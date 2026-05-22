@@ -1,8 +1,8 @@
 from datetime import date, datetime
-from sqlalchemy import cast, DateTime as SADateTime, func, literal, select, Time as SATime, update
+from sqlalchemy import cast, DateTime as SADateTime, delete, func, literal, select, Time as SATime, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.obra import Obra
-from app.models.task import Task, TaskStatus
+from app.models.task import Task, TaskStatus, task_dependencies_table
 from app.repositories.base import BaseRepository
 
 
@@ -121,3 +121,22 @@ class TaskRepository(BaseRepository[Task]):
         if completed_date is not None:
             fields["completed_date"] = completed_date
         return await self.update_fields(task_id, **fields)
+
+    async def get_dependency_ids(self, task_id: int) -> list[int]:
+        """Return IDs of tasks that task_id depends on."""
+        result = await self.session.execute(
+            select(task_dependencies_table.c.depends_on_id)
+            .where(task_dependencies_table.c.task_id == task_id)
+        )
+        return [row[0] for row in result.fetchall()]
+
+    async def set_dependencies(self, task_id: int, dep_ids: list[int]) -> None:
+        """Replace the full dependency set for task_id."""
+        await self.session.execute(
+            delete(task_dependencies_table).where(task_dependencies_table.c.task_id == task_id)
+        )
+        for dep_id in dep_ids:
+            await self.session.execute(
+                task_dependencies_table.insert().values(task_id=task_id, depends_on_id=dep_id)
+            )
+        await self.session.commit()

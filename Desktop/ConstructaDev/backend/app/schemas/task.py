@@ -14,6 +14,7 @@ class TaskCreate(BaseModel):
     due_time: time | None = None
     order_index: int = Field(default=0, ge=0)
     depends_on_id: int | None = None
+    dependency_ids: list[int] | None = None
 
     @model_validator(mode="after")
     def validate_dates(self) -> "TaskCreate":
@@ -32,6 +33,7 @@ class TaskUpdate(BaseModel):
     due_time: time | None = None
     order_index: int | None = Field(None, ge=0)
     depends_on_id: int | None = None
+    dependency_ids: list[int] | None = None
 
     @model_validator(mode="after")
     def validate_dates(self) -> "TaskUpdate":
@@ -54,10 +56,19 @@ class TaskRead(BaseModel):
     completed_date: date | None
     order_index: int
     depends_on_id: int | None
+    dependency_ids: list[int] = []
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def model_validate(cls, obj, **kwargs):  # type: ignore[override]
+        instance = super().model_validate(obj, **kwargs)
+        # Populate dependency_ids from the ORM relationship if available
+        if hasattr(obj, "dependencies"):
+            instance.dependency_ids = [d.id for d in (obj.dependencies or [])]
+        return instance
 
 
 class TaskDueSoonRead(BaseModel):

@@ -1,17 +1,28 @@
 import enum
 from datetime import date, datetime, time, timezone
 from sqlalchemy import (
+    Column,
     Date,
     DateTime,
     Enum as SAEnum,
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
     Time,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
+
+# Association table for M2M self-referential task dependencies
+task_dependencies_table = Table(
+    "task_dependencies",
+    Base.metadata,
+    Column("id", Integer, primary_key=True),
+    Column("task_id",       Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False),
+    Column("depends_on_id", Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False),
+)
 
 
 class TaskStatus(str, enum.Enum):
@@ -84,6 +95,23 @@ class Task(Base):
     # Self-referential: remote_side must reference the *column variable* (id), not a string
     depends_on: Mapped["Task | None"] = relationship(
         "Task", foreign_keys=[depends_on_id], remote_side=[id]
+    )
+    # M2M: tasks this task depends on (blocking tasks)
+    dependencies: Mapped[list["Task"]] = relationship(
+        "Task",
+        secondary="task_dependencies",
+        primaryjoin="Task.id == task_dependencies_table.c.task_id",
+        secondaryjoin="Task.id == task_dependencies_table.c.depends_on_id",
+        lazy="select",
+    )
+    # M2M: tasks that depend on this task (downstream tasks)
+    dependents: Mapped[list["Task"]] = relationship(
+        "Task",
+        secondary="task_dependencies",
+        primaryjoin="Task.id == task_dependencies_table.c.depends_on_id",
+        secondaryjoin="Task.id == task_dependencies_table.c.task_id",
+        lazy="select",
+        overlaps="dependencies",
     )
     messages: Mapped[list["Message"]] = relationship("Message", back_populates="task")
     historial: Mapped[list["HistorialEvento"]] = relationship(

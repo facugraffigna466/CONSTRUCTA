@@ -121,6 +121,41 @@ class TaskService:
                 f"Task {depends_on_id} belongs to a different obra and cannot be a dependency"
             )
 
+    async def _check_no_cycle(self, task_id: int, proposed_dep_ids: list[int]) -> None:
+        """DFS from each proposed dependency to ensure none of them lead back to task_id."""
+        visited: set[int] = set()
+
+        async def dfs(current_id: int) -> bool:
+            if current_id == task_id:
+                return True  # cycle found
+            if current_id in visited:
+                return False
+            visited.add(current_id)
+            deps = await self.repo.get_dependency_ids(current_id)
+            for dep_id in deps:
+                if await dfs(dep_id):
+                    return True
+            return False
+
+        for dep_id in proposed_dep_ids:
+            if await dfs(dep_id):
+                raise UnprocessableError(
+                    f"Agregar esta dependencia crearía un ciclo (la tarea {dep_id} ya depende de esta tarea)."
+                )
+
+    async def _sync_dependencies(self, task: Task, dep_ids: list[int]) -> None:
+        """Replace the task's dependency set with dep_ids, validating each one."""
+        for dep_id in dep_ids:
+            if dep_id == task.id:
+                raise UnprocessableError("Una tarea no puede depender de sí misma.")
+            dep = await self.repo.get(dep_id)
+            if not dep:
+                raise NotFoundError("Task", dep_id)
+            if dep.obra_id != task.obra_id:
+                raise UnprocessableError(f"La tarea {dep_id} pertenece a otra obra.")
+        await self._check_no_cycle(task.id, dep_ids)
+        await self.repo.set_dependencies(task.id, dep_ids)
+
     async def _assert_dates_working(self, obra_id: int, start_date: date | None, due_date: date | None) -> None:
         if start_date is None and due_date is None:
             return
@@ -149,8 +184,14 @@ class TaskService:
 
         await self._assert_dates_working(data.obra_id, data.start_date, data.due_date)
 
-        task = Task(**data.model_dump())
+        task_data = data.model_dump(exclude={"dependency_ids"})
+        task = Task(**task_data)
         task = await self.repo.create(task)
+
+        if data.dependency_ids:
+            await self._sync_dependencies(task, data.dependency_ids)
+            await self.repo.session.refresh(task)
+
         await self.historial.log(
             obra_id=task.obra_id,
             task_id=task.id,
@@ -214,8 +255,10 @@ class TaskService:
 
         # exclude_unset so that sending {"responsible_id": null} actually
         # removes the responsible instead of being silently ignored.
-        changes = data.model_dump(exclude_unset=True)
-        if not changes:
+        raw_changes = data.model_dump(exclude_unset=True)
+        dep_ids = raw_changes.pop("dependency_ids", None)  # handle separately
+        changes = raw_changes
+        if not changes and dep_ids is None:
             return task
 
         # BS-03: capture old values BEFORE any await that could refresh `task`
@@ -235,6 +278,9 @@ class TaskService:
         if "start_date" in changes or "due_date" in changes:
             await self._assert_dates_working(task.obra_id, new_start, new_due)  # type: ignore[arg-type]
 
+        if dep_ids is not None:
+            await self._sync_dependencies(task, dep_ids)
+
         real_changes: dict[str, dict[str, object]] = {
             field: {"from": _to_json(old_vals[field]), "to": _to_json(new_val)}
             for field, new_val in changes.items()
@@ -243,7 +289,7 @@ class TaskService:
 
         await self._enrich_all_entries(real_changes)
 
-        updated = await self.repo.update_fields(task_id, **changes)
+        updated = await self.repo.update_fields(task_id, **changes) if changes else task
 
         if real_changes:
             changed_labels = [_FIELD_LABELS.get(f, f) for f in real_changes]
