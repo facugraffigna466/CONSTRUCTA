@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import alerts, auth, events, notifications, obras, presence, responsibles, tasks, uploads, users, webhooks
 from app.api.routes import settings as settings_router
+from app.api.routes import calendar as calendar_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.core.socket_manager import sio
@@ -54,6 +55,7 @@ fastapi_app.include_router(settings_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(events.router, prefix=API_PREFIX)
 fastapi_app.include_router(uploads.router, prefix=API_PREFIX)
 fastapi_app.include_router(presence.router, prefix=API_PREFIX)
+fastapi_app.include_router(calendar_router.router, prefix=API_PREFIX)
 
 
 # Serve uploaded images — must be a proper route (not StaticFiles) to work

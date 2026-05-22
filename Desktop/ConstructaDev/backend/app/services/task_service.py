@@ -6,11 +6,13 @@ from app.core.socket_manager import emit_task_created, emit_task_deleted, emit_t
 from app.models.alert import AlertType
 from app.models.task import Task, TaskStatus
 from app.repositories.alert import AlertRepository
+from app.repositories.calendar import CalendarRepository
 from app.repositories.historial import HistorialRepository
 from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.task import TaskCreate, TaskDueSoonRead, TaskStatusUpdate, TaskUpdate
+from app.services.calendar_service import is_working_day
 
 _FIELD_LABELS: dict[str, str] = {
     "title":          "título",
@@ -75,6 +77,7 @@ class TaskService:
         self.resp_repo = ResponsibleRepository(session)
         self.historial = HistorialRepository(session)
         self.alert_repo = AlertRepository(session)
+        self.calendar_repo = CalendarRepository(session)
 
     # ── guards ────────────────────────────────────────────────────────────────
 
@@ -118,6 +121,21 @@ class TaskService:
                 f"Task {depends_on_id} belongs to a different obra and cannot be a dependency"
             )
 
+    async def _assert_dates_working(self, obra_id: int, start_date: date | None, due_date: date | None) -> None:
+        if start_date is None and due_date is None:
+            return
+        cal = await self.calendar_repo.get_for_obra(obra_id)
+        for field_name, d in [("inicio", start_date), ("vencimiento", due_date)]:
+            if d is not None and not is_working_day(cal, d):
+                exc_label = next(
+                    (e.label for e in (getattr(cal, "exceptions", []) or []) if e.date == d and not e.is_working),
+                    None,
+                )
+                detail = f" ({exc_label})" if exc_label else ""
+                raise UnprocessableError(
+                    f"La fecha de {field_name} {d.strftime('%d/%m/%Y')} es un día no laboral para esta obra{detail}."
+                )
+
     # ── public methods ────────────────────────────────────────────────────────
 
     async def create(self, data: TaskCreate, manager_id: int, actor: dict | None = None) -> Task:
@@ -128,6 +146,8 @@ class TaskService:
 
         if data.depends_on_id is not None:
             await self._assert_depends_on_valid(data.depends_on_id, data.obra_id)
+
+        await self._assert_dates_working(data.obra_id, data.start_date, data.due_date)
 
         task = Task(**data.model_dump())
         task = await self.repo.create(task)
@@ -209,6 +229,11 @@ class TaskService:
             await self._assert_depends_on_valid(
                 changes["depends_on_id"], task.obra_id, current_task_id=task_id
             )
+
+        new_start = changes.get("start_date", task.start_date)
+        new_due   = changes.get("due_date",   task.due_date)
+        if "start_date" in changes or "due_date" in changes:
+            await self._assert_dates_working(task.obra_id, new_start, new_due)  # type: ignore[arg-type]
 
         real_changes: dict[str, dict[str, object]] = {
             field: {"from": _to_json(old_vals[field]), "to": _to_json(new_val)}

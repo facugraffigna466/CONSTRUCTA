@@ -20,11 +20,13 @@ from app.models.message import Message, MessageDirection, MessageProcessingStatu
 from app.models.responsible import Responsible
 from app.models.task import Task
 from app.repositories.alert import AlertRepository
+from app.repositories.calendar import CalendarRepository
 from app.repositories.message import MessageRepository
 from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
+from app.services.calendar_service import is_within_working_hours
 from app.services.conversation_service import ConversationService
 from app.services.message_templates import fmt_date
 
@@ -40,6 +42,7 @@ class NotificationService:
         self.msg_repo = MessageRepository(session)
         self.alert_repo = AlertRepository(session)
         self.settings_repo = SettingsRepository(session)
+        self.calendar_repo = CalendarRepository(session)
         self.conv_service = ConversationService(session)
 
     # ── public methods ─────────────────────────────────────────────────────────
@@ -84,8 +87,9 @@ class NotificationService:
                 logger.debug("reminder_3days disabled — skipping task %d", task.id)
                 continue
 
-            if not self._within_send_hours(now, cfg.send_hour_from, cfg.send_hour_to):
-                logger.debug("outside send hours — skipping task %d", task.id)
+            cal = await self.calendar_repo.get_for_obra(task.obra_id)
+            if not is_within_working_hours(cal, now):
+                logger.debug("outside working hours/day for obra %d — skipping task %d", task.obra_id, task.id)
                 continue
 
             # Avoid duplicate if a reminder was already sent in the last hours_ahead*0.9 hours
@@ -215,8 +219,9 @@ class NotificationService:
 
             # ── Resend reminder to responsible ─────────────────────────────────
             if cfg.retry_failed and cfg.auto_reminders and responsible and responsible.is_active:
-                if not self._within_send_hours(now, cfg.send_hour_from, cfg.send_hour_to):
-                    logger.debug("Outside send hours — skipping retry for task %d", task.id)
+                retry_cal = await self.calendar_repo.get_for_obra(task.obra_id)
+                if not is_within_working_hours(retry_cal, now):
+                    logger.debug("Outside working hours/day for obra %d — skipping retry for task %d", task.obra_id, task.id)
                     continue
 
                 already_retried = await self.msg_repo.has_recent_reminder_for_task(
