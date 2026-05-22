@@ -95,6 +95,26 @@ export function AppLayout({
           borderBottom: "1px solid #E6E7E5", flexShrink: 0,
         }}>
 
+          {/* Hamburger — solo visible cuando el sidebar está colapsado */}
+          {sidebarCollapsed && (
+            <button
+              onClick={() => setSidebarCollapsed(false)}
+              title="Abrir menú"
+              style={{
+                width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+                background: "#fff", border: "1px solid #E6E7E5",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#5B6770", transition: "border-color 0.15s, color 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#C8CDD1"; e.currentTarget.style.color = "#1A2329"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#E6E7E5"; e.currentTarget.style.color = "#5B6770"; }}
+            >
+              <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
+                <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+              </svg>
+            </button>
+          )}
+
           {/* Breadcrumb */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0", flexShrink: 0 }}>

@@ -111,39 +111,6 @@ function NavItem({
 export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, collapsed = false, onToggle }: SidebarProps) {
   return (
     <>
-    {/* Collapsed tab — only visible when sidebar is hidden */}
-    {collapsed && (
-      <button
-        onClick={onToggle}
-        title="Abrir menú"
-        style={{
-          position: "fixed",
-          left: 0,
-          top: 16,
-          zIndex: 52,
-          width: 22,
-          height: 36,
-          borderRadius: "0 8px 8px 0",
-          background: "#2F3A40",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderLeft: "none",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "#8C969C",
-          padding: 0,
-          transition: "color 0.15s, background 0.15s",
-        }}
-        onMouseEnter={e => { e.currentTarget.style.background = "#3D4A50"; e.currentTarget.style.color = "#CFD4D7"; }}
-        onMouseLeave={e => { e.currentTarget.style.background = "#2F3A40"; e.currentTarget.style.color = "#8C969C"; }}
-      >
-        <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
-          <path d="M2 1l4 5-4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-      </button>
-    )}
-
     <aside style={{
       position: "fixed",
       left: 0,
