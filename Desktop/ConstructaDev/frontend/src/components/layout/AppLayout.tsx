@@ -102,12 +102,12 @@ export function AppLayout({
               title="Abrir menú"
               style={{
                 width: 34, height: 34, borderRadius: 9, flexShrink: 0,
-                background: "#2F3A40", border: "none",
+                background: "#fff", border: "1px solid #E6E7E5",
                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                color: "#8C969C", transition: "background 0.15s, color 0.15s",
+                color: "#5B6770", transition: "border-color 0.15s, color 0.15s",
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#3D4A50"; e.currentTarget.style.color = "#CFD4D7"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "#2F3A40"; e.currentTarget.style.color = "#8C969C"; }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#C8CDD1"; e.currentTarget.style.color = "#1A2329"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#E6E7E5"; e.currentTarget.style.color = "#5B6770"; }}
             >
               <svg width="15" height="12" viewBox="0 0 15 12" fill="none">
                 <path d="M0 1h15M0 6h15M0 11h15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
