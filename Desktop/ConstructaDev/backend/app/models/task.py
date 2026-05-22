@@ -99,17 +99,17 @@ class Task(Base):
     # M2M: tasks this task depends on (blocking tasks)
     dependencies: Mapped[list["Task"]] = relationship(
         "Task",
-        secondary="task_dependencies",
-        primaryjoin="Task.id == task_dependencies_table.c.task_id",
-        secondaryjoin="Task.id == task_dependencies_table.c.depends_on_id",
+        secondary=task_dependencies_table,
+        primaryjoin=lambda: Task.id == task_dependencies_table.c.task_id,
+        secondaryjoin=lambda: Task.id == task_dependencies_table.c.depends_on_id,
         lazy="select",
     )
     # M2M: tasks that depend on this task (downstream tasks)
     dependents: Mapped[list["Task"]] = relationship(
         "Task",
-        secondary="task_dependencies",
-        primaryjoin="Task.id == task_dependencies_table.c.depends_on_id",
-        secondaryjoin="Task.id == task_dependencies_table.c.task_id",
+        secondary=task_dependencies_table,
+        primaryjoin=lambda: Task.id == task_dependencies_table.c.depends_on_id,
+        secondaryjoin=lambda: Task.id == task_dependencies_table.c.task_id,
         lazy="select",
         overlaps="dependencies",
     )
