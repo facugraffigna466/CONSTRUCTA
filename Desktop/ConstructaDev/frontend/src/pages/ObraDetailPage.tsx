@@ -12,6 +12,7 @@ import { TaskDeleteConfirm } from "../components/TaskDeleteConfirm";
 import { TaskFormModal } from "../components/TaskFormModal";
 import { TaskTable } from "../components/TaskTable";
 import { TaskSheetView } from "../components/TaskSheetView";
+import { ImportModal } from "../components/ImportModal";
 import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import { useAlertSocket } from "../hooks/useAlertSocket";
 import { useTaskSocket } from "../hooks/useTaskSocket";
@@ -72,6 +73,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [taskView, setTaskView] = useState<"tabla" | "planilla">("tabla");
+  const [showImport, setShowImport] = useState(false);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -408,6 +410,28 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
                       </svg>
                     </button>
                   </div>
+                  {can("tarea.create") && (
+                    <button
+                      onClick={() => setShowImport(true)}
+                      title="Importar desde MS Project o Excel"
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        padding: "8px 12px", borderRadius: 9,
+                        fontSize: 12.5, fontWeight: 600,
+                        background: "#fff", color: "#5B6770",
+                        border: "1px solid #E6E7E5", cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#FF6B35"; e.currentTarget.style.color = "#FF6B35"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#E6E7E5"; e.currentTarget.style.color = "#5B6770"; }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                        <rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                        <path d="M8 4v7M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      Importar
+                    </button>
+                  )}
                   {can("tarea.create") && taskView === "tabla" && (
                     <button
                       onClick={() => setShowCreateTask(true)}
@@ -710,6 +734,13 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
       )}
       {taskToDelete && (
         <TaskDeleteConfirm task={taskToDelete} onClose={() => setTaskToDelete(null)} onDeleted={handleTaskDeleted} />
+      )}
+      {showImport && (
+        <ImportModal
+          obraId={obra.id}
+          onClose={() => setShowImport(false)}
+          onImported={(count) => { setShowImport(false); if (count > 0) loadData(true); }}
+        />
       )}
 
     </>
