@@ -31,6 +31,8 @@ interface SidebarProps {
   onTabChange?: (tab: ObraTab) => void;
   obraCounts?: { tasks: number; alerts: number; responsibles: number };
   currentUser?: { name: string; initials: string; color: string; roleLabel: string };
+  collapsed?: boolean;
+  onToggle?: () => void;
 }
 
 // ─── Nav item ─────────────────────────────────────────────────────────────────
@@ -106,8 +108,44 @@ function NavItem({
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, collapsed = false, onToggle }: SidebarProps) {
   return (
+    <>
+    {/* Toggle button — floats on the right edge of the sidebar */}
+    <button
+      onClick={onToggle}
+      title={collapsed ? "Abrir menú" : "Cerrar menú"}
+      style={{
+        position: "fixed",
+        left: collapsed ? 0 : 248,
+        top: "50%",
+        transform: "translateY(-50%)",
+        zIndex: 52,
+        width: 18,
+        height: 40,
+        borderRadius: "0 8px 8px 0",
+        background: "#3D4A50",
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderLeft: collapsed ? "1px solid rgba(255,255,255,0.08)" : "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#8C969C",
+        transition: "left 0.25s ease, color 0.15s, background 0.15s",
+        padding: 0,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = "#4A5860"; e.currentTarget.style.color = "#CFD4D7"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "#3D4A50"; e.currentTarget.style.color = "#8C969C"; }}
+    >
+      <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
+        {collapsed
+          ? <path d="M2 1l4 5-4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          : <path d="M6 1L2 6l4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        }
+      </svg>
+    </button>
+
     <aside style={{
       position: "fixed",
       left: 0,
@@ -120,6 +158,8 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
       padding: "14px 12px 12px",
       zIndex: 50,
       overflowY: "auto",
+      transform: collapsed ? "translateX(-260px)" : "translateX(0)",
+      transition: "transform 0.25s ease",
     }}>
 
       {/* ── Brand ── */}
@@ -363,5 +403,6 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
         </button>
       </div>
     </aside>
+    </>
   );
 }

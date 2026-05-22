@@ -41,9 +41,10 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { user, role } = useUser();
   const onlineUsers = useOnlineUsers();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [showInvite, setShowInvite]     = useState(false);
-  const [showProfile, setShowProfile]   = useState(false);
+  const [dropdownOpen, setDropdownOpen]       = useState(false);
+  const [showInvite, setShowInvite]           = useState(false);
+  const [showProfile, setShowProfile]         = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef   = useRef<HTMLDivElement>(null);
 
@@ -77,9 +78,11 @@ export function AppLayout({
         onTabChange={onTabChange}
         obraCounts={obraCounts}
         currentUser={{ name: displayUser.name, initials: displayUser.initials, color: displayUser.color, roleLabel: ROLE_LABELS[role] }}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed(v => !v)}
       />
 
-      <div className="ml-[260px] flex flex-col min-h-screen">
+      <div style={{ marginLeft: sidebarCollapsed ? 0 : 260, transition: "margin-left 0.25s ease", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
 
         {/* ── Top bar ── */}
         <header style={{
