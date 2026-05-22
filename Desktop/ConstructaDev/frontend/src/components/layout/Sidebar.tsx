@@ -144,7 +144,7 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           onClick={onToggle}
           title="Cerrar menú"
           style={{
-            width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+            width: 26, height: 26, borderRadius: 7, flexShrink: 0,
             background: "transparent", border: "none", cursor: "pointer",
             display: "flex", alignItems: "center", justifyContent: "center",
             color: "#6B767E", padding: 0, transition: "color 0.15s, background 0.15s",
@@ -152,8 +152,8 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#CFD4D7"; }}
           onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6B767E"; }}
         >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
+            <path d="M0 1h14M0 5.5h14M0 10h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
         </button>
       </div>
