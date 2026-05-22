@@ -111,40 +111,38 @@ function NavItem({
 export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, collapsed = false, onToggle }: SidebarProps) {
   return (
     <>
-    {/* Toggle button — floats on the right edge of the sidebar */}
-    <button
-      onClick={onToggle}
-      title={collapsed ? "Abrir menú" : "Cerrar menú"}
-      style={{
-        position: "fixed",
-        left: collapsed ? 0 : 248,
-        top: "50%",
-        transform: "translateY(-50%)",
-        zIndex: 52,
-        width: 18,
-        height: 40,
-        borderRadius: "0 8px 8px 0",
-        background: "#3D4A50",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderLeft: collapsed ? "1px solid rgba(255,255,255,0.08)" : "none",
-        cursor: "pointer",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        color: "#8C969C",
-        transition: "left 0.25s ease, color 0.15s, background 0.15s",
-        padding: 0,
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = "#4A5860"; e.currentTarget.style.color = "#CFD4D7"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "#3D4A50"; e.currentTarget.style.color = "#8C969C"; }}
-    >
-      <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
-        {collapsed
-          ? <path d="M2 1l4 5-4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          : <path d="M6 1L2 6l4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-        }
-      </svg>
-    </button>
+    {/* Collapsed tab — only visible when sidebar is hidden */}
+    {collapsed && (
+      <button
+        onClick={onToggle}
+        title="Abrir menú"
+        style={{
+          position: "fixed",
+          left: 0,
+          top: 16,
+          zIndex: 52,
+          width: 22,
+          height: 36,
+          borderRadius: "0 8px 8px 0",
+          background: "#2F3A40",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderLeft: "none",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#8C969C",
+          padding: 0,
+          transition: "color 0.15s, background 0.15s",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = "#3D4A50"; e.currentTarget.style.color = "#CFD4D7"; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "#2F3A40"; e.currentTarget.style.color = "#8C969C"; }}
+      >
+        <svg width="8" height="12" viewBox="0 0 8 12" fill="none">
+          <path d="M2 1l4 5-4 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </button>
+    )}
 
     <aside style={{
       position: "fixed",
@@ -169,12 +167,28 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           alt="Constructa"
           style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, objectFit: "cover" }}
         />
-        <div>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff", letterSpacing: "0.04em" }}>
             CONSTRUCTA
           </div>
           <div style={{ fontSize: 11, color: "#8C969C", marginTop: 1 }}>Gestión de obras</div>
         </div>
+        <button
+          onClick={onToggle}
+          title="Cerrar menú"
+          style={{
+            width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+            background: "transparent", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#6B767E", padding: 0, transition: "color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#CFD4D7"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6B767E"; }}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
       </div>
 
       {/* ── Workspace switcher ── */}
