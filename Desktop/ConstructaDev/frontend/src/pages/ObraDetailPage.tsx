@@ -233,6 +233,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
             responsibles={responsibles}
             obraStartDate={obra.start_date}
             obraExpectedEndDate={obra.expected_end_date}
+            obraId={obra.id}
             error={error}
             onMarkRead={handleMarkRead}
             onViewAlerts={() => onTabChange("alertas")}

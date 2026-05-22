@@ -62,6 +62,7 @@ interface ResumenTabProps {
   responsibles: Responsible[];
   obraStartDate?: string | null;
   obraExpectedEndDate?: string | null;
+  obraId?: number;
   error: string | null;
   onMarkRead: (id: number) => void;
   onViewAlerts: () => void;
@@ -81,6 +82,7 @@ export function ResumenTab({
   responsibles,
   obraStartDate,
   obraExpectedEndDate,
+  obraId,
   error,
   onViewAlerts,
   onViewTareas,
@@ -288,6 +290,7 @@ export function ResumenTab({
           onEditTask={onEditTask}
           onStatusChange={onStatusChange}
           tasksWithoutDates={tasksWithoutDates.length}
+          obraId={obraId}
         />
       </section>
 

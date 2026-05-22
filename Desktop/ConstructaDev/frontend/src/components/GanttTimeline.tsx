@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ReschedulingModal } from "./ReschedulingModal";
 import { SchedulingModal } from "./SchedulingModal";
+import { GanttSettingsDrawer } from "./GanttSettingsDrawer";
 import type { Task, TaskStatus, Responsible } from "../types";
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ interface GanttTimelineProps {
   onEditTask: (task: Task) => void;
   onStatusChange?: (task: Task, newStatus: TaskStatus) => void;
   tasksWithoutDates?: number;
+  obraId?: number;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -124,9 +126,12 @@ export function GanttTimeline({
   onEditTask,
   onStatusChange,
   tasksWithoutDates = 0,
+  obraId,
 }: GanttTimelineProps) {
   // ── View switcher state ──────────────────────────────────────────────────────
   const [view, setView] = useState<"semana" | "mes" | "trim">("semana");
+  const [showSettings, setShowSettings]               = useState(false);
+  const [showTasksWithoutDates, setShowTasksWithoutDates] = useState(false);
   const dayW = view === "semana" ? 90 : view === "mes" ? 45 : 22;
   const dayWRef = useRef(dayW);
   dayWRef.current = dayW;
@@ -535,7 +540,18 @@ export function GanttTimeline({
       {drag   && <div className="fixed inset-0 z-40 cursor-grabbing select-none" />}
       {resize && <div className="fixed inset-0 z-40 cursor-ew-resize select-none" />}
 
-      <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden", cursor: rowDrag ? "grabbing" : undefined }}>
+      <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden", cursor: rowDrag ? "grabbing" : undefined, position: "relative" }}>
+        {obraId && (
+          <GanttSettingsDrawer
+            obraId={obraId}
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            view={view}
+            onViewChange={setView}
+            showTasksWithoutDates={showTasksWithoutDates}
+            onToggleTasksWithoutDates={() => setShowTasksWithoutDates(v => !v)}
+          />
+        )}
 
         {/* ── Section header ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid #F0EBE2" }}>
@@ -581,32 +597,32 @@ export function GanttTimeline({
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Semana/Mes/Trim segmented control */}
-            <div style={{ display: "flex", background: "#F4F1EB", borderRadius: 7, padding: 2, border: "1px solid #ECE7DD" }}>
-              {(["semana", "mes", "trim"] as const).map((v, i) => {
-                const lbl = ["Semana", "Mes", "Trim."][i];
-                const isActive = view === v;
-                return (
-                  <button
-                    key={v}
-                    onClick={() => setView(v)}
-                    style={{
-                      background: isActive ? "#fff" : "transparent",
-                      border: "none", cursor: "pointer",
-                      padding: "4px 10px", fontSize: 11.5, fontWeight: 500,
-                      color: isActive ? "#1B1B1A" : "#6B6A66", borderRadius: 5,
-                      boxShadow: isActive ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
-                    }}
-                  >{lbl}</button>
-                );
-              })}
-            </div>
             {/* Filter */}
             <button title="Filtrar" style={{ width: 28, height: 28, borderRadius: 6, background: "#fff", border: "1px solid #ECE7DD", display: "flex", alignItems: "center", justifyContent: "center", color: "#3A3936", cursor: "pointer" }}>
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
                 <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               </svg>
             </button>
+            {/* Settings */}
+            {obraId && (
+              <button
+                title="Configuración del Gantt"
+                onClick={() => setShowSettings(v => !v)}
+                style={{
+                  width: 28, height: 28, borderRadius: 6, cursor: "pointer",
+                  background: showSettings ? "#FF6B35" : "#fff",
+                  border: showSettings ? "1px solid #FF6B35" : "1px solid #ECE7DD",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: showSettings ? "#fff" : "#3A3936",
+                  transition: "all 0.15s",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 10a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" strokeWidth="1.4" fill="none"/>
+                  <path d="M13.3 7.1l-.8-.5a5 5 0 000-1.2l.8-.5a1 1 0 00.3-1.3l-.8-1.4a1 1 0 00-1.3-.3l-.8.5a5 5 0 00-1-.6V1a1 1 0 00-1-1H7.3a1 1 0 00-1 1v.8a5 5 0 00-1 .6l-.8-.5a1 1 0 00-1.3.3L2.4 3.6a1 1 0 00.3 1.3l.8.5a5 5 0 000 1.2l-.8.5a1 1 0 00-.3 1.3l.8 1.4a1 1 0 001.3.3l.8-.5a5 5 0 001 .6V11a1 1 0 001 1h1.4a1 1 0 001-1v-.8a5 5 0 001-.6l.8.5a1 1 0 001.3-.3l.8-1.4a1 1 0 00-.3-1.3z" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                </svg>
+              </button>
+            )}
             {/* Go to today */}
             <button
               title="Ir a hoy"
