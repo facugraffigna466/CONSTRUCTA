@@ -698,13 +698,13 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
       {/* ── Modals ── */}
       {showCreateTask && (
         <TaskFormModal
-          mode="create" obraId={obra.id} responsibles={responsibles} taskCount={tasks.length}
+          mode="create" obraId={obra.id} tasks={tasks} responsibles={responsibles} taskCount={tasks.length}
           onClose={() => setShowCreateTask(false)} onSaved={handleTaskSaved}
         />
       )}
       {taskToEdit && (
         <TaskFormModal
-          mode="edit" obraId={obra.id} task={taskToEdit} responsibles={responsibles} taskCount={tasks.length}
+          mode="edit" obraId={obra.id} task={taskToEdit} tasks={tasks} responsibles={responsibles} taskCount={tasks.length}
           onClose={() => setTaskToEdit(null)} onSaved={handleTaskSaved}
         />
       )}

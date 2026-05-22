@@ -64,6 +64,7 @@ interface TaskFormModalProps {
   mode: "create" | "edit";
   obraId: number;
   task?: Task;
+  tasks?: Task[];
   responsibles: Responsible[];
   taskCount: number;
   onClose: () => void;
@@ -76,6 +77,7 @@ export function TaskFormModal({
   mode,
   obraId,
   task,
+  tasks = [],
   responsibles,
   taskCount,
   onClose,
@@ -103,6 +105,8 @@ export function TaskFormModal({
   const [startTime, setStartTime] = useState(task?.start_time?.slice(0, 5) ?? "");
   const [dueDate,   setDueDate]   = useState(task?.due_date ?? "");
   const [dueTime,   setDueTime]   = useState(task?.due_time?.slice(0, 5) ?? "");
+
+  const [dependencyIds, setDependencyIds] = useState<number[]>(task?.dependency_ids ?? []);
 
   const [errors,   setErrors]   = useState<Record<string, string>>({});
   const [saving,   setSaving]   = useState(false);
@@ -132,6 +136,7 @@ export function TaskFormModal({
         start_time: startTime || null,
         due_date: dueDate || null,
         due_time: dueTime || null,
+        dependency_ids: dependencyIds,
       };
       let saved: Task;
       if (mode === "create") {
@@ -347,6 +352,65 @@ export function TaskFormModal({
                 )}
               </div>
             </div>
+
+            {/* Depende de (multi-select) */}
+            {tasks.filter(t => t.id !== task?.id).length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <FieldLabel optional>Depende de</FieldLabel>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {/* Chips for selected dependencies */}
+                  {dependencyIds.map(depId => {
+                    const dep = tasks.find(t => t.id === depId);
+                    if (!dep) return null;
+                    return (
+                      <span key={depId} style={{
+                        display: "inline-flex", alignItems: "center", gap: 5,
+                        padding: "4px 8px", borderRadius: 7,
+                        fontSize: 12, fontWeight: 600,
+                        background: "#FFF1E9", color: "#E85A26",
+                        border: "1px solid #FFD5BB",
+                      }}>
+                        {dep.title.length > 30 ? dep.title.slice(0, 30) + "…" : dep.title}
+                        <button
+                          type="button"
+                          onClick={() => setDependencyIds(ids => ids.filter(id => id !== depId))}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#E85A26", lineHeight: 1, fontSize: 13 }}
+                          aria-label="Quitar dependencia"
+                        >×</button>
+                      </span>
+                    );
+                  })}
+                </div>
+                <select
+                  value=""
+                  onChange={e => {
+                    const id = Number(e.target.value);
+                    if (id && !dependencyIds.includes(id)) {
+                      setDependencyIds(ids => [...ids, id]);
+                    }
+                  }}
+                  style={{
+                    height: 38, padding: "0 34px 0 12px", border: "1px solid #E6E7E5",
+                    background: "#fff", borderRadius: 9, color: "#5B6770", fontSize: 13,
+                    width: "100%", outline: "none", appearance: "none", WebkitAppearance: "none",
+                    backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none'><path d='M4 6l4 4 4-4' stroke='%238E97A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")`,
+                    backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center",
+                    cursor: "pointer",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  <option value="">+ Agregar dependencia…</option>
+                  {tasks
+                    .filter(t => t.id !== task?.id && !dependencyIds.includes(t.id))
+                    .map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.title.length > 50 ? t.title.slice(0, 50) + "…" : t.title}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            )}
 
             {/* Info notes */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>

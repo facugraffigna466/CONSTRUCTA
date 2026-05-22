@@ -16,6 +16,7 @@ export interface TaskCreatePayload {
   due_date?: string | null;
   due_time?: string | null;
   order_index?: number;
+  dependency_ids?: number[];
 }
 
 export async function createTask(payload: TaskCreatePayload): Promise<Task> {
@@ -32,13 +33,17 @@ export interface TaskUpdatePayload {
   due_date?: string | null;
   due_time?: string | null;
   order_index?: number;
+  dependency_ids?: number[];
+  cascade_dates?: boolean;
 }
 
 export async function updateTask(
   id: number,
   payload: TaskUpdatePayload
 ): Promise<Task> {
-  const { data } = await apiClient.patch<Task>(`/tasks/${id}`, payload);
+  const { cascade_dates, ...rest } = payload;
+  const params = cascade_dates ? { cascade_dates: true } : undefined;
+  const { data } = await apiClient.patch<Task>(`/tasks/${id}`, rest, { params });
   return data;
 }
 

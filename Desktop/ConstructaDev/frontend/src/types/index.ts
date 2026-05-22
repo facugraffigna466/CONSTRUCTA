@@ -56,6 +56,7 @@ export interface Task {
   completed_date: string | null;
   order_index: number;
   depends_on_id: number | null;
+  dependency_ids: number[];
   created_at: string;
   updated_at: string;
 }
