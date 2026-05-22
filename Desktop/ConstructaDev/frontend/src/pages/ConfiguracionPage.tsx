@@ -4,6 +4,7 @@ import { usePermission } from "../hooks/usePermission";
 import {
   Bell,
   Building2,
+  Calendar,
   MessageCircle,
   RefreshCw,
   Send,
@@ -21,6 +22,17 @@ import {
   type SystemHealth,
   type SystemSettings,
 } from "../api/settings";
+import { fetchObras } from "../api/obras";
+import {
+  fetchCalendar,
+  updateCalendar,
+  addException,
+  deleteException,
+  loadHolidays,
+  type WorkingCalendar,
+  type CalendarException,
+} from "../api/calendar";
+import type { Obra } from "../types";
 import { Button } from "../components/ui/Button";
 
 // ─── Shared style tokens ──────────────────────────────────────────────────────
@@ -204,6 +216,273 @@ const STATUS_COLORS: Record<StatusLevel, { border: string; iconBg: string; iconC
   error:   { border: C.danger, iconBg: C.danger50, iconColor: C.danger, checkBg: C.danger, checkGlow: C.danger50 },
 };
 
+
+// ─── Calendar Section ─────────────────────────────────────────────────────────
+
+const DAY_LABELS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function CalendarSection({ canEdit }: { canEdit: boolean }) {
+  const [obras, setObras] = useState<Obra[]>([]);
+  const [selectedObraId, setSelectedObraId] = useState<number | null>(null);
+  const [calendar, setCalendar] = useState<WorkingCalendar | null>(null);
+  const [calLoading, setCalLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [newExcDate, setNewExcDate] = useState("");
+  const [newExcLabel, setNewExcLabel] = useState("");
+  const [newExcIsWorking, setNewExcIsWorking] = useState(false);
+  const [holidayLoading, setHolidayLoading] = useState(false);
+  const [holidayMsg, setHolidayMsg] = useState<string | null>(null);
+  const [excAdding, setExcAdding] = useState(false);
+
+  useEffect(() => {
+    fetchObras().then((list) => {
+      setObras(list);
+      if (list.length > 0) setSelectedObraId(list[0].id);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!selectedObraId) return;
+    setCalLoading(true);
+    setCalendar(null);
+    fetchCalendar(selectedObraId)
+      .then(setCalendar)
+      .catch(() => {})
+      .finally(() => setCalLoading(false));
+  }, [selectedObraId]);
+
+  async function toggleDay(bit: number) {
+    if (!calendar || !selectedObraId || !canEdit) return;
+    const next = calendar.working_days ^ (1 << bit);
+    setSaving(true);
+    try {
+      const updated = await updateCalendar(selectedObraId, { working_days: next });
+      setCalendar(updated);
+    } finally { setSaving(false); }
+  }
+
+  async function updateHours(field: "hour_from" | "hour_to", value: number) {
+    if (!calendar || !selectedObraId || !canEdit) return;
+    setSaving(true);
+    try {
+      const updated = await updateCalendar(selectedObraId, { [field]: value });
+      setCalendar(updated);
+    } finally { setSaving(false); }
+  }
+
+  async function handleAddException() {
+    if (!newExcDate || !selectedObraId) return;
+    setExcAdding(true);
+    try {
+      const exc = await addException(selectedObraId, newExcDate, newExcIsWorking, newExcLabel || null);
+      setCalendar((c) => c ? { ...c, exceptions: [...c.exceptions.filter(e => e.date !== exc.date), exc] } : c);
+      setNewExcDate(""); setNewExcLabel(""); setNewExcIsWorking(false);
+    } finally { setExcAdding(false); }
+  }
+
+  async function handleDeleteException(exc: CalendarException) {
+    if (!selectedObraId) return;
+    await deleteException(selectedObraId, exc.id);
+    setCalendar((c) => c ? { ...c, exceptions: c.exceptions.filter(e => e.id !== exc.id) } : c);
+  }
+
+  async function handleLoadHolidays() {
+    if (!selectedObraId) return;
+    setHolidayLoading(true);
+    setHolidayMsg(null);
+    try {
+      const res = await loadHolidays(selectedObraId, 2026);
+      setHolidayMsg(`✓ ${res.added} feriados agregados${res.skipped > 0 ? `, ${res.skipped} ya existían` : ""}`);
+      const updated = await fetchCalendar(selectedObraId);
+      setCalendar(updated);
+    } catch { setHolidayMsg("Error al cargar feriados."); }
+    finally { setHolidayLoading(false); }
+  }
+
+  const sortedExceptions = [...(calendar?.exceptions ?? [])].sort((a, b) => a.date.localeCompare(b.date));
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: "#FFF0E8", border: "1px solid #F5D5C0", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Calendar size={15} color="#E76A2D" />
+        </div>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: "-0.015em" }}>Calendario laboral</h3>
+          <p style={{ margin: 0, fontSize: 12, color: C.text2 }}>Días y horarios hábiles por obra — bloquea tareas y mensajes en días no laborables</p>
+        </div>
+      </div>
+
+      {/* Obra selector */}
+      {obras.length > 1 && (
+        <div style={{ marginBottom: 14 }}>
+          <SelectRow label="Obra" value={selectedObraId ?? ""} onChange={(v) => setSelectedObraId(Number(v))}>
+            {obras.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+          </SelectRow>
+        </div>
+      )}
+
+      {calLoading && <p style={{ fontSize: 13, color: C.text3 }}>Cargando calendario…</p>}
+
+      {calendar && (
+        <>
+          {/* Days */}
+          <div style={{ marginBottom: 14 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2 }}>Días hábiles</p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const }}>
+              {DAY_LABELS.map((label, i) => {
+                const active = !!(calendar.working_days & (1 << i));
+                return (
+                  <button
+                    key={label}
+                    onClick={() => toggleDay(i)}
+                    disabled={saving || !canEdit}
+                    style={{
+                      padding: "6px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 600,
+                      border: `1.5px solid ${active ? "#FF6B35" : C.line}`,
+                      background: active ? "#FFF1E9" : C.surface,
+                      color: active ? "#E85A26" : C.text2,
+                      cursor: canEdit ? "pointer" : "default",
+                      transition: "all 0.12s",
+                    }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Hours */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <SelectRow label="Hora de inicio" value={calendar.hour_from} onChange={(v) => updateHours("hour_from", Number(v))}>
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+              ))}
+            </SelectRow>
+            <SelectRow label="Hora de fin" value={calendar.hour_to} onChange={(v) => updateHours("hour_to", Number(v))}>
+              {Array.from({ length: 24 }, (_, h) => (
+                <option key={h} value={h}>{String(h).padStart(2, "0")}:00</option>
+              ))}
+            </SelectRow>
+          </div>
+
+          {/* Holidays button */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, padding: "12px 14px", background: "#F8F9F8", borderRadius: 10, border: `1px solid ${C.line}` }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: C.text }}>Feriados nacionales 2026</p>
+              <p style={{ margin: "2px 0 0", fontSize: 12, color: C.text2 }}>Carga automáticamente los feriados nacionales argentinos</p>
+              {holidayMsg && <p style={{ margin: "4px 0 0", fontSize: 12, color: holidayMsg.startsWith("✓") ? C.good : C.danger, fontWeight: 600 }}>{holidayMsg}</p>}
+            </div>
+            <button
+              onClick={handleLoadHolidays}
+              disabled={holidayLoading || !canEdit}
+              style={{
+                padding: "7px 14px", borderRadius: 8, border: `1px solid ${C.line}`,
+                fontSize: 12.5, fontWeight: 600, color: C.text,
+                background: C.surface, cursor: canEdit ? "pointer" : "default",
+                opacity: holidayLoading ? 0.6 : 1, whiteSpace: "nowrap" as const,
+              }}
+            >
+              {holidayLoading ? "Cargando…" : "Cargar feriados"}
+            </button>
+          </div>
+
+          {/* Add exception */}
+          {canEdit && (
+            <div style={{ marginBottom: 14 }}>
+              <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2 }}>Agregar excepción</p>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" as const, alignItems: "flex-end" }}>
+                <input
+                  type="date"
+                  value={newExcDate}
+                  onChange={e => setNewExcDate(e.target.value)}
+                  style={{ height: 36, padding: "0 10px", borderRadius: 8, border: `1px solid ${C.line}`, fontSize: 13, color: C.text, background: C.surface, outline: "none" }}
+                />
+                <input
+                  type="text"
+                  value={newExcLabel}
+                  onChange={e => setNewExcLabel(e.target.value)}
+                  placeholder="Etiqueta (ej: Paro gremial)"
+                  style={{ height: 36, padding: "0 10px", borderRadius: 8, border: `1px solid ${C.line}`, fontSize: 13, color: C.text, background: C.surface, outline: "none", flex: 1, minWidth: 160 }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 6, height: 36 }}>
+                  <input
+                    type="checkbox"
+                    id="exc-is-working"
+                    checked={newExcIsWorking}
+                    onChange={e => setNewExcIsWorking(e.target.checked)}
+                  />
+                  <label htmlFor="exc-is-working" style={{ fontSize: 12.5, color: C.text2, cursor: "pointer", whiteSpace: "nowrap" as const }}>Día laboral especial</label>
+                </div>
+                <button
+                  onClick={handleAddException}
+                  disabled={!newExcDate || excAdding}
+                  style={{
+                    height: 36, padding: "0 14px", borderRadius: 8, border: "none",
+                    fontSize: 13, fontWeight: 600, color: "#fff",
+                    background: !newExcDate ? C.line : "#FF6B35",
+                    cursor: !newExcDate ? "default" : "pointer",
+                  }}
+                >
+                  {excAdding ? "Agregando…" : "Agregar"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Exceptions list */}
+          {sortedExceptions.length > 0 && (
+            <div>
+              <p style={{ margin: "0 0 8px", fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2 }}>Excepciones ({sortedExceptions.length})</p>
+              <div style={{ borderRadius: 10, border: `1px solid ${C.line}`, overflow: "hidden" }}>
+                {sortedExceptions.map((exc, i) => {
+                  const [y, m, d] = exc.date.split("-");
+                  return (
+                    <div key={exc.id} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "9px 14px",
+                      borderBottom: i < sortedExceptions.length - 1 ? `1px solid ${C.line}` : "none",
+                      background: i % 2 === 0 ? C.surface : "#FAFAFA",
+                    }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, padding: "2px 7px", borderRadius: 6,
+                        background: exc.is_working ? "#E4F3EC" : "#FCE5E5",
+                        color: exc.is_working ? "#136E47" : "#D03A3A",
+                        flexShrink: 0,
+                      }}>
+                        {exc.is_working ? "✅ Hábil" : "🚫 No laboral"}
+                      </span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, flexShrink: 0 }}>
+                        {d}/{m}/{y}
+                      </span>
+                      <span style={{ fontSize: 12.5, color: C.text2, flex: 1 }}>{exc.label ?? ""}</span>
+                      {canEdit && (
+                        <button
+                          onClick={() => handleDeleteException(exc)}
+                          style={{
+                            width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.line}`,
+                            background: C.surface, color: C.text3, cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+                          }}
+                          title="Eliminar excepción"
+                        >
+                          <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -822,6 +1101,11 @@ export function ConfiguracionPage() {
               )}
             </Card>
           </div>
+
+          {/* ═══ CALENDARIO LABORAL ═══ */}
+          <Card style={{ marginTop: 8 }}>
+            <CalendarSection canEdit={canEdit} />
+          </Card>
 
           {/* ═══ SAVE BAR ═══ */}
           {dirty && canEdit && (
