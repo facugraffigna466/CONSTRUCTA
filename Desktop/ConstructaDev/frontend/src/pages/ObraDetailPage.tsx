@@ -11,6 +11,7 @@ import { Spinner } from "../components/Spinner";
 import { TaskDeleteConfirm } from "../components/TaskDeleteConfirm";
 import { TaskFormModal } from "../components/TaskFormModal";
 import { TaskTable } from "../components/TaskTable";
+import { TaskSheetView } from "../components/TaskSheetView";
 import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import { useAlertSocket } from "../hooks/useAlertSocket";
 import { useTaskSocket } from "../hooks/useTaskSocket";
@@ -70,6 +71,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [taskView, setTaskView] = useState<"tabla" | "planilla">("tabla");
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -369,28 +371,70 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
                     {tasks.length} {tasks.length === 1 ? "tarea" : "tareas"}
                   </span>
                 </div>
-                {can("tarea.create") && (
-                  <button
-                    onClick={() => setShowCreateTask(true)}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 7,
-                      padding: "8px 14px", borderRadius: 9,
-                      fontSize: 13, fontWeight: 600,
-                      background: "#FF6B35", color: "#fff",
-                      border: "none", cursor: "pointer",
-                      boxShadow: "0 4px 12px -4px rgba(255,107,53,0.5)",
-                      transition: "background 0.15s",
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "#E85A26")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "#FF6B35")}
-                  >
-                    <Plus style={{ width: 13, height: 13 }} />
-                    Nueva tarea
-                  </button>
-                )}
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {/* Vista toggle */}
+                  <div style={{ display: "flex", borderRadius: 8, border: "1px solid #E6E7E5", overflow: "hidden" }}>
+                    <button
+                      onClick={() => setTaskView("tabla")}
+                      title="Vista tabla"
+                      style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: 32, height: 32,
+                        background: taskView === "tabla" ? "#FF6B35" : "#fff",
+                        border: "none", cursor: "pointer",
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <rect x="1" y="1" width="14" height="14" rx="1.5" stroke={taskView === "tabla" ? "#fff" : "#8E97A0"} strokeWidth="1.3" fill="none"/>
+                        <path d="M1 5h14M1 9h14M5 5v9" stroke={taskView === "tabla" ? "#fff" : "#8E97A0"} strokeWidth="1.3"/>
+                      </svg>
+                    </button>
+                    <button
+                      onClick={() => setTaskView("planilla")}
+                      title="Vista planilla (tipo Project)"
+                      style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: 32, height: 32,
+                        background: taskView === "planilla" ? "#FF6B35" : "#fff",
+                        border: "none", borderLeft: "1px solid #E6E7E5", cursor: "pointer",
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                        <rect x="1" y="1" width="14" height="3" rx="1" fill={taskView === "planilla" ? "#fff" : "#8E97A0"}/>
+                        <rect x="1" y="6" width="14" height="3" rx="1" fill={taskView === "planilla" ? "rgba(255,255,255,0.6)" : "#C8CDD1"}/>
+                        <rect x="1" y="11" width="14" height="3" rx="1" fill={taskView === "planilla" ? "rgba(255,255,255,0.4)" : "#E0E3E6"}/>
+                      </svg>
+                    </button>
+                  </div>
+                  {can("tarea.create") && taskView === "tabla" && (
+                    <button
+                      onClick={() => setShowCreateTask(true)}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 7,
+                        padding: "8px 14px", borderRadius: 9,
+                        fontSize: 13, fontWeight: 600,
+                        background: "#FF6B35", color: "#fff",
+                        border: "none", cursor: "pointer",
+                        boxShadow: "0 4px 12px -4px rgba(255,107,53,0.5)",
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#E85A26")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "#FF6B35")}
+                    >
+                      <Plus style={{ width: 13, height: 13 }} />
+                      Nueva tarea
+                    </button>
+                  )}
+                </div>
               </div>
-              {/* Table */}
-              <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} />
+              {/* Table / Sheet */}
+              {taskView === "tabla" ? (
+                <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} />
+              ) : (
+                <TaskSheetView tasks={tasks} responsibles={responsibles} obraId={obra.id} onTaskSaved={handleTaskSaved} />
+              )}
             </div>
 
           </div>
