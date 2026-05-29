@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Constructa · Mis obras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"/>
+<style>
+  :root{
+    /* base palette */
+    --primary:#2F3A40;
+    --primary-700:#243035;
+    --primary-900:#18222A;
+    --secondary:#FF6B35;
+    --secondary-600:#E85A26;
+    --secondary-50:#FFF1E9;
+    --tertiary:#64748B;
+    --neutral:#787777;
+    --bg:#F4F5F4;
+    --surface:#FFFFFF;
+    --line:#E6E7E5;
+    --line-strong:#D5D7D3;
+    --text:#1A2329;
+    --text-2:#5B6770;
+    --text-3:#8E97A0;
+    --good:#1F8A5B;
+    --good-50:#E4F3EC;
+    --warn:#C97D0E;
+    --warn-50:#FDF1DE;
+    --info:#2A6FDB;
+    --info-50:#E5EEFB;
+
+    --r-card:14px;
+    --r-pill:99px;
+    --r-ctrl:10px;
+  }
+
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    font-feature-settings:"ss01","cv11";
+  }
+  .head,h1,h2,h3,h4{font-family:'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.02em;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;}
+  button{font-family:inherit;border:0;background:none;cursor:pointer;color:inherit;}
+  a{color:inherit;text-decoration:none;}
+
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#CDD0CC;border-radius:99px;border:2px solid var(--bg);}
+  ::-webkit-scrollbar-thumb:hover{background:#B6B9B4;}
+
+  /* ────── layout ────── */
+  .app{display:grid;grid-template-columns:248px 1fr;min-height:100vh;}
+
+  /* ────── sidebar ────── */
+  .side{
+    background:var(--primary);
+    color:#CFD4D7;
+    display:flex;flex-direction:column;
+    padding:14px 12px 12px;
+    position:sticky;top:0;height:100vh;
+  }
+  .side .brand{display:flex;align-items:center;gap:10px;padding:6px 6px 14px;}
+  .brand-mark{
+    width:32px;height:32px;border-radius:9px;
+    background:linear-gradient(160deg,var(--secondary) 0%, #E85A26 100%);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.25), 0 6px 14px -6px rgba(255,107,53,0.6);
+    flex-shrink:0;
+  }
+  .brand-name{font-family:'Plus Jakarta Sans';font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em;}
+  .brand-sub{font-size:11px;color:#8C969C;margin-top:1px;}
+
+  .side .workspace{
+    display:flex;align-items:center;gap:9px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:10px;
+    padding:8px 10px;margin:0 2px 14px;
+    cursor:pointer;transition:.15s;
+  }
+  .workspace:hover{background:rgba(255,255,255,0.07);}
+  .ws-mark{
+    width:24px;height:24px;border-radius:6px;
+    background:linear-gradient(135deg,#FF8856,#FF6B35);
+    color:#fff;font-weight:700;font-size:11px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Plus Jakarta Sans';
+  }
+  .ws-info{flex:1;min-width:0;line-height:1.2;}
+  .ws-name{color:#fff;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ws-role{font-size:10.5px;color:#8C969C;letter-spacing:0.04em;}
+
+  .side-search{
+    display:flex;align-items:center;gap:9px;
+    background:rgba(0,0,0,0.18);
+    border:1px solid rgba(255,255,255,0.05);
+    border-radius:9px;
+    padding:7px 10px;margin:0 2px 16px;
+    color:#8C969C;font-size:12.5px;cursor:pointer;
+  }
+  .side-search .kbd{
+    margin-left:auto;font-size:10px;
+    padding:1px 6px;border-radius:4px;
+    background:rgba(255,255,255,0.05);
+    color:#8C969C;
+    border:1px solid rgba(255,255,255,0.06);
+  }
+
+  .side-head{
+    font-size:10.5px;font-weight:600;letter-spacing:0.12em;
+    color:#6B767E;text-transform:uppercase;
+    padding:8px 10px 6px;
+  }
+  .nav{display:flex;flex-direction:column;gap:1px;}
+  .nav a{
+    display:flex;align-items:center;gap:11px;
+    padding:7px 10px;border-radius:8px;
+    color:#CFD4D7;font-size:13px;font-weight:500;
+    transition:background .12s;
+  }
+  .nav a:hover{background:rgba(255,255,255,0.04);}
+  .nav a.active{
+    background:linear-gradient(180deg,rgba(255,107,53,0.18),rgba(255,107,53,0.08));
+    color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(255,107,53,0.25);
+  }
+  .nav a.active .ico{color:var(--secondary);}
+  .nav .ico{width:16px;display:inline-flex;justify-content:center;color:#8C969C;}
+  .nav .count{
+    margin-left:auto;font-size:10.5px;padding:1px 6px;border-radius:99px;
+    background:rgba(255,255,255,0.08);color:#CFD4D7;
+    font-family:'JetBrains Mono';
+  }
+  .nav a.active .count{background:var(--secondary);color:#fff;}
+
+  .side .spacer{flex:1;}
+
+  .side-pinned{
+    margin:0 2px;padding:10px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.05);
+    border-radius:11px;
+    margin-bottom:10px;
+  }
+  .pinned-title{font-size:10.5px;font-weight:600;letter-spacing:0.12em;color:#6B767E;text-transform:uppercase;margin-bottom:8px;}
+  .pinned-row{display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;color:#CFD4D7;cursor:pointer;border-radius:6px;}
+  .pinned-row:hover{background:rgba(255,255,255,0.04);}
+  .pinned-dot{width:7px;height:7px;border-radius:99px;flex-shrink:0;}
+  .pinned-meta{margin-left:auto;font-size:10.5px;color:#8C969C;font-family:'JetBrains Mono';}
+
+  .side-user{
+    display:flex;align-items:center;gap:10px;
+    padding:8px;border-radius:10px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.06);
+  }
+  .avatar{
+    width:30px;height:30px;border-radius:99px;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:600;font-size:11px;
+    font-family:'Plus Jakarta Sans';flex-shrink:0;
+  }
+  .av-pm{background:linear-gradient(135deg,#FF8856,#E85A26);}
+  .av-1{background:#2A6FDB;}.av-2{background:#1F8A5B;}.av-3{background:#9A4DC9;}
+  .av-4{background:#C97D0E;}.av-5{background:#D03A3A;}
+  .av-stack{display:flex;}
+  .av-stack .avatar{width:24px;height:24px;font-size:10px;border:2px solid #fff;}
+  .av-stack .avatar+.avatar{margin-left:-7px;}
+
+  .side-user .name{font-size:12.5px;font-weight:600;color:#fff;line-height:1.15;}
+  .side-user .role{font-size:10.5px;color:#8C969C;}
+  .side-user .more{color:#6B767E;}
+
+  /* ────── main ────── */
+  main{display:flex;flex-direction:column;min-width:0;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:24px;
+    padding:12px 28px;
+    background:rgba(244,245,244,0.85);
+    backdrop-filter:saturate(140%) blur(10px);
+    border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:5;
+  }
+  .crumbs{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-3);}
+  .crumbs .sep{color:#C5C9C5;}
+  .crumbs .current{color:var(--text);font-weight:500;}
+  .crumbs .home-ico{color:var(--text-3);}
+
+  .top-search{
+    flex:1;max-width:480px;
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--r-ctrl);
+    padding:8px 12px;font-size:13px;color:var(--text-3);
+    transition:.15s;
+  }
+  .top-search:hover{border-color:var(--line-strong);}
+  .top-search .kbd{
+    margin-left:auto;font-size:10.5px;
+    padding:2px 7px;border-radius:5px;
+    background:#F4F5F4;color:var(--text-3);
+    border:1px solid var(--line);
+    font-family:'JetBrains Mono';
+  }
+  .top-right{display:flex;align-items:center;gap:8px;}
+  .icon-btn{
+    width:34px;height:34px;border-radius:9px;
+    background:var(--surface);border:1px solid var(--line);
+    display:inline-flex;align-items:center;justify-content:center;
+    color:var(--text-2);position:relative;
+    transition:.15s;
+  }
+  .icon-btn:hover{border-color:var(--line-strong);color:var(--text);}
+  .icon-btn .dot{
+    position:absolute;top:7px;right:7px;
+    width:7px;height:7px;border-radius:99px;background:var(--secondary);
+    box-shadow:0 0 0 2px var(--bg);
+  }
+
+  /* ────── page header ────── */
+  .page{padding:24px 28px 32px;max-width:1500px;}
+  .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:22px;}
+  .title{font-size:30px;font-weight:700;color:var(--text);margin:0;letter-spacing:-0.025em;}
+  .sub{font-size:13.5px;color:var(--text-2);margin-top:4px;}
+  .sub b{color:var(--text);font-weight:600;}
+
+  .page-head .actions{display:flex;gap:8px;align-items:center;}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:9px 14px;border-radius:var(--r-ctrl);
+    font-size:13px;font-weight:500;
+    transition:.15s;border:1px solid transparent;
+  }
+  .btn-ghost{background:var(--surface);border-color:var(--line);color:var(--text);}
+  .btn-ghost:hover{border-color:var(--line-strong);}
+  .btn-primary{
+    background:var(--secondary);color:#fff;
+    box-shadow:0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 14px -6px rgba(255,107,53,0.55);
+  }
+  .btn-primary:hover{background:var(--secondary-600);}
+  .btn-dark{background:var(--primary);color:#fff;}
+  .btn-dark:hover{background:var(--primary-700);}
+
+  /* ────── KPI strip ────── */
+  .kpi-strip{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:14px;
+    margin-bottom:22px;
+  }
+  .kpi{
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-card);
+    padding:16px 18px;
+    position:relative;overflow:hidden;
+  }
+  .kpi-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .kpi-label{font-size:11px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);font-family:'JetBrains Mono';}
+  .kpi-icon{
+    width:30px;height:30px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .kpi-val{font-family:'Plus Jakarta Sans';font-size:32px;font-weight:700;line-height:1;letter-spacing:-0.03em;}
+  .kpi-delta{font-size:11.5px;color:var(--text-2);margin-top:8px;display:flex;align-items:center;gap:6px;}
+  .kpi-delta b{color:var(--good);font-weight:600;}
+  .kpi-spark{position:absolute;bottom:0;left:0;right:0;height:36px;opacity:.45;}
+
+  .kpi-1 .kpi-icon{background:var(--secondary-50);color:var(--secondary);}
+  .kpi-2 .kpi-icon{background:var(--info-50);color:var(--info);}
+  .kpi-3 .kpi-icon{background:var(--warn-50);color:var(--warn);}
+  .kpi-4 .kpi-icon{background:var(--good-50);color:var(--good);}
+
+  /* ────── toolbar ────── */
+  .toolbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:16px;margin-bottom:16px;flex-wrap:wrap;
+  }
+  .tabs{
+    display:inline-flex;gap:2px;
+    background:var(--surface);border:1px solid var(--line);
+    padding:4px;border-radius:11px;
+  }
+  .tab{
+    padding:6px 12px;border-radius:8px;
+    font-size:12.5px;font-weight:500;color:var(--text-2);
+    display:inline-flex;align-items:center;gap:7px;
+    transition:.15s;
+  }
+  .tab .n{
+    font-family:'JetBrains Mono';font-size:10.5px;
+    padding:1px 6px;border-radius:99px;
+    background:#F0F1EF;color:var(--text-3);
+  }
+  .tab:hover{color:var(--text);}
+  .tab.active{background:var(--primary);color:#fff;}
+  .tab.active .n{background:rgba(255,255,255,0.16);color:#fff;}
+
+  .tool-right{display:flex;align-items:center;gap:8px;}
+  .seg{
+    display:inline-flex;border:1px solid var(--line);background:var(--surface);
+    border-radius:9px;overflow:hidden;
+  }
+  .seg button{
+    padding:7px 10px;font-size:12.5px;color:var(--text-2);
+    border-right:1px solid var(--line);
+  }
+  .seg button:last-child{border-right:0;}
+  .seg button.on{background:#F4F5F4;color:var(--text);}
+
+  .sort{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:7px 11px;border-radius:9px;
+    background:var(--surface);border:1px solid var(--line);
+    font-size:12.5px;color:var(--text-2);
+  }
+  .sort:hover{border-color:var(--line-strong);}
+
+  /* ────── grid ────── */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--r-card);
+    overflow:hidden;
+    transition:.18s;
+    display:flex;flex-direction:column;
+    cursor:pointer;position:relative;
+  }
+  .card:hover{
+    transform:translateY(-2px);
+    box-shadow:0 18px 36px -22px rgba(24,34,42,0.25), 0 4px 8px -4px rgba(24,34,42,0.06);
+    border-color:var(--line-strong);
+  }
+
+  .card-hero{
+    height:120px;position:relative;
+    background:linear-gradient(135deg,#E9ECEF,#DDE2E5);
+    overflow:hidden;
+  }
+  .hero-1{background:linear-gradient(135deg, #FF8856 0%, #E85A26 100%);}
+  .hero-2{background:linear-gradient(135deg, #3D8BFF 0%, #2A6FDB 100%);}
+  .hero-3{background:linear-gradient(135deg, #2AC58A 0%, #1F8A5B 100%);}
+  .hero-4{background:linear-gradient(135deg, #B07CF7 0%, #7848D3 100%);}
+  .hero-5{background:linear-gradient(135deg, #4A5862 0%, #2F3A40 100%);}
+  .hero-6{background:linear-gradient(135deg, #E8B14A 0%, #C97D0E 100%);}
+  .hero-7{background:linear-gradient(135deg, #5DA8B5 0%, #2C6571 100%);}
+
+  .hero-pattern{
+    position:absolute;inset:0;
+    background-image:
+      radial-gradient(circle at 18% 30%, rgba(255,255,255,0.18) 1px, transparent 2px),
+      radial-gradient(circle at 70% 75%, rgba(255,255,255,0.12) 1px, transparent 2px);
+    background-size:42px 42px, 28px 28px;
+    opacity:.55;
+  }
+  .hero-grid{
+    position:absolute;inset:0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.07) 1px, transparent 1px);
+    background-size:24px 24px;
+    mask-image:linear-gradient(135deg, transparent 30%, #000 90%);
+  }
+  .hero-mark{
+    position:absolute;left:18px;bottom:14px;
+    color:rgba(255,255,255,0.95);
+    font-family:'Plus Jakarta Sans';font-weight:700;font-size:22px;letter-spacing:-0.02em;
+    line-height:1;
+  }
+  .hero-mark .id{
+    display:block;font-family:'JetBrains Mono';font-weight:500;
+    font-size:10.5px;letter-spacing:0.12em;opacity:.7;margin-bottom:6px;
+  }
+
+  .status-pill{
+    position:absolute;top:14px;right:14px;
+    display:inline-flex;align-items:center;gap:6px;
+    padding:4px 10px 4px 9px;border-radius:99px;
+    font-size:11px;font-weight:600;
+    background:rgba(255,255,255,0.92);
+    color:var(--text);backdrop-filter:blur(4px);
+  }
+  .status-pill .d{width:6px;height:6px;border-radius:99px;}
+  .st-active .d{background:var(--good);box-shadow:0 0 0 3px rgba(31,138,91,0.18);}
+  .st-active{color:#136E47;}
+  .st-plan .d{background:var(--info);box-shadow:0 0 0 3px rgba(42,111,219,0.18);}
+  .st-plan{color:#1D539E;}
+  .st-pause .d{background:var(--warn);box-shadow:0 0 0 3px rgba(201,125,14,0.18);}
+  .st-pause{color:#8B5306;}
+  .st-done .d{background:var(--neutral);box-shadow:0 0 0 3px rgba(120,119,119,0.18);}
+
+  .card-body{padding:16px 18px 14px;display:flex;flex-direction:column;gap:10px;flex:1;}
+  .card-title{font-family:'Plus Jakarta Sans';font-weight:600;font-size:16.5px;color:var(--text);letter-spacing:-0.015em;line-height:1.25;}
+  .card-loc{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--text-2);}
+
+  .progress-row{display:flex;align-items:center;gap:10px;margin-top:auto;padding-top:8px;}
+  .progress{flex:1;height:6px;background:#F0F1EF;border-radius:99px;overflow:hidden;}
+  .progress > i{display:block;height:100%;border-radius:99px;background:var(--secondary);transition:width .6s;}
+  .progress.success > i{background:var(--good);}
+  .progress.info > i{background:var(--info);}
+  .progress.warn > i{background:var(--warn);}
+  .progress.neutral > i{background:var(--neutral);}
+  .pct{font-family:'JetBrains Mono';font-size:11.5px;color:var(--text-2);min-width:36px;text-align:right;}
+
+  .card-foot{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:10px 16px 14px;
+    border-top:1px solid var(--line);margin-top:auto;
+  }
+  .foot-meta{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--text-2);}
+  .foot-meta svg{color:var(--text-3);}
+  .menu-btn{
+    width:26px;height:26px;border-radius:7px;
+    display:inline-flex;align-items:center;justify-content:center;
+    color:var(--text-3);
+  }
+  .menu-btn:hover{background:#F4F5F4;color:var(--text);}
+
+  /* "new" card */
+  .card-new{
+    border:1.5px dashed #C7CAC6;background:transparent;
+    align-items:center;justify-content:center;
+    min-height:300px;color:var(--text-2);
+    text-align:center;
+  }
+  .card-new:hover{
+    border-color:var(--secondary);background:rgba(255,107,53,0.03);color:var(--secondary);
+    transform:translateY(-2px);box-shadow:none;
+  }
+  .card-new .plus{
+    width:44px;height:44px;border-radius:99px;
+    background:rgba(255,107,53,0.10);color:var(--secondary);
+    display:inline-flex;align-items:center;justify-content:center;
+    margin-bottom:12px;
+  }
+  .card-new h4{font-family:'Plus Jakarta Sans';font-weight:600;font-size:15px;margin:0 0 4px;color:var(--text);}
+  .card-new p{margin:0;font-size:12px;color:var(--text-3);max-width:200px;}
+
+  /* responsive nudge */
+  @media (max-width: 1280px){
+    .grid{grid-template-columns:repeat(2,1fr);}
+    .kpi-strip{grid-template-columns:repeat(2,1fr);}
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── inline icon library (so direct edits stay simple) ─── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 16 16"><path d="M3 13V7l5-4 5 4v6h-3v-4H6v4H3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-list" viewBox="0 0 16 16"><path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 16 16"><path d="M2 5a1.5 1.5 0 011.5-1.5h2.6L7.5 5h5a1.5 1.5 0 011.5 1.5V12a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 12V5z" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-people" viewBox="0 0 16 16"><circle cx="6" cy="6" r="2.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2.5 13c.4-2 1.8-3.3 3.5-3.3S9.1 11 9.5 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M10.5 4.5a2.2 2.2 0 010 4.3M11.5 9.7c1.5.3 2.5 1.6 2.8 3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 16 16"><path d="M3.5 2.5h6L13 6v7.5H3.5v-11z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M9.5 2.5V6H13" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 16 16"><path d="M3 13V8M7 13V4M11 13V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 1.8v1.8M8 12.4v1.8M14.2 8h-1.8M3.6 8H1.8M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3M12.4 12.4l-1.3-1.3M4.9 4.9L3.6 3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16"><path d="M3 12V8a5 5 0 0110 0v4M2 12h12M6 14a2 2 0 004 0" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M3 8a5 5 0 018.5-3.5L13 6M13 3v3h-3M13 8a5 5 0 01-8.5 3.5L3 10M3 13v-3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 16 16"><path d="M8 2.5a3.8 3.8 0 013.8 3.8c0 2.8-3.8 7.2-3.8 7.2S4.2 9.1 4.2 6.3A3.8 3.8 0 018 2.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><circle cx="8" cy="6.3" r="1.3" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="10" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 2v3M10.5 2v3M2.5 7h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 4.5V8l2.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-more" viewBox="0 0 16 16"><circle cx="4" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 16 16"><path d="M3 4h10M4.5 8h7M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 16 16"><path d="M9 4V3a1.5 1.5 0 00-1.5-1.5h-4A1.5 1.5 0 002 3v10a1.5 1.5 0 001.5 1.5h4A1.5 1.5 0 009 13v-1M6 8h8m0 0l-2.2-2.2M14 8l-2.2 2.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-trend" viewBox="0 0 16 16"><path d="M2 11l4-4 3 3 5-6M14 4h-3M14 4v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-build" viewBox="0 0 16 16"><path d="M2.5 13.5V6l5-3.5 5 3.5v7.5h-10z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M6 13.5V10h3v3.5M5 7.5h5" stroke="currentColor" stroke-width="1.4"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- ────── SIDEBAR ────── -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M3 19V8.5L11 3l8 5.5V19h-4v-6H7v6H3z" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">CONSTRUCTA</div>
+        <div class="brand-sub">Gestión de obras</div>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div class="ws-mark">EV</div>
+      <div class="ws-info">
+        <div class="ws-name">Estudio Velar</div>
+        <div class="ws-role">Workspace</div>
+      </div>
+      <svg width="12" height="12" style="color:#6B767E"><use href="#i-chev-d"/></svg>
+    </div>
+
+    <div class="side-search">
+      <svg width="13" height="13"><use href="#i-search"/></svg>
+      <span>Buscar…</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="side-head">Workspace</div>
+    <nav class="nav">
+      <a class="active" href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-grid"/></svg></span>
+        Panel
+      </a>
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-build"/></svg></span>
+        Mis obras
+        <span class="count">7</span>
+      </a>
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-cal"/></svg></span>
+        Cronograma
+      </a>
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-people"/></svg></span>
+        Equipo
+      </a>
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-doc"/></svg></span>
+        Documentos
+      </a>
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-chart"/></svg></span>
+        Reportes
+      </a>
+    </nav>
+
+    <div class="side-head" style="margin-top:14px">Cuenta</div>
+    <nav class="nav">
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-cog"/></svg></span>
+        Configuración
+      </a>
+      <a href="#">
+        <span class="ico"><svg width="15" height="15"><use href="#i-bell"/></svg></span>
+        Notificaciones
+        <span class="count" style="background:var(--secondary);color:#fff">3</span>
+      </a>
+    </nav>
+
+    <div class="spacer"></div>
+
+    <div class="side-pinned">
+      <div class="pinned-title">Fijadas</div>
+      <div class="pinned-row">
+        <span class="pinned-dot" style="background:#FF8856"></span>
+        <span>Edificio Nórdico</span>
+        <span class="pinned-meta">67%</span>
+      </div>
+      <div class="pinned-row">
+        <span class="pinned-dot" style="background:#3D8BFF"></span>
+        <span>Torre Belgrano</span>
+        <span class="pinned-meta">32%</span>
+      </div>
+      <div class="pinned-row">
+        <span class="pinned-dot" style="background:#2AC58A"></span>
+        <span>Casa Pampa</span>
+        <span class="pinned-meta">94%</span>
+      </div>
+    </div>
+
+    <div class="side-user">
+      <div class="avatar av-pm">PM</div>
+      <div style="flex:1;min-width:0">
+        <div class="name">Project Manager</div>
+        <div class="role">Administrador</div>
+      </div>
+      <button class="more" title="Cerrar sesión">
+        <svg width="14" height="14"><use href="#i-logout"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ────── MAIN ────── -->
+  <main>
+
+    <!-- topbar -->
+    <div class="topbar">
+      <div class="crumbs">
+        <span class="home-ico"><svg width="13" height="13"><use href="#i-home"/></svg></span>
+        <span>Workspace</span>
+        <span class="sep">/</span>
+        <span>Panel</span>
+        <span class="sep">/</span>
+        <span class="current">Vista general</span>
+      </div>
+
+      <div class="top-search">
+        <svg width="13" height="13"><use href="#i-search"/></svg>
+        <span>Buscar obras, tareas, documentos…</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="top-right">
+        <button class="icon-btn" title="Refrescar"><svg width="14" height="14"><use href="#i-refresh"/></svg></button>
+        <button class="icon-btn" title="Notificaciones"><svg width="14" height="14"><use href="#i-bell"/></svg><span class="dot"></span></button>
+        <div class="avatar av-pm" style="margin-left:4px">PM</div>
+      </div>
+    </div>
+
+    <!-- page content -->
+    <div class="page">
+
+      <!-- header -->
+      <div class="page-head">
+        <div>
+          <h1 class="title">Mis obras</h1>
+          <div class="sub">Vista general de proyectos · <b>7 activos</b> · actualizado hace un momento</div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost">
+            <svg width="13" height="13"><use href="#i-sort"/></svg>
+            Filtros
+          </button>
+          <button class="btn btn-primary">
+            <svg width="13" height="13"><use href="#i-plus"/></svg>
+            Nueva obra
+          </button>
+        </div>
+      </div>
+
+      <!-- KPIs -->
+      <div class="kpi-strip">
+        <div class="kpi kpi-1">
+          <div class="kpi-top">
+            <span class="kpi-label">Total obras</span>
+            <div class="kpi-icon"><svg width="15" height="15"><use href="#i-build"/></svg></div>
+          </div>
+          <div class="kpi-val">07</div>
+          <div class="kpi-delta">
+            <svg width="11" height="11" style="color:var(--good)"><use href="#i-trend"/></svg>
+            <b>+2</b> este trimestre
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 200 40" preserveAspectRatio="none">
+            <path d="M0 30 L25 28 L50 24 L75 26 L100 18 L125 20 L150 12 L175 14 L200 8" stroke="#FF6B35" stroke-width="1.8" fill="none"/>
+          </svg>
+        </div>
+
+        <div class="kpi kpi-2">
+          <div class="kpi-top">
+            <span class="kpi-label">En progreso</span>
+            <div class="kpi-icon"><svg width="15" height="15"><use href="#i-clock"/></svg></div>
+          </div>
+          <div class="kpi-val">04</div>
+          <div class="kpi-delta">
+            <svg width="11" height="11" style="color:var(--info)"><use href="#i-trend"/></svg>
+            avance medio <b style="color:var(--info)">52%</b>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 200 40" preserveAspectRatio="none">
+            <path d="M0 26 L25 24 L50 28 L75 20 L100 22 L125 14 L150 18 L175 10 L200 12" stroke="#2A6FDB" stroke-width="1.8" fill="none"/>
+          </svg>
+        </div>
+
+        <div class="kpi kpi-3">
+          <div class="kpi-top">
+            <span class="kpi-label">Planificadas</span>
+            <div class="kpi-icon"><svg width="15" height="15"><use href="#i-cal"/></svg></div>
+          </div>
+          <div class="kpi-val">02</div>
+          <div class="kpi-delta">
+            inicio próximo <b style="color:var(--warn)">en 14 días</b>
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 200 40" preserveAspectRatio="none">
+            <path d="M0 20 L25 22 L50 18 L75 20 L100 24 L125 22 L150 26 L175 24 L200 28" stroke="#C97D0E" stroke-width="1.8" fill="none"/>
+          </svg>
+        </div>
+
+        <div class="kpi kpi-4">
+          <div class="kpi-top">
+            <span class="kpi-label">Completadas</span>
+            <div class="kpi-icon"><svg width="15" height="15" style="transform:translate(0,1px)"><use href="#i-trend"/></svg></div>
+          </div>
+          <div class="kpi-val">01</div>
+          <div class="kpi-delta">
+            <b>+1</b> entregada este mes
+          </div>
+          <svg class="kpi-spark" viewBox="0 0 200 40" preserveAspectRatio="none">
+            <path d="M0 32 L25 30 L50 28 L75 24 L100 20 L125 18 L150 12 L175 10 L200 6" stroke="#1F8A5B" stroke-width="1.8" fill="none"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- toolbar -->
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button class="tab active">Todas <span class="n">7</span></button>
+          <button class="tab">Activas <span class="n">4</span></button>
+          <button class="tab">Planificadas <span class="n">2</span></button>
+          <button class="tab">Pausadas <span class="n">0</span></button>
+          <button class="tab">Completadas <span class="n">1</span></button>
+        </div>
+
+        <div class="tool-right">
+          <button class="sort">
+            <svg width="12" height="12"><use href="#i-sort"/></svg>
+            Ordenar: <b style="color:var(--text);font-weight:500">Más recientes</b>
+            <svg width="11" height="11"><use href="#i-chev-d"/></svg>
+          </button>
+          <div class="seg">
+            <button class="on" title="Grid"><svg width="13" height="13"><use href="#i-grid"/></svg></button>
+            <button title="Lista"><svg width="13" height="13"><use href="#i-list"/></svg></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- grid -->
+      <div class="grid">
+
+        <!-- card 1 -->
+        <article class="card">
+          <div class="card-hero hero-1">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-active"><span class="d"></span>En obra</span>
+            <div class="hero-mark"><span class="id">#007 · CAPITALINAS</span>Capitalinas</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Av. Colón 1450 · Córdoba Capital
+            </div>
+            <div class="progress-row">
+              <div class="progress"><i style="width:67%"></i></div>
+              <span class="pct">67%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-1">AV</div>
+              <div class="avatar av-2">MR</div>
+              <div class="avatar av-3">LP</div>
+              <div class="avatar" style="background:#F0F1EF;color:var(--text-2)">+4</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-clock"/></svg>
+              82 días restantes
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- card 2 -->
+        <article class="card">
+          <div class="card-hero hero-2">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-active"><span class="d"></span>En obra</span>
+            <div class="hero-mark"><span class="id">#006 · TORRE BELGRANO</span>Torre Belgrano</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Av. Cabildo 2210 · CABA
+            </div>
+            <div class="progress-row">
+              <div class="progress info"><i style="width:32%"></i></div>
+              <span class="pct">32%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-2">MR</div>
+              <div class="avatar av-4">JC</div>
+              <div class="avatar av-3">LP</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-clock"/></svg>
+              194 días restantes
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- card 3 -->
+        <article class="card">
+          <div class="card-hero hero-3">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-active"><span class="d"></span>Finalizando</span>
+            <div class="hero-mark"><span class="id">#005 · CASA PAMPA</span>Casa Pampa</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Ruta 8 km 47 · Pilar
+            </div>
+            <div class="progress-row">
+              <div class="progress success"><i style="width:94%"></i></div>
+              <span class="pct">94%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-2">MR</div>
+              <div class="avatar av-1">AV</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-clock"/></svg>
+              12 días restantes
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- card 4 -->
+        <article class="card">
+          <div class="card-hero hero-4">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-plan"><span class="d"></span>Planificada</span>
+            <div class="hero-mark"><span class="id">#004 · GALPÓN IND. 4</span>Galpón Industrial 4</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Parque Industrial · Garín
+            </div>
+            <div class="progress-row">
+              <div class="progress info"><i style="width:11%"></i></div>
+              <span class="pct">11%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-3">LP</div>
+              <div class="avatar av-5">IM</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-cal"/></svg>
+              inicio 28 May
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- card 5 -->
+        <article class="card">
+          <div class="card-hero hero-5">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-active"><span class="d"></span>En obra</span>
+            <div class="hero-mark"><span class="id">#003 · COMPLEJO RIVIERA</span>Complejo Riviera</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Av. del Libertador 4820 · CABA
+            </div>
+            <div class="progress-row">
+              <div class="progress"><i style="width:45%"></i></div>
+              <span class="pct">45%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-4">JC</div>
+              <div class="avatar av-1">AV</div>
+              <div class="avatar av-2">MR</div>
+              <div class="avatar" style="background:#F0F1EF;color:var(--text-2)">+2</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-clock"/></svg>
+              141 días restantes
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- card 6 -->
+        <article class="card">
+          <div class="card-hero hero-6">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-active"><span class="d"></span>En obra</span>
+            <div class="hero-mark"><span class="id">#002 · HOTEL DEL BOSQUE</span>Hotel del Bosque</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Cerro Otto · Bariloche
+            </div>
+            <div class="progress-row">
+              <div class="progress warn"><i style="width:78%"></i></div>
+              <span class="pct">78%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-2">MR</div>
+              <div class="avatar av-3">LP</div>
+              <div class="avatar av-5">IM</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-clock"/></svg>
+              48 días restantes
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- card 7 -->
+        <article class="card">
+          <div class="card-hero hero-7">
+            <div class="hero-pattern"></div>
+            <div class="hero-grid"></div>
+            <span class="status-pill st-plan"><span class="d"></span>Planificada</span>
+            <div class="hero-mark"><span class="id">#001 · PLAZA CENTRAL</span>Plaza Central</div>
+          </div>
+          <div class="card-body">
+            <div class="card-loc">
+              <svg width="12" height="12"><use href="#i-pin"/></svg>
+              Plaza San Martín · Rosario
+            </div>
+            <div class="progress-row">
+              <div class="progress neutral"><i style="width:23%"></i></div>
+              <span class="pct">23%</span>
+            </div>
+          </div>
+          <div class="card-foot">
+            <div class="av-stack">
+              <div class="avatar av-4">JC</div>
+              <div class="avatar av-3">LP</div>
+            </div>
+            <div class="foot-meta">
+              <svg width="12" height="12"><use href="#i-cal"/></svg>
+              inicio 10 Jun
+            </div>
+            <button class="menu-btn"><svg width="14" height="14"><use href="#i-more"/></svg></button>
+          </div>
+        </article>
+
+        <!-- new card slot -->
+        <article class="card card-new">
+          <div>
+            <div class="plus"><svg width="18" height="18"><use href="#i-plus"/></svg></div>
+            <h4>Crear nueva obra</h4>
+            <p>Empezá un proyecto desde cero o usá una plantilla.</p>
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // Simple tab toggle (visual only)
+  document.querySelectorAll('.tabs .tab').forEach(t => {
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.tabs .tab').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+    });
+  });
+  // Grid/list segment toggle (visual)
+  document.querySelectorAll('.seg button').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.seg button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>

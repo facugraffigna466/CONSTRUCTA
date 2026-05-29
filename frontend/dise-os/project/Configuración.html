@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Constructa · Configuración</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"/>
+<style>
+  :root{
+    --primary:#2F3A40;
+    --primary-700:#243035;
+    --primary-900:#18222A;
+    --secondary:#FF6B35;
+    --secondary-600:#E85A26;
+    --secondary-50:#FFF1E9;
+    --tertiary:#64748B;
+    --neutral:#787777;
+    --bg:#F4F5F4;
+    --surface:#FFFFFF;
+    --line:#E6E7E5;
+    --line-strong:#D5D7D3;
+    --text:#1A2329;
+    --text-2:#5B6770;
+    --text-3:#8E97A0;
+    --good:#1F8A5B;
+    --good-50:#E4F3EC;
+    --warn:#C97D0E;
+    --warn-50:#FDF1DE;
+    --info:#2A6FDB;
+    --info-50:#E5EEFB;
+    --danger:#D03A3A;
+    --danger-50:#FCE5E5;
+    --violet:#7848D3;
+    --violet-50:#EFE7FC;
+
+    --r-card:14px;
+    --r-pill:99px;
+    --r-ctrl:10px;
+  }
+
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,system-ui,sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    font-feature-settings:"ss01","cv11";
+  }
+  .head,h1,h2,h3,h4{font-family:'Plus Jakarta Sans',system-ui,sans-serif;letter-spacing:-0.02em;}
+  .mono{font-family:'JetBrains Mono',ui-monospace,Menlo,monospace;}
+  button{font-family:inherit;border:0;background:none;cursor:pointer;color:inherit;}
+  a{color:inherit;text-decoration:none;}
+  input,select,textarea{font-family:inherit;}
+
+  ::-webkit-scrollbar{width:10px;height:10px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:#CDD0CC;border-radius:99px;border:2px solid var(--bg);}
+  ::-webkit-scrollbar-thumb:hover{background:#B6B9B4;}
+
+  .app{display:grid;grid-template-columns:248px 1fr;min-height:100vh;}
+
+  /* ────── sidebar ────── */
+  .side{
+    background:var(--primary);
+    color:#CFD4D7;
+    display:flex;flex-direction:column;
+    padding:14px 12px 12px;
+    position:sticky;top:0;height:100vh;
+  }
+  .side .brand{display:flex;align-items:center;gap:10px;padding:6px 6px 14px;}
+  .brand-mark{
+    width:32px;height:32px;border-radius:9px;
+    background:linear-gradient(160deg,var(--secondary) 0%, #E85A26 100%);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,0.25), 0 6px 14px -6px rgba(255,107,53,0.6);
+    flex-shrink:0;
+  }
+  .brand-name{font-family:'Plus Jakarta Sans';font-weight:700;font-size:14px;color:#fff;letter-spacing:0.04em;}
+  .brand-sub{font-size:11px;color:#8C969C;margin-top:1px;}
+
+  .workspace{
+    display:flex;align-items:center;gap:9px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.07);
+    border-radius:10px;
+    padding:8px 10px;margin:0 2px 14px;
+    cursor:pointer;transition:.15s;
+  }
+  .workspace:hover{background:rgba(255,255,255,0.07);}
+  .ws-mark{
+    width:24px;height:24px;border-radius:6px;
+    background:linear-gradient(135deg,#FF8856,#FF6B35);
+    color:#fff;font-weight:700;font-size:11px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Plus Jakarta Sans';
+  }
+  .ws-info{flex:1;min-width:0;line-height:1.2;}
+  .ws-name{color:#fff;font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ws-role{font-size:10.5px;color:#8C969C;letter-spacing:0.04em;}
+
+  .side-search{
+    display:flex;align-items:center;gap:9px;
+    background:rgba(0,0,0,0.18);
+    border:1px solid rgba(255,255,255,0.05);
+    border-radius:9px;
+    padding:7px 10px;margin:0 2px 16px;
+    color:#8C969C;font-size:12.5px;cursor:pointer;
+  }
+  .side-search .kbd{
+    margin-left:auto;font-size:10px;
+    padding:1px 6px;border-radius:4px;
+    background:rgba(255,255,255,0.05);
+    color:#8C969C;
+    border:1px solid rgba(255,255,255,0.06);
+  }
+
+  .side-head{
+    font-size:10.5px;font-weight:600;letter-spacing:0.12em;
+    color:#6B767E;text-transform:uppercase;
+    padding:8px 10px 6px;
+  }
+  .nav{display:flex;flex-direction:column;gap:1px;}
+  .nav a{
+    display:flex;align-items:center;gap:11px;
+    padding:7px 10px;border-radius:8px;
+    color:#CFD4D7;font-size:13px;font-weight:500;
+    transition:background .12s;
+  }
+  .nav a:hover{background:rgba(255,255,255,0.04);}
+  .nav a.active{
+    background:linear-gradient(180deg,rgba(255,107,53,0.18),rgba(255,107,53,0.08));
+    color:#fff;
+    box-shadow:inset 0 0 0 1px rgba(255,107,53,0.25);
+  }
+  .nav a.active .ico{color:var(--secondary);}
+  .nav .ico{width:16px;display:inline-flex;justify-content:center;color:#8C969C;}
+  .nav .count{
+    margin-left:auto;font-size:10.5px;padding:1px 6px;border-radius:99px;
+    background:rgba(255,255,255,0.08);color:#CFD4D7;
+    font-family:'JetBrains Mono';
+  }
+
+  .side .spacer{flex:1;}
+
+  .side-pinned{
+    margin:0 2px;padding:10px;
+    background:rgba(255,255,255,0.03);
+    border:1px solid rgba(255,255,255,0.05);
+    border-radius:11px;
+    margin-bottom:10px;
+  }
+  .pinned-title{font-size:10.5px;font-weight:600;letter-spacing:0.12em;color:#6B767E;text-transform:uppercase;margin-bottom:8px;}
+  .pinned-row{display:flex;align-items:center;gap:8px;padding:5px 4px;font-size:12px;color:#CFD4D7;cursor:pointer;border-radius:6px;}
+  .pinned-row:hover{background:rgba(255,255,255,0.04);}
+  .pinned-dot{width:7px;height:7px;border-radius:99px;flex-shrink:0;}
+  .pinned-meta{margin-left:auto;font-size:10.5px;color:#8C969C;font-family:'JetBrains Mono';}
+
+  .side-user{
+    display:flex;align-items:center;gap:10px;
+    padding:8px;border-radius:10px;
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.06);
+  }
+  .avatar{
+    width:30px;height:30px;border-radius:99px;
+    display:flex;align-items:center;justify-content:center;
+    color:#fff;font-weight:600;font-size:11px;
+    font-family:'Plus Jakarta Sans';flex-shrink:0;
+  }
+  .av-pm{background:linear-gradient(135deg,#FF8856,#E85A26);}
+  .side-user .name{font-size:12.5px;font-weight:600;color:#fff;line-height:1.15;}
+  .side-user .role{font-size:10.5px;color:#8C969C;}
+  .side-user .more{color:#6B767E;}
+
+  /* ────── main ────── */
+  main{display:flex;flex-direction:column;min-width:0;}
+
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:24px;
+    padding:12px 28px;
+    background:rgba(244,245,244,0.85);
+    backdrop-filter:saturate(140%) blur(10px);
+    border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:5;
+  }
+  .crumbs{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-3);}
+  .crumbs .sep{color:#C5C9C5;}
+  .crumbs .current{color:var(--text);font-weight:500;}
+  .top-search{
+    flex:1;max-width:480px;
+    display:flex;align-items:center;gap:10px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--r-ctrl);
+    padding:8px 12px;font-size:13px;color:var(--text-3);
+  }
+  .top-search:hover{border-color:var(--line-strong);}
+  .top-search .kbd{
+    margin-left:auto;font-size:10.5px;
+    padding:2px 7px;border-radius:5px;
+    background:#F4F5F4;color:var(--text-3);
+    border:1px solid var(--line);
+    font-family:'JetBrains Mono';
+  }
+  .top-right{display:flex;align-items:center;gap:8px;}
+  .icon-btn{
+    width:34px;height:34px;border-radius:9px;
+    background:var(--surface);border:1px solid var(--line);
+    display:inline-flex;align-items:center;justify-content:center;
+    color:var(--text-2);position:relative;
+    transition:.15s;
+  }
+  .icon-btn:hover{border-color:var(--line-strong);color:var(--text);}
+  .icon-btn .dot{
+    position:absolute;top:7px;right:7px;
+    width:7px;height:7px;border-radius:99px;background:var(--secondary);
+    box-shadow:0 0 0 2px var(--bg);
+  }
+
+  /* ────── page ────── */
+  .page{padding:24px 28px 32px;max-width:1500px;}
+
+  .page-head{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:22px;
+  }
+  .title{font-size:28px;font-weight:700;color:var(--text);margin:0;letter-spacing:-0.025em;}
+  .sub{font-size:13.5px;color:var(--text-2);margin-top:4px;display:flex;align-items:center;gap:10px;}
+  .sub .dot{width:6px;height:6px;border-radius:99px;background:var(--good);box-shadow:0 0 0 3px rgba(31,138,91,0.18);}
+  .sub b{color:var(--text);font-weight:600;}
+
+  .actions{display:flex;gap:8px;align-items:center;}
+  .btn{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:9px 14px;border-radius:var(--r-ctrl);
+    font-size:13px;font-weight:500;
+    transition:.15s;border:1px solid transparent;
+  }
+  .btn-ghost{background:var(--surface);border-color:var(--line);color:var(--text);}
+  .btn-ghost:hover{border-color:var(--line-strong);}
+  .btn-primary{
+    background:var(--secondary);color:#fff;
+    box-shadow:0 1px 0 rgba(255,255,255,0.18) inset, 0 6px 14px -6px rgba(255,107,53,0.55);
+  }
+  .btn-primary:hover{background:var(--secondary-600);}
+  .btn-dark{background:var(--primary);color:#fff;}
+  .btn-dark:hover{background:var(--primary-700);}
+
+  /* ────── layout: settings nav + content ────── */
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:20px;align-items:flex-start;}
+
+  /* settings rail */
+  .rail{
+    position:sticky;top:88px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:var(--r-card);
+    padding:8px;
+    display:flex;flex-direction:column;gap:1px;
+  }
+  .rail-section{
+    font-size:10.5px;font-weight:600;letter-spacing:0.12em;
+    color:var(--text-3);text-transform:uppercase;
+    padding:10px 10px 6px;
+  }
+  .rail a{
+    display:flex;align-items:center;gap:10px;
+    padding:8px 10px;border-radius:8px;
+    font-size:13px;color:var(--text-2);font-weight:500;
+    transition:.12s;
+  }
+  .rail a:hover{background:#F4F5F4;color:var(--text);}
+  .rail a.active{
+    background:#F4F5F4;color:var(--text);
+    box-shadow:inset 2px 0 0 var(--secondary);
+  }
+  .rail a .ico{
+    width:24px;height:24px;border-radius:7px;
+    background:#F4F5F4;color:var(--text-2);
+    display:inline-flex;align-items:center;justify-content:center;
+    flex-shrink:0;transition:.12s;
+  }
+  .rail a.active .ico{background:var(--secondary-50);color:var(--secondary);}
+  .rail a .chev{margin-left:auto;color:var(--text-3);}
+
+  /* ────── section headers ────── */
+  .sec-head{
+    display:flex;align-items:center;justify-content:space-between;
+    margin:6px 4px 14px;
+  }
+  .sec-head:first-child{margin-top:0;}
+  .sec-label{
+    display:inline-flex;align-items:center;gap:10px;
+  }
+  .sec-tick{
+    width:3px;height:14px;border-radius:99px;background:var(--secondary);
+  }
+  .sec-ico{
+    width:22px;height:22px;border-radius:6px;
+    background:var(--secondary-50);color:var(--secondary);
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .sec-title{
+    font-family:'JetBrains Mono';
+    font-size:11px;font-weight:600;letter-spacing:0.18em;
+    color:var(--text-2);text-transform:uppercase;
+  }
+  .sec-aux{font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:8px;}
+  .sec-aux button{
+    width:28px;height:28px;border-radius:7px;
+    border:1px solid var(--line);background:var(--surface);
+    color:var(--text-2);display:inline-flex;align-items:center;justify-content:center;
+  }
+  .sec-aux button:hover{color:var(--text);border-color:var(--line-strong);}
+
+  /* ────── status cards ────── */
+  .status-grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+    margin-bottom:8px;
+  }
+  .status-card{
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-card);
+    padding:14px 16px;
+    display:flex;flex-direction:column;gap:8px;
+    position:relative;overflow:hidden;
+    transition:.15s;
+  }
+  .status-card::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--good);
+  }
+  .status-card.warn::before{background:var(--warn);}
+  .status-card.error::before{background:var(--danger);}
+  .sc-top{display:flex;align-items:center;justify-content:space-between;}
+  .sc-ico{
+    width:30px;height:30px;border-radius:8px;
+    background:var(--good-50);color:var(--good);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .status-card.warn .sc-ico{background:var(--warn-50);color:var(--warn);}
+  .status-card.error .sc-ico{background:var(--danger-50);color:var(--danger);}
+  .sc-check{
+    width:20px;height:20px;border-radius:99px;
+    background:var(--good);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 3px var(--good-50);
+  }
+  .status-card.warn .sc-check{background:var(--warn);box-shadow:0 0 0 3px var(--warn-50);}
+  .status-card.error .sc-check{background:var(--danger);box-shadow:0 0 0 3px var(--danger-50);}
+  .sc-name{font-family:'Plus Jakarta Sans';font-weight:600;font-size:14.5px;color:var(--text);}
+  .sc-meta{font-size:11.5px;color:var(--text-2);}
+  .sc-meta .mono{color:var(--text);}
+  .sc-foot{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-top:4px;font-size:10.5px;color:var(--text-3);
+    border-top:1px solid var(--line);padding-top:8px;
+  }
+  .sc-foot .mono{color:var(--text-2);}
+
+  .last-check{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:11.5px;color:var(--text-3);
+    margin-top:6px;
+  }
+  .last-check .mono{color:var(--text-2);}
+
+  /* ────── form cards ────── */
+  .card{
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-card);
+    padding:20px 22px;
+  }
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 20px;}
+  .field{display:flex;flex-direction:column;gap:7px;}
+  .field label{
+    font-size:11px;font-weight:600;letter-spacing:0.08em;
+    color:var(--text-2);text-transform:uppercase;
+    display:flex;align-items:center;gap:6px;
+  }
+  .field .req{color:var(--secondary);}
+  .field .hint{font-size:11.5px;color:var(--text-3);margin-top:-2px;}
+  .input,.select{
+    height:38px;padding:0 12px;
+    border:1px solid var(--line);background:var(--surface);
+    border-radius:9px;color:var(--text);font-size:13.5px;
+    transition:.15s;
+    width:100%;
+    outline:none;
+  }
+  .input::placeholder{color:#B5BAC0;}
+  .input:hover,.select:hover{border-color:var(--line-strong);}
+  .input:focus,.select:focus{
+    border-color:var(--secondary);
+    box-shadow:0 0 0 4px rgba(255,107,53,0.10);
+  }
+  .input-wrap{position:relative;}
+  .input-wrap .lead{
+    position:absolute;left:11px;top:50%;transform:translateY(-50%);
+    color:var(--text-3);pointer-events:none;
+  }
+  .input-wrap.lead-pad .input{padding-left:34px;}
+  .select{
+    appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none'><path d='M4 6l4 4 4-4' stroke='%238E97A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 12px center;padding-right:34px;
+  }
+
+  /* whatsapp connected banner */
+  .wa-banner{
+    display:flex;align-items:center;gap:12px;
+    background:linear-gradient(180deg, #ECF7F1, #E4F3EC);
+    border:1px solid #BFE3CE;
+    border-radius:11px;
+    padding:12px 14px;
+    margin-bottom:18px;
+    position:relative;overflow:hidden;
+  }
+  .wa-banner .ic{
+    width:34px;height:34px;border-radius:9px;
+    background:#fff;color:var(--good);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 0 0 1px #BFE3CE;
+  }
+  .wa-body{flex:1;min-width:0;}
+  .wa-l1{font-size:13px;color:#0E5A37;font-weight:500;line-height:1.2;}
+  .wa-l1 b{font-family:'JetBrains Mono';font-weight:600;color:#0E5A37;background:#fff;padding:1px 7px;border-radius:5px;margin-left:4px;box-shadow:0 0 0 1px #BFE3CE;}
+  .wa-l2{font-size:11.5px;color:var(--good);margin-top:2px;display:flex;align-items:center;gap:6px;}
+  .wa-l2 .ping{
+    width:6px;height:6px;border-radius:99px;background:var(--good);
+    box-shadow:0 0 0 0 rgba(31,138,91,0.6);
+    animation:ping 1.8s ease-out infinite;
+  }
+  @keyframes ping{
+    0%{box-shadow:0 0 0 0 rgba(31,138,91,0.45);}
+    70%{box-shadow:0 0 0 8px rgba(31,138,91,0);}
+    100%{box-shadow:0 0 0 0 rgba(31,138,91,0);}
+  }
+  .wa-banner .actions-r{display:flex;gap:8px;}
+  .btn-sm{padding:6px 11px;font-size:12px;border-radius:8px;}
+
+  /* ────── toggle rows ────── */
+  .toggle-list{display:flex;flex-direction:column;}
+  .toggle-row{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 0;
+    border-top:1px solid var(--line);
+  }
+  .toggle-row:first-child{border-top:0;padding-top:0;}
+  .toggle-row .body{flex:1;min-width:0;}
+  .toggle-row h4{
+    margin:0 0 3px;
+    font-family:'Plus Jakarta Sans';font-weight:600;font-size:14px;color:var(--text);
+    letter-spacing:-0.01em;
+  }
+  .toggle-row p{margin:0;font-size:12.5px;color:var(--text-2);line-height:1.45;}
+  .toggle-row .ico{
+    width:32px;height:32px;border-radius:9px;
+    background:#F4F5F4;color:var(--text-2);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+
+  /* toggle switch */
+  .switch{
+    position:relative;width:38px;height:22px;border-radius:99px;
+    background:#D5D7D3;cursor:pointer;
+    transition:.18s;flex-shrink:0;
+  }
+  .switch::after{
+    content:"";position:absolute;top:2px;left:2px;
+    width:18px;height:18px;border-radius:99px;background:#fff;
+    box-shadow:0 1px 2px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04);
+    transition:.18s;
+  }
+  .switch.on{background:var(--good);}
+  .switch.on::after{transform:translateX(16px);}
+  .switch:hover{filter:brightness(0.97);}
+
+  /* time + select inline row inside chatbot config */
+  .inline-fields{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:14px;
+    padding-top:16px;margin-top:8px;
+    border-top:1px solid var(--line);
+  }
+
+  /* ────── two-col panels ────── */
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:8px;}
+
+  /* automation list (denser) */
+  .auto-list{display:flex;flex-direction:column;}
+  .auto-row{
+    display:flex;align-items:center;gap:12px;
+    padding:11px 0;
+    border-top:1px solid var(--line);
+  }
+  .auto-row:first-child{border-top:0;padding-top:2px;}
+  .auto-row .ico{
+    width:28px;height:28px;border-radius:8px;
+    background:#F4F5F4;color:var(--text-2);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .auto-row.on .ico{background:var(--secondary-50);color:var(--secondary);}
+  .auto-row .body{flex:1;}
+  .auto-row h4{margin:0;font-family:'Plus Jakarta Sans';font-weight:600;font-size:13.5px;color:var(--text);}
+  .auto-row .kbd{
+    font-size:10.5px;padding:2px 7px;border-radius:5px;
+    background:#F4F5F4;color:var(--text-2);border:1px solid var(--line);
+    font-family:'JetBrains Mono';
+  }
+
+  /* ────── tiempo real card ────── */
+  .rt-card{
+    background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--r-card);
+    padding:6px 22px;
+  }
+  .rt-row{
+    display:flex;align-items:center;gap:14px;
+    padding:14px 0;border-top:1px solid var(--line);
+  }
+  .rt-row:first-child{border-top:0;}
+  .rt-row .ico{
+    width:34px;height:34px;border-radius:9px;
+    background:var(--info-50);color:var(--info);
+    display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  }
+  .rt-body{flex:1;min-width:0;}
+  .rt-body h4{margin:0 0 2px;font-family:'Plus Jakarta Sans';font-weight:600;font-size:14px;color:var(--text);}
+  .rt-body p{margin:0;font-size:12.5px;color:var(--text-2);}
+  .rt-status{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:5px 11px;border-radius:99px;
+    background:var(--good-50);color:#0E5A37;
+    font-size:12px;font-weight:600;
+    border:1px solid #BFE3CE;
+  }
+  .rt-status .d{width:7px;height:7px;border-radius:99px;background:var(--good);
+    box-shadow:0 0 0 0 rgba(31,138,91,0.6);
+    animation:ping 1.8s ease-out infinite;
+  }
+  .rt-status.neutral{background:#F4F5F4;color:var(--text-2);border-color:var(--line);}
+  .rt-status.neutral .d{background:var(--text-3);animation:none;}
+  .rt-time{font-family:'JetBrains Mono';font-size:13px;color:var(--text);font-weight:500;}
+
+  /* save bar (sticky) */
+  .save-bar{
+    position:sticky;bottom:18px;z-index:4;
+    margin-top:24px;
+    background:var(--primary);
+    color:#fff;
+    border-radius:var(--r-card);
+    padding:11px 14px 11px 18px;
+    display:flex;align-items:center;gap:14px;
+    box-shadow:0 12px 28px -10px rgba(24,34,42,0.35);
+  }
+  .save-bar .pulse{
+    width:8px;height:8px;border-radius:99px;background:var(--secondary);
+    box-shadow:0 0 0 0 rgba(255,107,53,0.6);
+    animation:ping 1.6s ease-out infinite;
+  }
+  .save-bar .msg{font-size:13px;font-weight:500;}
+  .save-bar .msg b{color:#fff;}
+  .save-bar .msg .dim{color:#9BA3AB;font-weight:400;margin-left:6px;}
+  .save-bar .actions-r{margin-left:auto;display:flex;gap:8px;}
+  .save-bar .btn-ghost{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.10);color:#fff;}
+  .save-bar .btn-ghost:hover{background:rgba(255,255,255,0.10);}
+
+  @media (max-width:1280px){
+    .layout{grid-template-columns:1fr;}
+    .rail{position:static;flex-direction:row;flex-wrap:wrap;}
+    .rail .rail-section{display:none;}
+    .status-grid{grid-template-columns:repeat(2,1fr);}
+    .two-col{grid-template-columns:1fr;}
+    .form-grid{grid-template-columns:1fr;}
+    .inline-fields{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<!-- icon library -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-home" viewBox="0 0 16 16"><path d="M3 13V7l5-4 5 4v6h-3v-4H6v4H3z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="9" y="9" width="4.5" height="4.5" rx="1" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-build" viewBox="0 0 16 16"><path d="M2.5 13.5V6l5-3.5 5 3.5v7.5h-10z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M6 13.5V10h3v3.5M5 7.5h5" stroke="currentColor" stroke-width="1.4"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 16 16"><rect x="2.5" y="3.5" width="11" height="10" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5.5 2v3M10.5 2v3M2.5 7h11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-people" viewBox="0 0 16 16"><circle cx="6" cy="6" r="2.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2.5 13c.4-2 1.8-3.3 3.5-3.3S9.1 11 9.5 13" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><path d="M10.5 4.5a2.2 2.2 0 010 4.3M11.5 9.7c1.5.3 2.5 1.6 2.8 3.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 16 16"><path d="M3.5 2.5h6L13 6v7.5H3.5v-11z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M9.5 2.5V6H13" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 16 16"><path d="M3 13V8M7 13V4M11 13V9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-cog" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 1.8v1.8M8 12.4v1.8M14.2 8h-1.8M3.6 8H1.8M12.4 3.6l-1.3 1.3M4.9 11.1l-1.3 1.3M12.4 12.4l-1.3-1.3M4.9 4.9L3.6 3.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M11 11l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 16 16"><path d="M3 12V8a5 5 0 0110 0v4M2 12h12M6 14a2 2 0 004 0" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 16 16"><path d="M3 8a5 5 0 018.5-3.5L13 6M13 3v3h-3M13 8a5 5 0 01-8.5 3.5L3 10M3 13v-3h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8 4.5V8l2.4 1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-checkc" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M5 8.2l2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-server" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="4.5" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="2" y="8.5" width="12" height="4.5" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="5" cy="5.25" r="0.7" fill="currentColor"/><circle cx="5" cy="10.75" r="0.7" fill="currentColor"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 16 16"><path d="M2 6.5C3.5 5 5.6 4 8 4s4.5 1 6 2.5M4 9c1-1 2.4-1.7 4-1.7S11 8 12 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle cx="8" cy="12" r="1.1" fill="currentColor"/></symbol>
+    <symbol id="i-db" viewBox="0 0 16 16"><ellipse cx="8" cy="4" rx="5.2" ry="1.8" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2.8 4v8c0 1 2.3 1.8 5.2 1.8s5.2-.8 5.2-1.8V4M2.8 8c0 1 2.3 1.8 5.2 1.8s5.2-.8 5.2-1.8" stroke="currentColor" stroke-width="1.4" fill="none"/></symbol>
+    <symbol id="i-chat" viewBox="0 0 16 16"><path d="M2.5 7.5c0-2.5 2.5-4.5 5.5-4.5s5.5 2 5.5 4.5-2.5 4.5-5.5 4.5c-.6 0-1.2-.1-1.8-.2L3 13l.7-2.4A4.7 4.7 0 012.5 7.5z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 16 16"><path d="M9 1.5L3 9h4l-1 5.5L13 7H9V1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 16 16"><path d="M8 2.5L14 13H2L8 2.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/><path d="M8 6.5V9.5M8 11.4v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+    <symbol id="i-building" viewBox="0 0 16 16"><path d="M3 13V3.5h7V13M3 13h10V8h-3M5 5.5h3M5 8h3M5 10.5h3" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="9" rx="1.4" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M2.5 5.5L8 9l5.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 16 16"><path d="M3 4c0-.8.6-1.5 1.4-1.5h1.4c.6 0 1.1.4 1.3 1l.4 1.5c.1.5-.1 1-.5 1.3l-.7.5c.9 1.8 2.4 3.3 4.2 4.2l.5-.7c.3-.4.8-.6 1.3-.5l1.5.4c.6.2 1 .7 1 1.3v1.4c0 .8-.7 1.4-1.5 1.4C7 13.3 2.7 9 3 4z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></symbol>
+    <symbol id="i-user" viewBox="0 0 16 16"><circle cx="8" cy="6" r="2.6" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M3 13.5c.6-2.3 2.6-3.8 5-3.8s4.4 1.5 5 3.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/></symbol>
+    <symbol id="i-more" viewBox="0 0 16 16"><circle cx="4" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 16 16"><path d="M9 4V3a1.5 1.5 0 00-1.5-1.5h-4A1.5 1.5 0 002 3v10a1.5 1.5 0 001.5 1.5h4A1.5 1.5 0 009 13v-1M6 8h8m0 0l-2.2-2.2M14 8l-2.2 2.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 16 16"><path d="M8 2L3 4v4c0 3 2.2 5.5 5 6 2.8-.5 5-3 5-6V4l-5-2z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sync" viewBox="0 0 16 16"><path d="M3 6h6m4 4H7M9 4l-4 2 4 2M7 12l4-2-4-2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-retry" viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.5-3.5L13 6M13 3v3h-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 16 16"><path d="M9 1.5L3 9h4l-1 5.5L13 7H9V1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" fill="none"/></symbol>
+    <symbol id="i-save" viewBox="0 0 16 16"><path d="M3 3.5C3 2.9 3.4 2.5 4 2.5h7l2 2v8a1 1 0 01-1 1H4a1 1 0 01-1-1v-9z" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/><path d="M5 2.5v3.5h5V2.5M5 13.5V9h6v4.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linejoin="round"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="16" height="16" viewBox="0 0 22 22" fill="none"><path d="M3 19V8.5L11 3l8 5.5V19h-4v-6H7v6H3z" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">CONSTRUCTA</div>
+        <div class="brand-sub">Gestión de obras</div>
+      </div>
+    </div>
+
+    <div class="workspace">
+      <div class="ws-mark">EV</div>
+      <div class="ws-info">
+        <div class="ws-name">Estudio Velar</div>
+        <div class="ws-role">Workspace</div>
+      </div>
+      <svg width="12" height="12" style="color:#6B767E"><use href="#i-chev-d"/></svg>
+    </div>
+
+    <div class="side-search">
+      <svg width="13" height="13"><use href="#i-search"/></svg>
+      <span>Buscar…</span>
+      <span class="kbd">⌘K</span>
+    </div>
+
+    <div class="side-head">Workspace</div>
+    <nav class="nav">
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-grid"/></svg></span>Panel</a>
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-build"/></svg></span>Mis obras<span class="count">7</span></a>
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-cal"/></svg></span>Cronograma</a>
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-people"/></svg></span>Equipo</a>
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-doc"/></svg></span>Documentos</a>
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-chart"/></svg></span>Reportes</a>
+    </nav>
+
+    <div class="side-head" style="margin-top:14px">Cuenta</div>
+    <nav class="nav">
+      <a class="active" href="#"><span class="ico"><svg width="15" height="15"><use href="#i-cog"/></svg></span>Configuración</a>
+      <a href="#"><span class="ico"><svg width="15" height="15"><use href="#i-bell"/></svg></span>Notificaciones<span class="count" style="background:var(--secondary);color:#fff">3</span></a>
+    </nav>
+
+    <div class="spacer"></div>
+
+    <div class="side-pinned">
+      <div class="pinned-title">Obras fijadas</div>
+      <div class="pinned-row"><span class="pinned-dot" style="background:#FF8856"></span><span>Edificio Nórdico</span><span class="pinned-meta">52%</span></div>
+      <div class="pinned-row"><span class="pinned-dot" style="background:#3D8BFF"></span><span>Torre Belgrano</span><span class="pinned-meta">32%</span></div>
+      <div class="pinned-row"><span class="pinned-dot" style="background:#2AC58A"></span><span>Casa Pampa</span><span class="pinned-meta">94%</span></div>
+    </div>
+
+    <div class="side-user">
+      <div class="avatar av-pm">PM</div>
+      <div style="flex:1;min-width:0">
+        <div class="name">Project Manager</div>
+        <div class="role">Administrador</div>
+      </div>
+      <button class="more" title="Cerrar sesión"><svg width="14" height="14"><use href="#i-logout"/></svg></button>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main>
+
+    <!-- topbar -->
+    <div class="topbar">
+      <div class="crumbs">
+        <span style="color:var(--text-3)"><svg width="13" height="13"><use href="#i-home"/></svg></span>
+        <span>Workspace</span>
+        <span class="sep">/</span>
+        <span>Cuenta</span>
+        <span class="sep">/</span>
+        <span class="current">Configuración</span>
+      </div>
+
+      <div class="top-search">
+        <svg width="13" height="13"><use href="#i-search"/></svg>
+        <span>Buscar ajustes, integraciones…</span>
+        <span class="kbd">⌘K</span>
+      </div>
+
+      <div class="top-right">
+        <button class="icon-btn" title="Notificaciones"><svg width="14" height="14"><use href="#i-bell"/></svg><span class="dot"></span></button>
+        <div class="avatar av-pm" style="margin-left:4px">PM</div>
+      </div>
+    </div>
+
+    <div class="page">
+
+      <!-- page header -->
+      <div class="page-head">
+        <div>
+          <h1 class="title">Configuración</h1>
+          <div class="sub">
+            <span class="dot"></span>
+            <span>Todos los servicios operativos · última verificación <b class="mono" style="font-family:'JetBrains Mono';font-weight:500">06:07:45</b></span>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-ghost"><svg width="13" height="13"><use href="#i-refresh"/></svg>Verificar ahora</button>
+          <button class="btn btn-primary"><svg width="13" height="13"><use href="#i-save"/></svg>Guardar cambios</button>
+        </div>
+      </div>
+
+      <div class="layout">
+
+        <!-- ── settings nav rail ── -->
+        <aside class="rail">
+          <div class="rail-section">Sistema</div>
+          <a class="active" href="#sistema">
+            <span class="ico"><svg width="13" height="13"><use href="#i-server"/></svg></span>
+            Estado del sistema
+            <svg width="11" height="11" class="chev"><use href="#i-chev-r"/></svg>
+          </a>
+          <a href="#empresa">
+            <span class="ico"><svg width="13" height="13"><use href="#i-building"/></svg></span>
+            Datos generales
+          </a>
+
+          <div class="rail-section">Integraciones</div>
+          <a href="#chatbot">
+            <span class="ico"><svg width="13" height="13"><use href="#i-chat"/></svg></span>
+            Chatbot WhatsApp
+          </a>
+          <a href="#automatizaciones">
+            <span class="ico"><svg width="13" height="13"><use href="#i-zap"/></svg></span>
+            Automatizaciones
+          </a>
+          <a href="#alertas">
+            <span class="ico"><svg width="13" height="13"><use href="#i-bell"/></svg></span>
+            Alertas
+          </a>
+
+          <div class="rail-section">Avanzado</div>
+          <a href="#tiempo-real">
+            <span class="ico"><svg width="13" height="13"><use href="#i-wifi"/></svg></span>
+            Tiempo real
+          </a>
+          <a href="#seguridad">
+            <span class="ico"><svg width="13" height="13"><use href="#i-shield"/></svg></span>
+            Seguridad
+          </a>
+        </aside>
+
+        <!-- ── content ── -->
+        <section style="min-width:0">
+
+          <!-- ESTADO DEL SISTEMA -->
+          <div class="sec-head" id="sistema">
+            <div class="sec-label">
+              <span class="sec-tick"></span>
+              <span class="sec-ico"><svg width="12" height="12"><use href="#i-server"/></svg></span>
+              <span class="sec-title">Estado del sistema</span>
+            </div>
+            <div class="sec-aux">
+              <span>Última verificación · <span class="mono" style="color:var(--text-2)">06:07:45</span></span>
+              <button title="Verificar ahora"><svg width="13" height="13"><use href="#i-refresh"/></svg></button>
+            </div>
+          </div>
+
+          <div class="status-grid">
+            <div class="status-card">
+              <div class="sc-top">
+                <div class="sc-ico"><svg width="15" height="15"><use href="#i-server"/></svg></div>
+                <div class="sc-check"><svg width="10" height="10"><use href="#i-check"/></svg></div>
+              </div>
+              <div>
+                <div class="sc-name">Backend</div>
+                <div class="sc-meta">API <span class="mono">v2.4.1</span> online</div>
+              </div>
+              <div class="sc-foot">
+                <span>latencia</span>
+                <span class="mono">42 ms</span>
+              </div>
+            </div>
+
+            <div class="status-card">
+              <div class="sc-top">
+                <div class="sc-ico"><svg width="15" height="15"><use href="#i-wifi"/></svg></div>
+                <div class="sc-check"><svg width="10" height="10"><use href="#i-check"/></svg></div>
+              </div>
+              <div>
+                <div class="sc-name">WebSocket</div>
+                <div class="sc-meta">Canal en vivo conectado</div>
+              </div>
+              <div class="sc-foot">
+                <span>uptime</span>
+                <span class="mono">99.98%</span>
+              </div>
+            </div>
+
+            <div class="status-card">
+              <div class="sc-top">
+                <div class="sc-ico"><svg width="15" height="15"><use href="#i-db"/></svg></div>
+                <div class="sc-check"><svg width="10" height="10"><use href="#i-check"/></svg></div>
+              </div>
+              <div>
+                <div class="sc-name">Base de datos</div>
+                <div class="sc-meta">PostgreSQL online</div>
+              </div>
+              <div class="sc-foot">
+                <span>queries/s</span>
+                <span class="mono">128</span>
+              </div>
+            </div>
+
+            <div class="status-card">
+              <div class="sc-top">
+                <div class="sc-ico"><svg width="15" height="15"><use href="#i-chat"/></svg></div>
+                <div class="sc-check"><svg width="10" height="10"><use href="#i-check"/></svg></div>
+              </div>
+              <div>
+                <div class="sc-name">WhatsApp</div>
+                <div class="sc-meta mono">+1 415 523 8886</div>
+              </div>
+              <div class="sc-foot">
+                <span>mensajes hoy</span>
+                <span class="mono">312</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- DATOS GENERALES -->
+          <div class="sec-head" id="empresa" style="margin-top:28px">
+            <div class="sec-label">
+              <span class="sec-tick"></span>
+              <span class="sec-ico"><svg width="12" height="12"><use href="#i-building"/></svg></span>
+              <span class="sec-title">Datos generales</span>
+            </div>
+            <div class="sec-aux"><span>Información de la empresa que aparece en avisos y reportes</span></div>
+          </div>
+
+          <div class="card">
+            <div class="form-grid">
+              <div class="field">
+                <label>Nombre de la empresa <span class="req">*</span></label>
+                <div class="input-wrap lead-pad">
+                  <span class="lead"><svg width="14" height="14"><use href="#i-building"/></svg></span>
+                  <input class="input" type="text" placeholder="Constructora XYZ" value="Estudio Velar"/>
+                </div>
+              </div>
+              <div class="field">
+                <label>Responsable principal <span class="req">*</span></label>
+                <div class="input-wrap lead-pad">
+                  <span class="lead"><svg width="14" height="14"><use href="#i-user"/></svg></span>
+                  <input class="input" type="text" placeholder="Juan García" value="Facundo Cabrera"/>
+                </div>
+              </div>
+              <div class="field">
+                <label>Email de contacto</label>
+                <div class="input-wrap lead-pad">
+                  <span class="lead"><svg width="14" height="14"><use href="#i-mail"/></svg></span>
+                  <input class="input" type="email" placeholder="contacto@empresa.com" value="hola@estudiovelar.com"/>
+                </div>
+                <div class="hint">Usado para enviar reportes semanales y alertas críticas.</div>
+              </div>
+              <div class="field">
+                <label>Teléfono</label>
+                <div class="input-wrap lead-pad">
+                  <span class="lead"><svg width="14" height="14"><use href="#i-phone"/></svg></span>
+                  <input class="input" type="tel" placeholder="+54 9 11 1234-5678" value="+54 9 11 4488-2210"/>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHATBOT -->
+          <div class="sec-head" id="chatbot" style="margin-top:28px">
+            <div class="sec-label">
+              <span class="sec-tick"></span>
+              <span class="sec-ico"><svg width="12" height="12"><use href="#i-chat"/></svg></span>
+              <span class="sec-title">Chatbot WhatsApp</span>
+            </div>
+            <div class="sec-aux"><span>Procesamiento automático de mensajes entrantes</span></div>
+          </div>
+
+          <div class="card">
+            <div class="wa-banner">
+              <div class="ic"><svg width="18" height="18"><use href="#i-chat"/></svg></div>
+              <div class="wa-body">
+                <div class="wa-l1">Número conectado <b>+1 415 523 8886</b></div>
+                <div class="wa-l2"><span class="ping"></span>Recibiendo y enviando mensajes correctamente · 312 hoy</div>
+              </div>
+              <div class="actions-r">
+                <button class="btn btn-ghost btn-sm" style="background:#fff">Reconectar</button>
+                <button class="btn btn-ghost btn-sm" style="background:#fff">Ver registros</button>
+              </div>
+            </div>
+
+            <div class="toggle-list">
+              <div class="toggle-row">
+                <div class="ico"><svg width="15" height="15"><use href="#i-chat"/></svg></div>
+                <div class="body">
+                  <h4>Chatbot habilitado</h4>
+                  <p>Activa o desactiva el procesamiento de mensajes entrantes desde WhatsApp.</p>
+                </div>
+                <div class="switch on" role="switch" aria-checked="true"></div>
+              </div>
+              <div class="toggle-row">
+                <div class="ico"><svg width="15" height="15"><use href="#i-clock"/></svg></div>
+                <div class="body">
+                  <h4>Recordatorios automáticos</h4>
+                  <p>Envía recordatorios proactivos a los responsables antes del vencimiento de sus tareas.</p>
+                </div>
+                <div class="switch on" role="switch" aria-checked="true"></div>
+              </div>
+            </div>
+
+            <div class="inline-fields">
+              <div class="field">
+                <label>Horario desde</label>
+                <select class="select">
+                  <option>06:00</option>
+                  <option selected>08:00</option>
+                  <option>09:00</option>
+                  <option>10:00</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Horario hasta</label>
+                <select class="select">
+                  <option>18:00</option>
+                  <option>19:00</option>
+                  <option selected>20:00</option>
+                  <option>22:00</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Tiempo máx. sin respuesta</label>
+                <select class="select">
+                  <option>6 horas</option>
+                  <option>12 horas</option>
+                  <option selected>24 horas</option>
+                  <option>48 horas</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- AUTO + ALERTAS -->
+          <div class="two-col" style="margin-top:28px">
+
+            <!-- AUTOMATIZACIONES -->
+            <div>
+              <div class="sec-head" id="automatizaciones">
+                <div class="sec-label">
+                  <span class="sec-tick"></span>
+                  <span class="sec-ico"><svg width="12" height="12"><use href="#i-zap"/></svg></span>
+                  <span class="sec-title">Automatizaciones</span>
+                </div>
+              </div>
+              <div class="card">
+                <div class="auto-list">
+                  <div class="auto-row on">
+                    <div class="ico"><svg width="13" height="13"><use href="#i-clock"/></svg></div>
+                    <div class="body"><h4>Recordatorio 3 días antes</h4></div>
+                    <span class="kbd">+3d</span>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="auto-row on">
+                    <div class="ico"><svg width="13" height="13"><use href="#i-clock"/></svg></div>
+                    <div class="body"><h4>Recordatorio 1 día antes</h4></div>
+                    <span class="kbd">+1d</span>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="auto-row on">
+                    <div class="ico"><svg width="13" height="13"><use href="#i-alert"/></svg></div>
+                    <div class="body"><h4>Alertar tareas vencidas</h4></div>
+                    <span class="kbd">−0d</span>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="auto-row on">
+                    <div class="ico"><svg width="13" height="13"><use href="#i-bell"/></svg></div>
+                    <div class="body"><h4>Alertar sin respuesta</h4></div>
+                    <span class="kbd">24h</span>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="auto-row on">
+                    <div class="ico"><svg width="13" height="13"><use href="#i-retry"/></svg></div>
+                    <div class="body"><h4>Reintentar envío fallido</h4></div>
+                    <span class="kbd">×3</span>
+                    <div class="switch on"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ALERTAS -->
+            <div>
+              <div class="sec-head" id="alertas">
+                <div class="sec-label">
+                  <span class="sec-tick"></span>
+                  <span class="sec-ico"><svg width="12" height="12"><use href="#i-bell"/></svg></span>
+                  <span class="sec-title">Configuración de alertas</span>
+                </div>
+              </div>
+              <div class="card">
+                <div class="toggle-list">
+                  <div class="toggle-row">
+                    <div class="ico" style="background:var(--danger-50);color:var(--danger)"><svg width="15" height="15"><use href="#i-alert"/></svg></div>
+                    <div class="body">
+                      <h4>Tarea vencida</h4>
+                      <p>Mostrar alerta cuando una tarea pasa su fecha límite.</p>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="ico" style="background:var(--warn-50);color:var(--warn)"><svg width="15" height="15"><use href="#i-clock"/></svg></div>
+                    <div class="body">
+                      <h4>Tarea demorada / bloqueada</h4>
+                      <p>Mostrar alerta cuando se marca una tarea como demorada o bloqueada.</p>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="ico" style="background:var(--info-50);color:var(--info)"><svg width="15" height="15"><use href="#i-user"/></svg></div>
+                    <div class="body">
+                      <h4>Responsable sin respuesta</h4>
+                      <p>Mostrar alerta si no hay respuesta tras el tiempo máximo configurado.</p>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <div class="ico" style="background:var(--secondary-50);color:var(--secondary)"><svg width="15" height="15"><use href="#i-cal"/></svg></div>
+                    <div class="body">
+                      <h4>Fecha reprogramada</h4>
+                      <p>Mostrar alerta cuando se reprograma una tarea vía WhatsApp.</p>
+                    </div>
+                    <div class="switch on"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TIEMPO REAL -->
+          <div class="sec-head" id="tiempo-real" style="margin-top:28px">
+            <div class="sec-label">
+              <span class="sec-tick"></span>
+              <span class="sec-ico"><svg width="12" height="12"><use href="#i-wifi"/></svg></span>
+              <span class="sec-title">Tiempo real</span>
+            </div>
+            <div class="sec-aux"><span>Sincronización en vivo con el chatbot y el backend</span></div>
+          </div>
+
+          <div class="rt-card">
+            <div class="rt-row">
+              <div class="ico"><svg width="16" height="16"><use href="#i-wifi"/></svg></div>
+              <div class="rt-body">
+                <h4>Estado WebSocket</h4>
+                <p>Canal de actualización en tiempo real con el servidor.</p>
+              </div>
+              <span class="rt-status"><span class="d"></span>Conectado</span>
+            </div>
+            <div class="rt-row">
+              <div class="ico" style="background:var(--secondary-50);color:var(--secondary)"><svg width="16" height="16"><use href="#i-sync"/></svg></div>
+              <div class="rt-body">
+                <h4>Actualización automática</h4>
+                <p>El panel se actualiza cuando el chatbot modifica una tarea.</p>
+              </div>
+              <span class="rt-status"><span class="d"></span>Habilitada</span>
+            </div>
+            <div class="rt-row">
+              <div class="ico" style="background:#F4F5F4;color:var(--text-2)"><svg width="16" height="16"><use href="#i-clock"/></svg></div>
+              <div class="rt-body">
+                <h4>Última sincronización</h4>
+                <p>Momento de la última lectura recibida desde el servidor.</p>
+              </div>
+              <span class="rt-time">06:07:45</span>
+            </div>
+          </div>
+
+          <!-- save bar -->
+          <div class="save-bar">
+            <span class="pulse"></span>
+            <div class="msg">
+              <b>Tenés cambios sin guardar</b>
+              <span class="dim">3 campos modificados en datos generales y chatbot</span>
+            </div>
+            <div class="actions-r">
+              <button class="btn btn-ghost btn-sm">Descartar</button>
+              <button class="btn btn-primary btn-sm"><svg width="12" height="12"><use href="#i-save"/></svg>Guardar cambios</button>
+            </div>
+          </div>
+
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // Toggle switches (visual)
+  document.querySelectorAll('.switch').forEach(sw => {
+    sw.addEventListener('click', () => {
+      sw.classList.toggle('on');
+      sw.setAttribute('aria-checked', sw.classList.contains('on') ? 'true' : 'false');
+    });
+  });
+  // Rail active state
+  document.querySelectorAll('.rail a').forEach(a => {
+    a.addEventListener('click', (e) => {
+      document.querySelectorAll('.rail a').forEach(x => x.classList.remove('active'));
+      a.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>
