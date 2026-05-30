@@ -281,55 +281,65 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-      {/* Nombre + Foto compacta en la misma fila */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "flex-start" }}>
-        <div>
-          <FieldLabel>Nombre de la obra</FieldLabel>
-          <input style={iStyle(!!errors.name)} placeholder="Ej: Edificio Palermo III"
-            value={data.name} onChange={set("name")} maxLength={255} autoFocus
-            onFocus={e => onFocus(e, !!errors.name)} onBlur={e => onBlur(e, !!errors.name)} />
-          <FieldError msg={errors.name} />
-        </div>
-        {/* Foto compacta */}
-        <div>
-          <FieldLabel optional>Foto</FieldLabel>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
-            style={{ display: "none" }} onChange={handleInputChange} />
-          {preview && !imgLoadError ? (
-            <div style={{ position: "relative", width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: "1px solid #E6E7E5", flexShrink: 0 }}>
+      <div>
+        <FieldLabel>Nombre de la obra</FieldLabel>
+        <input style={iStyle(!!errors.name)} placeholder="Ej: Edificio Palermo III"
+          value={data.name} onChange={set("name")} maxLength={255} autoFocus
+          onFocus={e => onFocus(e, !!errors.name)} onBlur={e => onBlur(e, !!errors.name)} />
+        <FieldError msg={errors.name} />
+      </div>
+
+      {/* Foto — barra horizontal */}
+      <div>
+        <FieldLabel optional>Foto de la obra</FieldLabel>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
+          style={{ display: "none" }} onChange={handleInputChange} />
+        {preview && !imgLoadError ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 10, padding: "8px 12px" }}>
+            <div style={{ position: "relative", width: 48, height: 48, borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
               <img src={preview} alt="Preview" onError={() => setImgLoadError(true)}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              {uploading ? (
+              {uploading && (
                 <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Loader2 style={{ width: 14, height: 14, color: "#fff", animation: "spin 1s linear infinite" }} />
                 </div>
-              ) : (
-                <button type="button" onClick={clearImage}
-                  style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: 4, background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-                  <X style={{ width: 9, height: 9 }} />
-                </button>
               )}
             </div>
-          ) : (
+            <span style={{ flex: 1, fontSize: 12.5, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {uploading ? "Subiendo..." : "Foto cargada"}
+            </span>
             <button type="button" onClick={() => fileRef.current?.click()}
-              onDragOver={e => e.preventDefault()} onDrop={handleDrop}
-              style={{
-                width: 56, height: 56, borderRadius: 10, border: "1.5px dashed #C7CAC6",
-                background: "#F9FAF8", cursor: "pointer", display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", gap: 3, transition: "border-color 0.15s",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = "#FF6B35")}
-              onMouseLeave={e => (e.currentTarget.style.borderColor = "#C7CAC6")}
-            >
-              {imgLoadError
-                ? <ImageOff style={{ width: 16, height: 16, color: "#C7CAC6" }} />
-                : <Upload style={{ width: 16, height: 16, color: "#ADAAA4" }} />
-              }
-              <span style={{ fontSize: 9, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Foto</span>
+              style={{ fontSize: 12, color: "#5B6770", background: "#fff", padding: "4px 10px", borderRadius: 7, border: "1px solid #E6E7E5", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>
+              Cambiar
             </button>
-          )}
-          {uploadError && <FieldError msg={uploadError} />}
-        </div>
+            <button type="button" onClick={clearImage}
+              style={{ width: 28, height: 28, borderRadius: 7, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+              <X style={{ width: 12, height: 12 }} />
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()} onDrop={handleDrop}
+            style={{
+              width: "100%", padding: "10px 14px", borderRadius: 10,
+              border: "1.5px dashed #C7CAC6", background: "#F9FAF8",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+              transition: "border-color 0.15s, background 0.15s", boxSizing: "border-box",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#FF6B35"; e.currentTarget.style.background = "rgba(255,107,53,0.03)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "#C7CAC6"; e.currentTarget.style.background = "#F9FAF8"; }}
+          >
+            {imgLoadError
+              ? <ImageOff style={{ width: 18, height: 18, color: "#C7CAC6", flexShrink: 0 }} />
+              : <Upload style={{ width: 18, height: 18, color: "#ADAAA4", flexShrink: 0 }} />
+            }
+            <div style={{ textAlign: "left" }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agregar foto de la obra</p>
+              <p style={{ margin: 0, fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>JPG · PNG · WebP — máx. 5 MB</p>
+            </div>
+          </button>
+        )}
+        {uploadError && <FieldError msg={uploadError} />}
       </div>
 
       <div>
@@ -382,6 +392,12 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
   responsibles: DraftResponsible[]; form: RespForm; onFormChange: (f: RespForm) => void;
   error: string | null; onAdd: () => void; onRemove: (k: string) => void; onEdit: (k: string) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (listRef.current && responsibles.length > 0) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [responsibles.length]);
   function set(field: keyof RespForm) {
     return (e: ChangeEvent<HTMLInputElement>) => onFormChange({ ...form, [field]: e.target.value });
   }
@@ -427,7 +443,7 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
       </div>
 
       {/* List */}
-      <div style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
+      <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
         {responsibles.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
@@ -474,6 +490,13 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
   onFormChange: (f: TaskForm) => void; error: string | null;
   onAdd: () => void; onRemove: (k: string) => void; onEdit: (k: string) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (listRef.current && tasks.length > 0) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [tasks.length]);
+
   function set(field: keyof TaskForm) {
     return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       onFormChange({ ...form, [field]: e.target.value });
@@ -534,7 +557,7 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
       </div>
 
       {/* List */}
-      <div style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
+      <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
         {tasks.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
