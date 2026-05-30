@@ -34,6 +34,10 @@ class Obra(Base):
     expected_end_date: Mapped[date | None] = mapped_column(Date)
     actual_end_date: Mapped[date | None] = mapped_column(Date)
 
+    client_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     manager_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
     )

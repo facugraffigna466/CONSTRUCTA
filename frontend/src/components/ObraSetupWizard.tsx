@@ -14,6 +14,7 @@ import type { Obra } from "../types";
 interface ObraFormData {
   name: string; location: string; description: string;
   image_url: string; start_date: string; expected_end_date: string;
+  client_name: string; client_email: string; client_phone: string;
 }
 interface DraftResponsible {
   _key: string; full_name: string; whatsapp_number: string; role: string;
@@ -375,6 +376,59 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
           <FieldError msg={errors.expected_end_date} />
         </div>
       </div>
+
+      <ClienteSection data={data} onChange={onChange} />
+    </div>
+  );
+}
+
+function ClienteSection({ data, onChange }: { data: ObraFormData; onChange: (d: ObraFormData) => void }) {
+  const [open, setOpen] = useState(false);
+  function set(field: keyof ObraFormData) {
+    return (e: ChangeEvent<HTMLInputElement>) => onChange({ ...data, [field]: e.target.value });
+  }
+  const iStyle = (): React.CSSProperties => ({
+    width: "100%", padding: "9px 11px", borderRadius: 8, fontSize: 13, boxSizing: "border-box",
+    border: "1px solid #D1D7DB", background: "#fff", color: "#1A2329", outline: "none",
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+  });
+  const hasData = data.client_name || data.client_email || data.client_phone;
+  return (
+    <div style={{ borderTop: "1px solid #E6E7E5", paddingTop: 16 }}>
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
+          cursor: "pointer", padding: 0, fontSize: 13, fontWeight: 600,
+          color: hasData ? "#FF6B35" : "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif",
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
+          style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: ".15s" }}>
+          <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        Datos del comitente
+        {hasData && <span style={{ fontSize: 10, fontWeight: 700, background: "#FF6B35", color: "#fff", borderRadius: 99, padding: "1px 6px" }}>●</span>}
+      </button>
+      {open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+          <div>
+            <FieldLabel optional>Nombre del comitente</FieldLabel>
+            <input style={iStyle()} placeholder="Ej: Juan García" value={data.client_name} onChange={set("client_name")} maxLength={255} />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <FieldLabel optional>Email</FieldLabel>
+              <input style={iStyle()} type="email" placeholder="juan@empresa.com" value={data.client_email} onChange={set("client_email")} maxLength={255} />
+            </div>
+            <div>
+              <FieldLabel optional>Teléfono</FieldLabel>
+              <input style={iStyle()} placeholder="+54 9 11 1234-5678" value={data.client_phone} onChange={set("client_phone")} maxLength={50} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -677,7 +731,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
   const [done, setDone] = useState(false);
   const [createdObra, setCreatedObra] = useState<Obra | null>(null);
 
-  const [obraData, setObraData] = useState<ObraFormData>({ name: "", location: "", description: "", image_url: "", start_date: "", expected_end_date: "" });
+  const [obraData, setObraData] = useState<ObraFormData>({ name: "", location: "", description: "", image_url: "", start_date: "", expected_end_date: "", client_name: "", client_email: "", client_phone: "" });
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
 
   const [responsibles, setResponsibles] = useState<DraftResponsible[]>([]);
@@ -752,6 +806,9 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
         name: obraData.name.trim(), location: obraData.location.trim() || null,
         description: obraData.description.trim() || null, image_url: obraData.image_url.trim() || null,
         start_date: obraData.start_date || null, expected_end_date: obraData.expected_end_date || null,
+        client_name: obraData.client_name.trim() || null,
+        client_email: obraData.client_email.trim() || null,
+        client_phone: obraData.client_phone.trim() || null,
       });
       const keyToId = new Map<string, number>();
       for (const r of responsibles) {

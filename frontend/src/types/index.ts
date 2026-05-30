@@ -16,6 +16,9 @@ export interface Obra {
   start_date: string | null;
   expected_end_date: string | null;
   actual_end_date: string | null;
+  client_name: string | null;
+  client_email: string | null;
+  client_phone: string | null;
   created_at: string;
   updated_at: string;
   completed_tasks: number;
