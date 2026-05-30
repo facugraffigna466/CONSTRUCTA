@@ -893,14 +893,28 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
           </button>
         </div>
 
-        {/* ── Content ── */}
-        <div style={{ padding: "24px 28px", flex: 1, overflowY: "auto" }}>
-          {!done && <StepBar current={step} />}
-          {!done && step === 1 && <Step1 data={obraData} onChange={setObraData} errors={step1Errors} />}
-          {!done && step === 2 && <Step2 responsibles={responsibles} form={respForm} onFormChange={setRespForm} error={respError} onAdd={addResponsible} onRemove={removeResponsible} onEdit={editResponsible} />}
-          {!done && step === 3 && <Step3 tasks={tasks} responsibles={responsibles} form={taskForm} onFormChange={setTaskForm} error={taskError} onAdd={addTask} onRemove={removeTask} onEdit={editTask} />}
-          {!done && step === 4 && <Step4 obraData={obraData} responsibles={responsibles} tasks={tasks} tasksWithoutResp={tasksWithoutResp} error={submitError} />}
-          {done && createdObra && <SuccessView obra={createdObra} onNavigate={() => onCreated(createdObra)} />}
+        {/* ── StepBar — siempre visible, fuera del scroll ── */}
+        {!done && (
+          <div style={{ padding: "16px 28px 0", flexShrink: 0 }}>
+            <StepBar current={step} />
+          </div>
+        )}
+
+        {/* ── Content scrolleable ── */}
+        <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
+          <div style={{ padding: "20px 28px 24px", height: "100%", overflowY: "auto" }}>
+            {!done && step === 1 && <Step1 data={obraData} onChange={setObraData} errors={step1Errors} />}
+            {!done && step === 2 && <Step2 responsibles={responsibles} form={respForm} onFormChange={setRespForm} error={respError} onAdd={addResponsible} onRemove={removeResponsible} onEdit={editResponsible} />}
+            {!done && step === 3 && <Step3 tasks={tasks} responsibles={responsibles} form={taskForm} onFormChange={setTaskForm} error={taskError} onAdd={addTask} onRemove={removeTask} onEdit={editTask} />}
+            {!done && step === 4 && <Step4 obraData={obraData} responsibles={responsibles} tasks={tasks} tasksWithoutResp={tasksWithoutResp} error={submitError} />}
+            {done && createdObra && <SuccessView obra={createdObra} onNavigate={() => onCreated(createdObra)} />}
+          </div>
+          {/* Gradiente inferior — indica que hay más contenido para scrollear */}
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0, height: 40,
+            background: "linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.95))",
+            pointerEvents: "none",
+          }} />
         </div>
 
         {/* ── Footer ── */}
