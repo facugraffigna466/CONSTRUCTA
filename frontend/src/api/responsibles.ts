@@ -41,3 +41,12 @@ export async function reactivateResponsible(id: number): Promise<Responsible> {
   const { data } = await apiClient.patch<Responsible>(`/responsibles/${id}/reactivate`);
   return data;
 }
+
+export async function lookupResponsibleByWhatsapp(whatsapp: string): Promise<Responsible | null> {
+  try {
+    const { data } = await apiClient.get<Responsible>(`/responsibles/lookup?whatsapp=${encodeURIComponent(whatsapp)}`);
+    return data;
+  } catch {
+    return null;
+  }
+}

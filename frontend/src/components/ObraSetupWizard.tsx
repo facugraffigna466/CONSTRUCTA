@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
-import { createResponsible } from "../api/responsibles";
+import { createResponsible, lookupResponsibleByWhatsapp } from "../api/responsibles";
 import { createTask } from "../api/tasks";
 import type { Obra } from "../types";
 
@@ -852,8 +852,22 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
       });
       const keyToId = new Map<string, number>();
       for (const r of responsibles) {
-        const created = await createResponsible({ full_name: r.full_name, whatsapp_number: r.whatsapp_number, role: r.role || null });
-        keyToId.set(r._key, created.id);
+        let id: number;
+        try {
+          const created = await createResponsible({ full_name: r.full_name, whatsapp_number: r.whatsapp_number, role: r.role || null });
+          id = created.id;
+        } catch (err: unknown) {
+          // 409 = número ya registrado → reutilizar el existente
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status === 409) {
+            const existing = await lookupResponsibleByWhatsapp(r.whatsapp_number);
+            if (!existing) throw err;
+            id = existing.id;
+          } else {
+            throw err;
+          }
+        }
+        keyToId.set(r._key, id);
       }
       for (let i = 0; i < tasks.length; i++) {
         const t = tasks[i];
