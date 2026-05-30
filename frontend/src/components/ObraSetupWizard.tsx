@@ -540,12 +540,6 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
               onFocus={onFocus} onBlur={onBlur} />
           </div>
         </div>
-        <div style={{ marginBottom: 10 }}>
-          <textarea style={{ ...iStyle(), resize: "none" } as React.CSSProperties}
-            placeholder="Descripción (opcional)..." rows={1}
-            value={form.description} onChange={set("description")}
-            onFocus={onFocus} onBlur={onBlur} />
-        </div>
         {error && <div style={{ marginBottom: 10 }}><InlineError msg={error} /></div>}
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <PrimaryBtn onClick={onAdd}>
