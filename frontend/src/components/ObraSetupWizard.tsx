@@ -598,57 +598,133 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
 
 // ─── Step 4 — Confirmación ────────────────────────────────────────────────────
 
+const TASK_PREVIEW = 4;
+
 function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
   obraData: ObraFormData; responsibles: DraftResponsible[]; tasks: DraftTask[];
   tasksWithoutResp: number; error: string | null;
 }) {
+  const extraTasks = tasks.length > TASK_PREVIEW ? tasks.length - TASK_PREVIEW : 0;
+  const visibleTasks = tasks.slice(0, TASK_PREVIEW);
+
+  const SectionLabel = ({ children }: { children: string }) => (
+    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {children}
+    </span>
+  );
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <p style={{ margin: 0, fontSize: 13, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         Revisá el resumen antes de crear la obra.
       </p>
 
-      {/* Summary card */}
-      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderLeft: "4px solid #FF6B35", borderRadius: 12, padding: "18px 20px" }}>
-        <div style={{ marginBottom: 14 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Obra</span>
-          <p style={{ margin: "4px 0 0", fontSize: 18, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.015em", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{obraData.name}</p>
-          {obraData.location && <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{obraData.location}</p>}
-          {obraData.description && <p style={{ margin: "6px 0 0", fontSize: 12, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{obraData.description}</p>}
-        </div>
+      {/* ── Obra ── */}
+      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderLeft: "4px solid #FF6B35", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <SectionLabel>Obra</SectionLabel>
+        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.015em", fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.2 }}>
+          {obraData.name}
+        </p>
 
-        {(obraData.start_date || obraData.expected_end_date) && (
-          <div style={{ marginBottom: 14 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Período</span>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#1A2329", fontFamily: "'JetBrains Mono', monospace" }}>
+        {/* Meta row: location · dates · comitente */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
+          {obraData.location && (
+            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              📍 {obraData.location}
+            </span>
+          )}
+          {(obraData.start_date || obraData.expected_end_date) && (
+            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'JetBrains Mono', monospace" }}>
               {formatDate(obraData.start_date)} → {formatDate(obraData.expected_end_date)}
-            </p>
-          </div>
-        )}
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", paddingTop: 14, borderTop: "1px solid #F0F1EF", gap: 0 }}>
-          {[
-            { value: responsibles.length, label: "Responsables", color: "#1A2329" },
-            { value: tasks.length, label: "Tareas", color: "#1A2329" },
-            { value: tasksWithoutResp, label: "Sin responsable", color: tasksWithoutResp > 0 ? "#C97D0E" : "#1F8A5B" },
-          ].map(({ value, label, color }) => (
-            <div key={label} style={{ textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: "-0.025em" }}>{value}</p>
-              <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{label}</p>
-            </div>
-          ))}
+            </span>
+          )}
+          {obraData.client_name && (
+            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              · Comitente: <strong style={{ color: "#1A2329", fontWeight: 600 }}>{obraData.client_name}</strong>
+            </span>
+          )}
         </div>
       </div>
 
-      {tasksWithoutResp > 0 && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "#FDF1DE", border: "1px solid #E89B14", borderRadius: 10, padding: "10px 14px" }}>
-          <AlertTriangle style={{ width: 13, height: 13, color: "#C97D0E", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ margin: 0, fontSize: 12, color: "#8B5E0A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            <strong>{tasksWithoutResp} tarea{tasksWithoutResp > 1 ? "s" : ""} sin responsable.</strong>{" "}
-            Podés asignarlos después desde el detalle de la obra.
-          </p>
+      {/* ── Responsables ── */}
+      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <SectionLabel>Responsables</SectionLabel>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            {responsibles.length === 0 ? "Ninguno" : `${responsibles.length}`}
+          </span>
         </div>
-      )}
+        {responsibles.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Podés agregarlos después desde el detalle de la obra.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {responsibles.map(r => {
+              const color = avatarColor(r.full_name);
+              const initials = getInitials(r.full_name);
+              return (
+                <div key={r._key} style={{ display: "flex", alignItems: "center", gap: 6, background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 99, padding: "4px 10px 4px 4px" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 99, background: color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{initials}</span>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" }}>
+                    {r.full_name}{r.role ? <span style={{ color: "#8E97A0" }}> · {r.role}</span> : null}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Tareas ── */}
+      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <SectionLabel>Tareas</SectionLabel>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {tasksWithoutResp > 0 && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#C97D0E", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <AlertTriangle style={{ width: 10, height: 10 }} />
+                {tasksWithoutResp} sin responsable
+              </span>
+            )}
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {tasks.length === 0 ? "Ninguna" : `${tasks.length}`}
+            </span>
+          </div>
+        </div>
+        {tasks.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Podés agregarlas después desde el detalle de la obra.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {visibleTasks.map((t, i) => {
+              const resp = responsibles.find(r => r._key === t.responsible_key);
+              const sinResp = !t.responsible_key;
+              return (
+                <div key={t._key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace", minWidth: 16, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ fontSize: 12.5, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t.title}
+                  </span>
+                  {sinResp ? (
+                    <span style={{ fontSize: 10.5, color: "#C97D0E", fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>sin resp.</span>
+                  ) : (
+                    <span style={{ fontSize: 10.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>{resp?.full_name.split(" ")[0]}</span>
+                  )}
+                </div>
+              );
+            })}
+            {extraTasks > 0 && (
+              <p style={{ margin: "2px 0 0 24px", fontSize: 11.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                + {extraTasks} tarea{extraTasks > 1 ? "s" : ""} más
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {error && <InlineError msg={error} />}
     </div>
