@@ -13,6 +13,7 @@ import {
   ArrowRightStartOnRectangleIcon,
 } from "@heroicons/react/24/outline";
 import type { Obra, ObraStatus, ObraTab, Page } from "../../types";
+import { useUser } from "../../context/UserContext";
 
 const HERO_DOT_COLORS = ["#FF8856","#3D8BFF","#2AC58A","#B07CF7","#8FA8B5","#E8B14A","#5DA8B5"];
 const STATUS_PCT: Record<ObraStatus, number> = {
@@ -109,6 +110,8 @@ function NavItem({
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, collapsed = false, onToggle }: SidebarProps) {
+  const { role } = useUser();
+  const isAdmin = role === "admin";
   return (
     <>
     <aside style={{
@@ -256,31 +259,39 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
         )}
       </nav>
 
-      {/* ── ORGANIZACIÓN section ── */}
-      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", color: "#6B767E", textTransform: "uppercase", padding: "14px 10px 6px" }}>
-        Organización
-      </div>
-      <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        <NavItem
-          label="Gestión de equipo"
-          active={activePage === "equipo"}
-          onClick={() => onNavigate("equipo")}
-          icon={<UsersIcon style={ICON_SIZE} />}
-        />
-      </nav>
+      {/* ── ORGANIZACIÓN section — solo admins ── */}
+      {isAdmin && (
+        <>
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", color: "#6B767E", textTransform: "uppercase", padding: "14px 10px 6px" }}>
+            Organización
+          </div>
+          <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <NavItem
+              label="Gestión de equipo"
+              active={activePage === "equipo"}
+              onClick={() => onNavigate("equipo")}
+              icon={<UsersIcon style={ICON_SIZE} />}
+            />
+          </nav>
+        </>
+      )}
 
-      {/* ── CUENTA section ── */}
-      <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", color: "#6B767E", textTransform: "uppercase", padding: "14px 10px 6px" }}>
-        Cuenta
-      </div>
-      <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        <NavItem
-          label="Configuración"
-          active={activePage === "configuracion"}
-          onClick={() => onNavigate("configuracion")}
-          icon={<Cog6ToothIcon style={ICON_SIZE} />}
-        />
-      </nav>
+      {/* ── CUENTA section — solo admins ── */}
+      {isAdmin && (
+        <>
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", color: "#6B767E", textTransform: "uppercase", padding: "14px 10px 6px" }}>
+            Cuenta
+          </div>
+          <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <NavItem
+              label="Configuración"
+              active={activePage === "configuracion"}
+              onClick={() => onNavigate("configuracion")}
+              icon={<Cog6ToothIcon style={ICON_SIZE} />}
+            />
+          </nav>
+        </>
+      )}
 
       {/* ── PRÓXIMAMENTE section — solo con obra seleccionada ── */}
       {selectedObra && (

@@ -34,6 +34,11 @@ export async function removeMember(userId: number): Promise<void> {
   await apiClient.delete(`/users/${userId}`);
 }
 
+export async function updateMemberRole(userId: number, role: "admin" | "collaborator"): Promise<ApiUser> {
+  const { data } = await apiClient.patch<ApiUser>(`/users/${userId}/role`, { role });
+  return data;
+}
+
 export async function updateProfile(data: { full_name?: string; avatar_url?: string | null }): Promise<ApiUser> {
   const { data: res } = await apiClient.patch<ApiUser>("/users/me", data);
   return res;

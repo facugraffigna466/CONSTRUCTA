@@ -22,8 +22,20 @@ function getInviteToken(): string | null {
   return match ? match[1] : null;
 }
 
+function AccessDenied() {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 300, gap: 12, color: "#5B6770" }}>
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+      </svg>
+      <p style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "#1A2329" }}>Acceso restringido</p>
+      <p style={{ margin: 0, fontSize: 13 }}>Solo los administradores pueden ver esta sección.</p>
+    </div>
+  );
+}
+
 function App() {
-  const { user, loading: userLoading, refetch: refetchUser } = useUser();
+  const { user, role, loading: userLoading, refetch: refetchUser } = useUser();
   const [, latestActivity]              = useActivityFeed(user?.id);
   const [authed, setAuthed]             = useState(() => !!getToken());
   const [activePage, setActivePage]     = useState<Page>("panel");
@@ -138,9 +150,13 @@ function App() {
         />
       );
     }
-    if (activePage === "equipo") return <EquipoPage />;
+    if (activePage === "equipo") {
+      if (role !== "admin") return <AccessDenied />;
+      return <EquipoPage />;
+    }
     if (activePage === "bitacora") return <BitacoraPage />;
     if (activePage === "presupuestos") return <PresupuestosPage />;
+    if (role !== "admin") return <AccessDenied />;
     return <ConfiguracionPage />;
   }
 

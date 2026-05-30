@@ -5,7 +5,7 @@ from app.core.deps import AdminUser, CurrentUser, DbSession
 from app.core.exceptions import ConflictError
 from app.core.security import hash_password, verify_password
 from app.repositories.user import UserRepository
-from app.schemas.user import ChangePasswordRequest, InviteRequest, InviteResponse, UpdateProfileRequest, UserRead
+from app.schemas.user import ChangePasswordRequest, InviteRequest, InviteResponse, RoleUpdateRequest, UpdateProfileRequest, UserRead
 from app.services.auth_service import AuthService
 from app.services.email_service import send_invite_email
 
@@ -50,6 +50,18 @@ async def invite_member(data: InviteRequest, current_user: AdminUser, db: DbSess
     invite_url = f"{settings.FRONTEND_URL}/invite/{token}"
     await send_invite_email(data.email, invite_url, data.role)
     return InviteResponse(invite_token=token, invite_url=invite_url)
+
+
+@router.patch("/{user_id}/role", response_model=UserRead)
+async def update_member_role(user_id: int, data: RoleUpdateRequest, current_user: AdminUser, db: DbSession):
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="No podés cambiar tu propio rol")
+    repo = UserRepository(db)
+    target = await repo.get(user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    updated = await repo.update_fields(user_id, role=data.role)
+    return updated
 
 
 @router.delete("/{user_id}", status_code=204)

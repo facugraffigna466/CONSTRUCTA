@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from sqlalchemy import text
 
 from app.core.config import settings as app_settings
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import AdminUser, DbSession
 from app.integrations.twilio.client import send_whatsapp_message
 from app.repositories.settings import SettingsRepository
 from app.schemas.settings import (
@@ -17,22 +17,22 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 
 @router.get("", response_model=SettingsRead)
-async def get_settings(db: DbSession, manager_id: CurrentUserId) -> SettingsRead:
-    obj = await SettingsRepository(db).get_or_create(manager_id)
+async def get_settings(db: DbSession, current_user: AdminUser) -> SettingsRead:
+    obj = await SettingsRepository(db).get_or_create(current_user.id)
     return SettingsRead.model_validate(obj)
 
 
 @router.patch("", response_model=SettingsRead)
 async def patch_settings(
-    data: SettingsPatch, db: DbSession, manager_id: CurrentUserId
+    data: SettingsPatch, db: DbSession, current_user: AdminUser
 ) -> SettingsRead:
     updates = data.model_dump(exclude_none=True)
-    obj = await SettingsRepository(db).update(manager_id, updates)
+    obj = await SettingsRepository(db).update(current_user.id, updates)
     return SettingsRead.model_validate(obj)
 
 
 @router.get("/system-health", response_model=SystemHealth)
-async def system_health(db: DbSession, _: CurrentUserId) -> SystemHealth:
+async def system_health(db: DbSession, _: AdminUser) -> SystemHealth:
     try:
         await db.execute(text("SELECT 1"))
         db_ok = True
@@ -54,7 +54,7 @@ async def system_health(db: DbSession, _: CurrentUserId) -> SystemHealth:
 
 
 @router.post("/test-whatsapp")
-async def test_whatsapp(body: TestWhatsAppRequest, _: CurrentUserId) -> dict:
+async def test_whatsapp(body: TestWhatsAppRequest, _: AdminUser) -> dict:
     sid = await send_whatsapp_message(
         body.phone_number,
         "✅ Mensaje de prueba desde CONSTRUCTA. El chatbot está funcionando correctamente.",
@@ -65,6 +65,6 @@ async def test_whatsapp(body: TestWhatsAppRequest, _: CurrentUserId) -> dict:
 
 
 @router.post("/simulate-overdue")
-async def simulate_overdue(db: DbSession, _: CurrentUserId) -> dict:
+async def simulate_overdue(db: DbSession, _: AdminUser) -> dict:
     count = await NotificationService(db).mark_overdue_tasks()
     return {"alerts_created": count}
