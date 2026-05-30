@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
 import { InviteModal } from "../components/InviteModal";
-import { fetchMembers, removeMember } from "../api/users";
+import { fetchMembers, removeMember, updateMemberRole } from "../api/users";
 import type { ApiUser } from "../api/users";
 
 const C = {
@@ -121,9 +121,30 @@ export function EquipoPage() {
                   <div style={{ fontSize: 12, color: C.text3 }}>{m.email}</div>
                 </div>
 
-                <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 99, padding: "2px 9px", background: rc.bg, color: rc.color, border: `1px solid ${rc.border}`, flexShrink: 0 }}>
-                  {ROLE_LABELS[m.role as keyof typeof ROLE_LABELS] ?? m.role}
-                </span>
+                {canRemove && !isMe ? (
+                  <select
+                    value={m.role}
+                    onChange={async (e) => {
+                      const newRole = e.target.value as "admin" | "collaborator";
+                      try {
+                        const updated = await updateMemberRole(m.id, newRole);
+                        setMembers(p => p.map(x => x.id === m.id ? { ...x, role: updated.role } : x));
+                      } catch { /* silent */ }
+                    }}
+                    style={{
+                      fontSize: 11, fontWeight: 600, borderRadius: 99, padding: "2px 9px",
+                      background: rc.bg, color: rc.color, border: `1px solid ${rc.border}`,
+                      flexShrink: 0, cursor: "pointer", appearance: "none", paddingRight: 16,
+                    }}
+                  >
+                    <option value="admin">{ROLE_LABELS.admin}</option>
+                    <option value="collaborator">{ROLE_LABELS.collaborator}</option>
+                  </select>
+                ) : (
+                  <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 99, padding: "2px 9px", background: rc.bg, color: rc.color, border: `1px solid ${rc.border}`, flexShrink: 0 }}>
+                    {ROLE_LABELS[m.role as keyof typeof ROLE_LABELS] ?? m.role}
+                  </span>
+                )}
 
                 {canRemove && m.role !== "admin" && !isMe && (
                   <button
