@@ -693,6 +693,11 @@ export interface ObraSetupWizardProps {
 }
 
 export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
   const [createdObra, setCreatedObra] = useState<Obra | null>(null);
