@@ -279,13 +279,57 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div>
-        <FieldLabel>Nombre de la obra</FieldLabel>
-        <input style={iStyle(!!errors.name)} placeholder="Ej: Edificio Palermo III"
-          value={data.name} onChange={set("name")} maxLength={255} autoFocus
-          onFocus={e => onFocus(e, !!errors.name)} onBlur={e => onBlur(e, !!errors.name)} />
-        <FieldError msg={errors.name} />
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+      {/* Nombre + Foto compacta en la misma fila */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "flex-start" }}>
+        <div>
+          <FieldLabel>Nombre de la obra</FieldLabel>
+          <input style={iStyle(!!errors.name)} placeholder="Ej: Edificio Palermo III"
+            value={data.name} onChange={set("name")} maxLength={255} autoFocus
+            onFocus={e => onFocus(e, !!errors.name)} onBlur={e => onBlur(e, !!errors.name)} />
+          <FieldError msg={errors.name} />
+        </div>
+        {/* Foto compacta */}
+        <div>
+          <FieldLabel optional>Foto</FieldLabel>
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
+            style={{ display: "none" }} onChange={handleInputChange} />
+          {preview && !imgLoadError ? (
+            <div style={{ position: "relative", width: 56, height: 56, borderRadius: 10, overflow: "hidden", border: "1px solid #E6E7E5", flexShrink: 0 }}>
+              <img src={preview} alt="Preview" onError={() => setImgLoadError(true)}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              {uploading ? (
+                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Loader2 style={{ width: 14, height: 14, color: "#fff", animation: "spin 1s linear infinite" }} />
+                </div>
+              ) : (
+                <button type="button" onClick={clearImage}
+                  style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: 4, background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+                  <X style={{ width: 9, height: 9 }} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button type="button" onClick={() => fileRef.current?.click()}
+              onDragOver={e => e.preventDefault()} onDrop={handleDrop}
+              style={{
+                width: 56, height: 56, borderRadius: 10, border: "1.5px dashed #C7CAC6",
+                background: "#F9FAF8", cursor: "pointer", display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 3, transition: "border-color 0.15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = "#FF6B35")}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = "#C7CAC6")}
+            >
+              {imgLoadError
+                ? <ImageOff style={{ width: 16, height: 16, color: "#C7CAC6" }} />
+                : <Upload style={{ width: 16, height: 16, color: "#ADAAA4" }} />
+              }
+              <span style={{ fontSize: 9, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Foto</span>
+            </button>
+          )}
+          {uploadError && <FieldError msg={uploadError} />}
+        </div>
       </div>
 
       <div>
@@ -294,73 +338,6 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
           value={data.location} onChange={set("location")} maxLength={255}
           onFocus={e => onFocus(e, !!errors.location)} onBlur={e => onBlur(e, !!errors.location)} />
         <FieldError msg={errors.location} />
-      </div>
-
-      <div>
-        <FieldLabel optional>Descripción</FieldLabel>
-        <textarea style={{ ...iStyle(), resize: "none" } as React.CSSProperties}
-          placeholder="Descripción breve del proyecto..." rows={2}
-          value={data.description} onChange={set("description")}
-          onFocus={onFocus} onBlur={onBlur} />
-      </div>
-
-      {/* Image upload */}
-      <div>
-        <FieldLabel optional>Foto de la obra</FieldLabel>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
-          style={{ display: "none" }} onChange={handleInputChange} />
-
-        {preview && !imgLoadError ? (
-          <div style={{ position: "relative", height: 140, borderRadius: 12, overflow: "hidden", border: "1px solid #E6E7E5" }}>
-            <img src={preview} alt="Preview" onError={() => setImgLoadError(true)}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            {uploading ? (
-              <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.50)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                <Loader2 style={{ width: 18, height: 18, color: "#fff", animation: "spin 1s linear infinite" }} />
-                <span style={{ color: "#fff", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>Subiendo...</span>
-              </div>
-            ) : (
-              <div className="img-hover-overlay" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(0,0,0,0)", transition: "background 0.2s" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.30)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,0,0,0)")}>
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  style={{ fontSize: 11, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>
-                  Cambiar
-                </button>
-                <button type="button" onClick={clearImage}
-                  style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-                  <X style={{ width: 12, height: 12 }} />
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div
-            role="button" tabIndex={0}
-            onClick={() => fileRef.current?.click()}
-            onKeyDown={e => e.key === "Enter" && fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={handleDrop}
-            style={{
-              height: 130, borderRadius: 12, border: "1.5px dashed #C7CAC6",
-              cursor: "pointer", display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 10,
-              background: "#F9FAF8", transition: "border-color 0.15s, background 0.15s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#FF6B35"; (e.currentTarget as HTMLElement).style.background = "rgba(255,107,53,0.03)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#C7CAC6"; (e.currentTarget as HTMLElement).style.background = "#F9FAF8"; }}
-          >
-            {imgLoadError
-              ? <ImageOff style={{ width: 22, height: 22, color: "#C7CAC6" }} />
-              : <Upload style={{ width: 22, height: 22, color: "#ADAAA4" }} />
-            }
-            <div style={{ textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Hacé click o arrastrá una foto</p>
-              <p style={{ margin: "3px 0 0", fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>JPG · PNG · WebP — máx. 5 MB</p>
-            </div>
-          </div>
-        )}
-        {uploadError && <FieldError msg={uploadError} />}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -377,61 +354,27 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
         </div>
       </div>
 
-      <ClienteSection data={data} onChange={onChange} />
+      {/* Comitente — siempre visible */}
+      <div style={{ borderTop: "1px solid #F0F1EF", paddingTop: 14 }}>
+        <FieldLabel optional>Comitente</FieldLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input style={iStyle()} placeholder="Nombre del comitente"
+            value={data.client_name} onChange={(e) => onChange({ ...data, client_name: e.target.value })}
+            maxLength={255} onFocus={onFocus} onBlur={onBlur} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <input style={iStyle()} type="email" placeholder="Email"
+              value={data.client_email} onChange={(e) => onChange({ ...data, client_email: e.target.value })}
+              maxLength={255} onFocus={onFocus} onBlur={onBlur} />
+            <input style={iStyle()} placeholder="Teléfono"
+              value={data.client_phone} onChange={(e) => onChange({ ...data, client_phone: e.target.value })}
+              maxLength={50} onFocus={onFocus} onBlur={onBlur} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function ClienteSection({ data, onChange }: { data: ObraFormData; onChange: (d: ObraFormData) => void }) {
-  const [open, setOpen] = useState(false);
-  function set(field: keyof ObraFormData) {
-    return (e: ChangeEvent<HTMLInputElement>) => onChange({ ...data, [field]: e.target.value });
-  }
-  const iStyle = (): React.CSSProperties => ({
-    width: "100%", padding: "9px 11px", borderRadius: 8, fontSize: 13, boxSizing: "border-box",
-    border: "1px solid #D1D7DB", background: "#fff", color: "#1A2329", outline: "none",
-    fontFamily: "'Plus Jakarta Sans', sans-serif",
-  });
-  const hasData = data.client_name || data.client_email || data.client_phone;
-  return (
-    <div style={{ borderTop: "1px solid #E6E7E5", paddingTop: 16 }}>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        style={{
-          display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
-          cursor: "pointer", padding: 0, fontSize: 13, fontWeight: 600,
-          color: hasData ? "#FF6B35" : "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif",
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"
-          style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)", transition: ".15s" }}>
-          <path d="M6 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        Datos del comitente
-        {hasData && <span style={{ fontSize: 10, fontWeight: 700, background: "#FF6B35", color: "#fff", borderRadius: 99, padding: "1px 6px" }}>●</span>}
-      </button>
-      {open && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
-          <div>
-            <FieldLabel optional>Nombre del comitente</FieldLabel>
-            <input style={iStyle()} placeholder="Ej: Juan García" value={data.client_name} onChange={set("client_name")} maxLength={255} />
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <FieldLabel optional>Email</FieldLabel>
-              <input style={iStyle()} type="email" placeholder="juan@empresa.com" value={data.client_email} onChange={set("client_email")} maxLength={255} />
-            </div>
-            <div>
-              <FieldLabel optional>Teléfono</FieldLabel>
-              <input style={iStyle()} placeholder="+54 9 11 1234-5678" value={data.client_phone} onChange={set("client_phone")} maxLength={50} />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ─── Step 2 — Responsables ────────────────────────────────────────────────────
 
