@@ -1,4 +1,4 @@
-import { useState, useRef, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
+import { useState, useRef, useEffect, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
 import {
   X, Plus, Trash2, Pencil, AlertTriangle, CheckCircle2,
   ChevronLeft, ChevronRight, Loader2, Upload, ImageOff, Building2,
