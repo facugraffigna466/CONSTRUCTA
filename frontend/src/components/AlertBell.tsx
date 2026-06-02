@@ -40,11 +40,18 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
-  // Bloquear scroll del fondo mientras el dropdown está abierto
+  // Bloquear scroll del fondo: solo prevenir cuando el contenido interno llegó al límite
   useEffect(() => {
     if (!open || !ref.current) return;
     const el = ref.current;
-    function blockScroll(e: WheelEvent) { e.preventDefault(); }
+    function blockScroll(e: WheelEvent) {
+      const list = el.querySelector("[data-scroll-list]") as HTMLElement | null;
+      if (!list) { e.preventDefault(); return; }
+      const { scrollTop, scrollHeight, clientHeight } = list;
+      const atTop    = e.deltaY < 0 && scrollTop === 0;
+      const atBottom = e.deltaY > 0 && scrollTop + clientHeight >= scrollHeight - 1;
+      if (atTop || atBottom) e.preventDefault();
+    }
     el.addEventListener("wheel", blockScroll, { passive: false });
     return () => el.removeEventListener("wheel", blockScroll);
   }, [open]);
@@ -153,7 +160,7 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
               </p>
             </div>
           ) : (
-            <div style={{ maxHeight: 360, overflowY: "auto", overscrollBehavior: "contain" }}>
+            <div data-scroll-list style={{ maxHeight: 360, overflowY: "auto", overscrollBehavior: "contain" }}>
               {recent.map(alert => {
                 const meta = TYPE_META[alert.type] ?? { icon: "⚠️", color: "#C97D0E", label: alert.type };
                 return (
