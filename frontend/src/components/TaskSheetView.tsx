@@ -116,9 +116,11 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
     ? all.filter(r => r.full_name.toLowerCase().includes(text.toLowerCase()) || (r.role ?? "").toLowerCase().includes(text.toLowerCase()))
     : all;
 
+  // Siempre enfocar y abrir al montar — ya sea por click o por navegación desde alerta
   useEffect(() => {
-    if (autoFocus) { inputRef.current?.focus(); setOpen(true); }
-  }, [autoFocus]);
+    inputRef.current?.focus();
+    setOpen(true);
+  }, []);
 
   function commit(opt: Responsible) {
     const id = opt.id ? String(opt.id) : "";
