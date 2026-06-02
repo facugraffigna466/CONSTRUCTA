@@ -195,7 +195,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         setTimeout(() => {
           const row = containerRef.current?.querySelector(`[data-task-row="${taskId}"]`);
           row?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 50);
+          // Para campos select (responsible, taskStatus), abrir el dropdown automáticamente
+          if (field === "responsible" || field === "taskStatus") {
+            const sel = row?.querySelector<HTMLSelectElement>(`[data-sheet-field="${field}"]`);
+            sel?.focus();
+            sel?.click();
+          }
+        }, 80);
       },
     }));
 
