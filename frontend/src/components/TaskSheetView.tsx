@@ -1,4 +1,4 @@
-import {
+import React, {
   forwardRef,
   useCallback,
   useEffect,
@@ -93,6 +93,24 @@ interface Props {
   onTaskDeleted?: (taskId: number) => void;
 }
 
+// ─── DropdownPortal ───────────────────────────────────────────────────────────
+
+function DropdownPortal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [onClose]);
+  return (
+    <div ref={ref} style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999, marginTop: 2 }}>
+      {children}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
@@ -131,6 +149,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
     const [editing, setEditing] = useState<EditState | null>(null);
     const [showNewRow, setShowNewRow] = useState(false);
+    const [openDropdownFor, setOpenDropdownFor] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // ── Clipboard paste state ────────────────────────────────────────────────
@@ -192,14 +211,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
         startEdit(task, field);
+        if (field === "responsible") setOpenDropdownFor(taskId);
         setTimeout(() => {
           const row = containerRef.current?.querySelector(`[data-task-row="${taskId}"]`);
           row?.scrollIntoView({ behavior: "smooth", block: "center" });
-          // Para campos select (responsible, taskStatus), abrir el dropdown automáticamente
-          if (field === "responsible" || field === "taskStatus") {
-            const sel = row?.querySelector<HTMLSelectElement>(`[data-sheet-field="${field}"]`);
-            sel?.focus();
-            sel?.click();
+          if (field !== "responsible") {
+            const el = row?.querySelector<HTMLElement>(`[data-sheet-field="${field}"]`);
+            el?.focus();
           }
         }, 80);
       },
@@ -436,39 +454,69 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 )}
               </div>
 
-              {/* Responsable — always a select so first click opens it natively */}
-              <div style={{
-                ...cellStyle(2),
-                boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
-                background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
-                cursor: "pointer",
-              }}>
-                <select
-                  data-sheet-field="responsible"
-                  value={isEditing ? editing!.responsibleId : (task.responsible_id ? String(task.responsible_id) : "")}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (isEditing && editing!.taskId === task.id) {
-                      setEditing((s) => s ? { ...s, responsibleId: v } : s);
-                    } else {
-                      setEditing({ ...makeEdit(task, "responsible"), responsibleId: v });
-                    }
+              {/* Responsable — custom dropdown para poder abrirlo programáticamente */}
+              {(() => {
+                const currentVal = isEditing ? editing!.responsibleId : (task.responsible_id ? String(task.responsible_id) : "");
+                const currentLabel = activeResponsibles.find(r => String(r.id) === currentVal)?.full_name;
+                const currentRole  = activeResponsibles.find(r => String(r.id) === currentVal)?.role;
+                const dropOpen = openDropdownFor === task.id;
+
+                function selectResponsible(v: string) {
+                  if (isEditing && editing!.taskId === task.id) {
+                    setEditing(s => s ? { ...s, responsibleId: v } : s);
+                  } else {
+                    setEditing({ ...makeEdit(task, "responsible"), responsibleId: v });
+                  }
+                  setOpenDropdownFor(null);
+                }
+
+                return (
+                  <div style={{
+                    ...cellStyle(2), position: "relative",
+                    boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
+                    background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
+                    cursor: "pointer",
                   }}
-                  onFocus={() => startEdit(task, "responsible")}
-                  onKeyDown={(e) => editing && handleKeyDown(e, "responsible")}
-                  style={{
-                    ...selectStyle,
-                    color: (isEditing ? editing!.responsibleId : task.responsible_id) ? "#1A2329" : "#9BA3AB",
-                  }}
-                >
-                  <option value="">Sin responsable</option>
-                  {activeResponsibles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.full_name}{r.role ? ` · ${r.role}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                    onClick={() => { startEdit(task, "responsible"); setOpenDropdownFor(task.id); }}
+                  >
+                    <span style={{ fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: currentVal ? "#1A2329" : "#9BA3AB", userSelect: "none" }}>
+                      {currentVal ? `${currentLabel}${currentRole ? ` · ${currentRole}` : ""}` : "Sin responsable"}
+                    </span>
+
+                    {dropOpen && (
+                      <DropdownPortal onClose={() => setOpenDropdownFor(null)}>
+                        <div style={{
+                          background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10,
+                          boxShadow: "0 6px 24px -6px rgba(0,0,0,0.18)", minWidth: 220, maxHeight: 240,
+                          overflowY: "auto", padding: 4,
+                        }}>
+                          {[{ id: "", full_name: "Sin responsable", role: null, is_active: true, whatsapp_number: "", created_at: "" } as Responsible, ...activeResponsibles].map((r) => {
+                            const val = r.id ? String(r.id) : "";
+                            const selected = currentVal === val;
+                            return (
+                              <div key={val || "none"}
+                                onMouseDown={(e) => { e.preventDefault(); selectResponsible(val); }}
+                                style={{
+                                  padding: "7px 12px", borderRadius: 7, cursor: "pointer",
+                                  background: selected ? "#EBF3FE" : "transparent",
+                                  display: "flex", alignItems: "center", gap: 8,
+                                  fontSize: 13, color: val ? "#1A2329" : "#9BA3AB",
+                                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                                }}
+                                onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "#F4F5F4"; }}
+                                onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}
+                              >
+                                {selected && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2A6FDB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                <span style={{ flex: 1 }}>{r.full_name}{r.role ? <span style={{ color: "#8E97A0" }}> · {r.role}</span> : null}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </DropdownPortal>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Inicio */}
               <div style={activeCellStyle(task.id, "start", 3)} onClick={() => startEdit(task, "start")}>
