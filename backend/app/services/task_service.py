@@ -461,6 +461,14 @@ class TaskService:
                         obra_id=task.obra_id,
                         task_id=task_id,
                     )
+                    await self.historial.log(
+                        obra_id=task.obra_id,
+                        task_id=task_id,
+                        event_type="alert_created",
+                        description=blocked_msg,
+                        payload={"alert_type": "task_blocked"},
+                        triggered_by=update.triggered_by,
+                    )
 
             # Auto-resolve: task unblocked → resolve all unread task_blocked alerts.
             if old_status == TaskStatus.BLOQUEADA and update.status != TaskStatus.BLOQUEADA:
