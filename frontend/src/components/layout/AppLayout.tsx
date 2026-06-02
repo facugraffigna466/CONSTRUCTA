@@ -194,8 +194,14 @@ export function AppLayout({
               </div>
             )}
 
-            {/* Alert bell */}
-            <AlertBell alerts={alerts} unreadCount={unreadCount} onMarkRead={markRead} />
+            {/* Alert bell — global en panel, filtrado por obra cuando hay una seleccionada */}
+            {(() => {
+              const visibleAlerts = selectedObra
+                ? alerts.filter(a => a.obra_id === selectedObra.id)
+                : alerts;
+              const visibleUnread = visibleAlerts.filter(a => !a.is_read).length;
+              return <AlertBell alerts={visibleAlerts} unreadCount={visibleUnread} onMarkRead={markRead} />;
+            })()}
 
             {/* User avatar + dropdown */}
             <div style={{ position: "relative" }}>
