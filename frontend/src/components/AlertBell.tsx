@@ -40,6 +40,15 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
+  // Bloquear scroll del fondo mientras el dropdown está abierto
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const el = ref.current;
+    function blockScroll(e: WheelEvent) { e.preventDefault(); }
+    el.addEventListener("wheel", blockScroll, { passive: false });
+    return () => el.removeEventListener("wheel", blockScroll);
+  }, [open]);
+
   const recent = alerts;
 
   const hasUnread = unreadCount > 0;
@@ -108,7 +117,6 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
       {open && (
         <div
           ref={ref}
-          onWheel={e => e.stopPropagation()}
           style={{
             position: "absolute", top: "calc(100% + 8px)", right: 0,
             width: 320, background: "#fff", borderRadius: 14,
