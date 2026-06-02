@@ -82,6 +82,7 @@ interface EditState {
 
 export interface SheetViewHandle {
   startNewRow: () => void;
+  focusTask: (taskId: number, field: Field) => void;
 }
 
 interface Props {
@@ -185,7 +186,18 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       setShowNewRow(false);
     }
 
-    useImperativeHandle(ref, () => ({ startNewRow }));
+    useImperativeHandle(ref, () => ({
+      startNewRow,
+      focusTask: (taskId: number, field: Field) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+        startEdit(task, field);
+        setTimeout(() => {
+          const row = containerRef.current?.querySelector(`[data-task-row="${taskId}"]`);
+          row?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 50);
+      },
+    }));
 
     // ── Bulk create from paste preview ────────────────────────────────────────
 
@@ -389,7 +401,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           const isCompleted = dStatus === "completada";
 
           return (
-            <div key={task.id} style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8" }}>
+            <div key={task.id} data-task-row={task.id} style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8" }}>
 
               {/* # */}
               <div style={cellStyle(0, { color: "#9BA3AB", fontSize: 11.5, fontWeight: 600, justifyContent: "center", cursor: "default" })}>

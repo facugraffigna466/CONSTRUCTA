@@ -16,6 +16,7 @@ import { Spinner } from "./components/Spinner";
 import { useUser } from "./context/UserContext";
 import { useActivityFeed } from "./hooks/useActivityFeed";
 import type { Alert, Obra, ObraTab, Page } from "./types";
+import type { AlertFocusField } from "./pages/ObraDetailPage";
 
 // Extract invite token from URL if present: /invite/{token}
 function getInviteToken(): string | null {
@@ -44,6 +45,7 @@ function App() {
   const [activeTab, setActiveTab]       = useState<ObraTab>("resumen");
   const [obraCounts, setObraCounts]     = useState({ tasks: 0, alerts: 0, responsibles: 0 });
   const [showWizard, setShowWizard]     = useState(false);
+  const [focusAlert, setFocusAlert]     = useState<{ taskId: number; field: AlertFocusField } | null>(null);
   const [pinnedObras, setPinnedObras]   = useState<Obra[]>(() => {
     try { return JSON.parse(localStorage.getItem("pinned_obras") || "[]"); }
     catch { return []; }
@@ -95,14 +97,22 @@ function App() {
     setActivePage("panel");
     setActiveTab("resumen");
     setObraCounts({ tasks: 0, alerts: 0, responsibles: 0 });
+    setFocusAlert(null);
   }
 
   async function handleAlertClick(alert: Alert) {
     if (!alert.obra_id) return;
+    const fieldMap: Record<string, AlertFocusField> = {
+      task_blocked:         "taskStatus",
+      task_overdue:         "due",
+      delay_risk:           "responsible",
+      no_response:          "responsible",
+      reschedule_requested: "due",
+    };
     try {
       const obra = await fetchObra(alert.obra_id);
+      setFocusAlert(alert.task_id ? { taskId: alert.task_id, field: fieldMap[alert.type] ?? "responsible" } : null);
       handleSelectObra(obra);
-      setActiveTab("tareas");
     } catch { /* silently ignore if obra was deleted */ }
   }
 
@@ -150,7 +160,7 @@ function App() {
   function renderPage() {
     if (activePage === "panel") {
       return selectedObra ? (
-        <ObraDetailPage obra={selectedObra} activeTab={activeTab} onTabChange={handleTabChange} onCounts={handleObraCounts} />
+        <ObraDetailPage obra={selectedObra} activeTab={activeTab} onTabChange={handleTabChange} onCounts={handleObraCounts} focusAlert={focusAlert} />
       ) : (
         <PortfolioPage
           onSelectObra={handleSelectObra}
