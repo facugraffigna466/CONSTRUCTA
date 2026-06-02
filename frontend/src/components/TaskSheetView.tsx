@@ -93,20 +93,102 @@ interface Props {
   onTaskDeleted?: (taskId: number) => void;
 }
 
-// ─── DropdownPortal ───────────────────────────────────────────────────────────
+// ─── ResponsableCombobox ──────────────────────────────────────────────────────
 
-function DropdownPortal({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
+interface ComboboxProps {
+  currentId: string;
+  options: Responsible[];
+  autoFocus?: boolean;
+  onSelect: (id: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}
+
+function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDown }: ComboboxProps) {
+  const currentLabel = options.find(r => String(r.id) === currentId)?.full_name ?? "";
+  const [text, setText] = useState(currentLabel);
+  const [open, setOpen] = useState(!!autoFocus);
+  const [highlighted, setHighlighted] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const all = [{ id: 0, full_name: "Sin responsable", role: null } as unknown as Responsible, ...options];
+  const filtered = text
+    ? all.filter(r => r.full_name.toLowerCase().includes(text.toLowerCase()) || (r.role ?? "").toLowerCase().includes(text.toLowerCase()))
+    : all;
+
   useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [onClose]);
+    if (autoFocus) { inputRef.current?.focus(); setOpen(true); }
+  }, [autoFocus]);
+
+  function commit(opt: Responsible) {
+    const id = opt.id ? String(opt.id) : "";
+    setText(id ? opt.full_name : "");
+    onSelect(id);
+    setOpen(false);
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted(h => Math.min(h + 1, filtered.length - 1)); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); return; }
+    if (e.key === "Enter" && open && filtered[highlighted]) { e.preventDefault(); commit(filtered[highlighted]); return; }
+    if (e.key === "Escape")    { setOpen(false); return; }
+    onKeyDown?.(e);
+  }
+
   return (
-    <div ref={ref} style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999, marginTop: 2 }}>
-      {children}
+    <div style={{ position: "relative", width: "100%" }}>
+      <input
+        ref={inputRef}
+        data-sheet-field="responsible"
+        value={text}
+        placeholder="Sin responsable"
+        onChange={e => { setText(e.target.value); setOpen(true); setHighlighted(0); }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={handleKey}
+        style={{
+          width: "100%", boxSizing: "border-box",
+          background: "transparent", border: "none", outline: "none",
+          fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif",
+          color: text ? "#1A2329" : "#9BA3AB", padding: 0,
+        }}
+      />
+      {open && filtered.length > 0 && (
+        <div ref={listRef} style={{
+          position: "absolute", top: "calc(100% + 4px)", left: -12, zIndex: 9999,
+          background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10,
+          boxShadow: "0 6px 24px -6px rgba(0,0,0,0.18)",
+          minWidth: 230, maxHeight: 220, overflowY: "auto", padding: 4,
+        }}>
+          {filtered.map((r, i) => {
+            const isHighlighted = i === highlighted;
+            return (
+              <div
+                key={r.id || "none"}
+                onMouseDown={() => commit(r)}
+                onMouseEnter={() => setHighlighted(i)}
+                style={{
+                  padding: "7px 12px", borderRadius: 7, cursor: "pointer",
+                  background: isHighlighted ? "#EBF3FE" : "transparent",
+                  fontSize: 13, color: r.id ? "#1A2329" : "#9BA3AB",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                {String(r.id || "") === currentId && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2A6FDB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+                <span style={{ flex: 1 }}>
+                  {r.full_name}
+                  {r.role && <span style={{ color: "#8E97A0" }}> · {r.role}</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -454,69 +536,35 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 )}
               </div>
 
-              {/* Responsable — custom dropdown para poder abrirlo programáticamente */}
-              {(() => {
-                const currentVal = isEditing ? editing!.responsibleId : (task.responsible_id ? String(task.responsible_id) : "");
-                const currentLabel = activeResponsibles.find(r => String(r.id) === currentVal)?.full_name;
-                const currentRole  = activeResponsibles.find(r => String(r.id) === currentVal)?.role;
-                const dropOpen = openDropdownFor === task.id;
-
-                function selectResponsible(v: string) {
-                  if (isEditing && editing!.taskId === task.id) {
-                    setEditing(s => s ? { ...s, responsibleId: v } : s);
-                  } else {
-                    setEditing({ ...makeEdit(task, "responsible"), responsibleId: v });
-                  }
-                  setOpenDropdownFor(null);
-                }
-
-                return (
-                  <div style={{
-                    ...cellStyle(2), position: "relative",
-                    boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
-                    background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
-                    cursor: "pointer",
-                  }}
-                    onClick={() => { startEdit(task, "responsible"); setOpenDropdownFor(task.id); }}
-                  >
-                    <span style={{ fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: currentVal ? "#1A2329" : "#9BA3AB", userSelect: "none" }}>
-                      {currentVal ? `${currentLabel}${currentRole ? ` · ${currentRole}` : ""}` : "Sin responsable"}
-                    </span>
-
-                    {dropOpen && (
-                      <DropdownPortal onClose={() => setOpenDropdownFor(null)}>
-                        <div style={{
-                          background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10,
-                          boxShadow: "0 6px 24px -6px rgba(0,0,0,0.18)", minWidth: 220, maxHeight: 240,
-                          overflowY: "auto", padding: 4,
-                        }}>
-                          {[{ id: "", full_name: "Sin responsable", role: null, is_active: true, whatsapp_number: "", created_at: "" } as Responsible, ...activeResponsibles].map((r) => {
-                            const val = r.id ? String(r.id) : "";
-                            const selected = currentVal === val;
-                            return (
-                              <div key={val || "none"}
-                                onMouseDown={(e) => { e.preventDefault(); selectResponsible(val); }}
-                                style={{
-                                  padding: "7px 12px", borderRadius: 7, cursor: "pointer",
-                                  background: selected ? "#EBF3FE" : "transparent",
-                                  display: "flex", alignItems: "center", gap: 8,
-                                  fontSize: 13, color: val ? "#1A2329" : "#9BA3AB",
-                                  fontFamily: "'Plus Jakarta Sans', sans-serif",
-                                }}
-                                onMouseEnter={e => { if (!selected) e.currentTarget.style.background = "#F4F5F4"; }}
-                                onMouseLeave={e => { if (!selected) e.currentTarget.style.background = "transparent"; }}
-                              >
-                                {selected && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2A6FDB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                                <span style={{ flex: 1 }}>{r.full_name}{r.role ? <span style={{ color: "#8E97A0" }}> · {r.role}</span> : null}</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </DropdownPortal>
-                    )}
-                  </div>
-                );
-              })()}
+              {/* Responsable — combobox con búsqueda */}
+              <div style={{
+                ...cellStyle(2), position: "relative",
+                boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
+                background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
+                cursor: "text",
+              }}
+                onClick={() => { if (!isEditing || editing!.taskId !== task.id) startEdit(task, "responsible"); }}
+              >
+                {isEditing && editing!.taskId === task.id ? (
+                  <ResponsableCombobox
+                    currentId={editing!.responsibleId}
+                    options={activeResponsibles}
+                    autoFocus={openDropdownFor === task.id}
+                    onSelect={(id) => {
+                      setEditing(s => s ? { ...s, responsibleId: id } : s);
+                      setOpenDropdownFor(null);
+                    }}
+                    onKeyDown={(e) => handleKeyDown(e as unknown as KeyboardEvent<HTMLInputElement>, "responsible")}
+                  />
+                ) : (
+                  <span style={{ fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: task.responsible_id ? "#1A2329" : "#9BA3AB", userSelect: "none" }}>
+                    {task.responsible_id
+                      ? (() => { const r = activeResponsibles.find(x => x.id === task.responsible_id); return r ? `${r.full_name}${r.role ? ` · ${r.role}` : ""}` : "Sin responsable"; })()
+                      : "Sin responsable"
+                    }
+                  </span>
+                )}
+              </div>
 
               {/* Inicio */}
               <div style={activeCellStyle(task.id, "start", 3)} onClick={() => startEdit(task, "start")}>
