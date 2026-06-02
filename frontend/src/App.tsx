@@ -97,7 +97,7 @@ function App() {
     setActivePage("panel");
     setActiveTab("resumen");
     setObraCounts({ tasks: 0, alerts: 0, responsibles: 0 });
-    setFocusAlert(null);
+    setFocusAlert(null); // reset manual navigation
   }
 
   async function handleAlertClick(alert: Alert) {
@@ -111,8 +111,11 @@ function App() {
     };
     try {
       const obra = await fetchObra(alert.obra_id);
-      setFocusAlert(alert.task_id ? { taskId: alert.task_id, field: fieldMap[alert.type] ?? "responsible" } : null);
-      handleSelectObra(obra);
+      handleSelectObra(obra); // llama setFocusAlert(null) internamente
+      // setFocusAlert después — gana en el batch de React porque va último
+      if (alert.task_id) {
+        setFocusAlert({ taskId: alert.task_id, field: fieldMap[alert.type] ?? "responsible" });
+      }
     } catch { /* silently ignore if obra was deleted */ }
   }
 

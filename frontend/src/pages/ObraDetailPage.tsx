@@ -82,15 +82,14 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
   const sheetViewRef = useRef<SheetViewHandle>(null);
 
   useEffect(() => {
-    if (!focusAlert) return;
+    if (!focusAlert || loading) return;
     onTabChange("tareas");
     setTaskView("planilla");
-    // Esperar a que los datos estén cargados y el componente renderizado
     const t = setTimeout(() => {
       sheetViewRef.current?.focusTask(focusAlert.taskId, focusAlert.field);
-    }, 300);
+    }, 80);
     return () => clearTimeout(t);
-  }, [focusAlert]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [focusAlert, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
