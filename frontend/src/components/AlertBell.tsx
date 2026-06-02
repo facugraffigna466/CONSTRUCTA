@@ -108,6 +108,7 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
       {open && (
         <div
           ref={ref}
+          onWheel={e => e.stopPropagation()}
           style={{
             position: "absolute", top: "calc(100% + 8px)", right: 0,
             width: 320, background: "#fff", borderRadius: 14,
