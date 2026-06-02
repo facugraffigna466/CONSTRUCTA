@@ -9,7 +9,7 @@ const TYPE_META: Record<Alert["type"], { icon: string; color: string; label: str
   reschedule_requested:  { icon: "📅", color: "#3A6BD9", label: "Reprogramación solicitada" },
 };
 
-function AlertRow({ alert, onAlertClick, setOpen }: { alert: Alert; onAlertClick: (a: Alert) => void; setOpen: (v: boolean) => void }) {
+function AlertRow({ alert, onAlertClick, setOpen, obraName }: { alert: Alert; onAlertClick: (a: Alert) => void; setOpen: (v: boolean) => void; obraName?: string }) {
   const meta = TYPE_META[alert.type] ?? { icon: "⚠️", color: "#C97D0E", label: alert.type };
   return (
     <div
@@ -28,11 +28,23 @@ function AlertRow({ alert, onAlertClick, setOpen }: { alert: Alert; onAlertClick
         <div style={{ width: 7, height: 7, borderRadius: 99, background: meta.color }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: meta.color, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          {meta.icon} {meta.label}
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: meta.color, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            {meta.icon} {meta.label}
+          </span>
+          {obraName && (
+            <span style={{
+              fontSize: 10, fontWeight: 600, color: "#fff",
+              background: "#8E97A0", borderRadius: 99,
+              padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif",
+              whiteSpace: "nowrap",
+            }}>
+              {obraName}
+            </span>
+          )}
+        </div>
         <p style={{
-          margin: "2px 0 0", fontSize: 12, color: "#1A2329",
+          margin: 0, fontSize: 12, color: "#1A2329",
           fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.4,
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
@@ -203,31 +215,26 @@ export function AlertBell({ alerts, unreadCount, onAlertClick, obraNames, groupB
             <div data-scroll-list style={{ maxHeight: 360, overflowY: "auto", overscrollBehavior: "contain" }}>
               {(() => {
                 if (!groupByObra) {
-                  // Vista dentro de una obra — lista plana
                   return recent.map(alert => <AlertRow key={alert.id} alert={alert} onAlertClick={onAlertClick} setOpen={setOpen} />);
                 }
-                // Vista panel — agrupar por obra
+                // Panel — mostrar nombre de obra como chip en cada alerta, agrupadas
                 const groups = new Map<number | null, Alert[]>();
                 for (const a of recent) {
                   const key = a.obra_id ?? null;
                   if (!groups.has(key)) groups.set(key, []);
                   groups.get(key)!.push(a);
                 }
-                return Array.from(groups.entries()).map(([obraId, groupAlerts]) => (
-                  <div key={obraId ?? "sin-obra"}>
-                    <div style={{
-                      padding: "8px 14px 4px",
-                      fontSize: 10, fontWeight: 700, letterSpacing: "0.09em",
-                      textTransform: "uppercase", color: "#8E97A0",
-                      fontFamily: "'Plus Jakarta Sans', sans-serif",
-                      borderBottom: "1px solid #F0F1EF",
-                      background: "#FAFAFA",
-                    }}>
-                      {obraId && obraNames?.get(obraId) ? obraNames.get(obraId) : "Sin obra"}
-                    </div>
-                    {groupAlerts.map(alert => <AlertRow key={alert.id} alert={alert} onAlertClick={onAlertClick} setOpen={setOpen} />)}
-                  </div>
-                ));
+                return Array.from(groups.entries()).flatMap(([obraId, groupAlerts]) =>
+                  groupAlerts.map(alert => (
+                    <AlertRow
+                      key={alert.id}
+                      alert={alert}
+                      onAlertClick={onAlertClick}
+                      setOpen={setOpen}
+                      obraName={obraId && obraNames?.get(obraId) ? obraNames.get(obraId) : undefined}
+                    />
+                  ))
+                );
               })()}
             </div>
           )}
