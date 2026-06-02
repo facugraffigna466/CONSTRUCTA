@@ -52,14 +52,17 @@ function formatDate(iso: string) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+export type AlertFocusField = "responsible" | "taskStatus" | "due";
+
 interface ObraDetailPageProps {
   obra: Obra;
   activeTab: ObraTab;
   onTabChange: (tab: ObraTab) => void;
   onCounts?: (counts: { tasks: number; alerts: number; responsibles: number }) => void;
+  focusAlert?: { taskId: number; field: AlertFocusField } | null;
 }
 
-export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraDetailPageProps) {
+export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAlert }: ObraDetailPageProps) {
   const can = useCan();
   const viewingUsers = useViewingUsers(obra.id);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -77,6 +80,16 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
   const [showImport, setShowImport] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const sheetViewRef = useRef<SheetViewHandle>(null);
+
+  useEffect(() => {
+    if (!focusAlert || loading) return;
+    onTabChange("tareas");
+    setTaskView("planilla");
+    const t = setTimeout(() => {
+      sheetViewRef.current?.focusTask(focusAlert.taskId, focusAlert.field);
+    }, 80);
+    return () => clearTimeout(t);
+  }, [focusAlert, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);

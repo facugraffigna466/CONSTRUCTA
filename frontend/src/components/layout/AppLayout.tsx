@@ -5,9 +5,12 @@ import { useRef, useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { useUser, ROLE_LABELS, ROLE_COLORS } from "../../context/UserContext";
 import { useOnlineUsers } from "../../hooks/useOnlineUsers";
+import { useGlobalAlerts } from "../../hooks/useGlobalAlerts";
 import { UserAvatarTooltip } from "../ui/UserAvatarTooltip";
 import { InviteModal } from "../InviteModal";
 import { UserProfileModal } from "../UserProfileModal";
+import { AlertBell } from "../AlertBell";
+import { CriticalAlertToast } from "../CriticalAlertToast";
 import type { Obra, ObraTab, Page } from "../../types";
 
 interface AppLayoutProps {
@@ -17,6 +20,7 @@ interface AppLayoutProps {
   activePage: Page;
   onNavigate: (page: Page) => void;
   onLogout: () => void;
+  onAlertClick?: (alert: import("../../types").Alert) => void;
   pinnedObras?: Obra[];
   currentUser?: { name: string; email: string; initials: string; color: string; avatar_url?: string | null };
   selectedObra?: Obra | null;
@@ -32,6 +36,7 @@ export function AppLayout({
   activePage,
   onNavigate,
   onLogout,
+  onAlertClick,
   pinnedObras = [],
   currentUser,
   selectedObra,
@@ -41,6 +46,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { user, role } = useUser();
   const onlineUsers = useOnlineUsers();
+  const { alerts, unreadCount, obraNames, toastAlert, markRead, clearToast } = useGlobalAlerts();
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [showInvite, setShowInvite]           = useState(false);
   const [showProfile, setShowProfile]         = useState(false);
@@ -190,6 +196,15 @@ export function AppLayout({
               </div>
             )}
 
+            {/* Alert bell — global en panel, filtrado por obra cuando hay una seleccionada */}
+            {(() => {
+              const visibleAlerts = selectedObra
+                ? alerts.filter(a => a.obra_id === selectedObra.id)
+                : alerts;
+              const visibleUnread = visibleAlerts.filter(a => !a.is_read).length;
+              return <AlertBell alerts={visibleAlerts} unreadCount={visibleUnread} onAlertClick={a => onAlertClick?.(a)} obraNames={obraNames} groupByObra={!selectedObra} />;
+            })()}
+
             {/* User avatar + dropdown */}
             <div style={{ position: "relative" }}>
               <div
@@ -284,6 +299,7 @@ export function AppLayout({
 
       {showInvite   && <InviteModal       onClose={() => setShowInvite(false)} />}
       {showProfile  && <UserProfileModal  onClose={() => setShowProfile(false)} />}
+      <CriticalAlertToast alert={toastAlert} onDismiss={clearToast} />
     </div>
   );
 }

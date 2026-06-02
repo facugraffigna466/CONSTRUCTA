@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError, UnprocessableError
-from app.core.socket_manager import emit_task_created, emit_task_deleted, emit_task_updated
+from app.core.socket_manager import emit_alerts_resolved, emit_task_created, emit_task_deleted, emit_task_updated
 from app.models.alert import AlertType
 from app.models.task import Task, TaskStatus
 from app.repositories.alert import AlertRepository
@@ -274,18 +274,23 @@ class TaskService:
                 entry["to_label"]   = _format_field_value(field, entry["to"])
 
     async def _resolve_update_alerts(
-        self, task_id: int, changes: dict[str, object]
+        self, task_id: int, changes: dict[str, object], obra_id: int
     ) -> None:
+        resolved = False
         if changes.get("responsible_id") is not None:
             await self.alert_repo.mark_read_by_task_and_fragment(
                 task_id, AlertType.DELAY_RISK, "responsable"
             )
+            resolved = True
         if "due_date" in changes:
             new_due = changes["due_date"]
             if new_due is None or new_due >= date.today():  # type: ignore[operator]
                 await self.alert_repo.mark_read_by_task_and_fragment(
                     task_id, AlertType.DELAY_RISK, "vencida"
                 )
+                resolved = True
+        if resolved:
+            await emit_alerts_resolved(task_id, obra_id)
 
     async def update(self, task_id: int, data: TaskUpdate, manager_id: int, actor: dict | None = None) -> Task:
         task = await self.get_or_raise(task_id)
@@ -353,7 +358,7 @@ class TaskService:
                 triggered_by="user",
             )
 
-        await self._resolve_update_alerts(task_id, changes)
+        await self._resolve_update_alerts(task_id, changes, task.obra_id)
         updated._dep_links = await self.repo.get_dependency_links(task_id)  # type: ignore[union-attr]
         await emit_task_updated(updated, actor)
         return updated  # type: ignore[return-value]
@@ -460,6 +465,14 @@ class TaskService:
                         message=blocked_msg,
                         obra_id=task.obra_id,
                         task_id=task_id,
+                    )
+                    await self.historial.log(
+                        obra_id=task.obra_id,
+                        task_id=task_id,
+                        event_type="alert_created",
+                        description=blocked_msg,
+                        payload={"alert_type": "task_blocked"},
+                        triggered_by=update.triggered_by,
                     )
 
             # Auto-resolve: task unblocked → resolve all unread task_blocked alerts.

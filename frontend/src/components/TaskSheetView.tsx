@@ -1,4 +1,4 @@
-import {
+import React, {
   forwardRef,
   useCallback,
   useEffect,
@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { createTask, updateTask } from "../api/tasks";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
@@ -82,6 +83,7 @@ interface EditState {
 
 export interface SheetViewHandle {
   startNewRow: () => void;
+  focusTask: (taskId: number, field: Field) => void;
 }
 
 interface Props {
@@ -90,6 +92,122 @@ interface Props {
   obraId: number;
   onTaskSaved: (task: Task) => void;
   onTaskDeleted?: (taskId: number) => void;
+}
+
+// ─── ResponsableCombobox ──────────────────────────────────────────────────────
+
+interface ComboboxProps {
+  currentId: string;
+  options: Responsible[];
+  autoFocus?: boolean;
+  onSelect: (id: string) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}
+
+function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDown }: ComboboxProps) {
+  const currentLabel = options.find(r => String(r.id) === currentId)?.full_name ?? "";
+  const [text, setText] = useState(currentLabel);
+  const [open, setOpen] = useState(false);
+  const [highlighted, setHighlighted] = useState(0);
+  const [listPos, setListPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const all = [{ id: 0, full_name: "Sin responsable", role: null } as unknown as Responsible, ...options];
+  const filtered = text.trim()
+    ? all.filter(r => r.full_name.toLowerCase().includes(text.toLowerCase()) || (r.role ?? "").toLowerCase().includes(text.toLowerCase()))
+    : all;
+
+  // Enfocar al montar y abrir la lista
+  useEffect(() => {
+    inputRef.current?.focus();
+    openList();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openList() {
+    const rect = inputRef.current?.closest("[data-task-row]")?.querySelector("[data-combobox-anchor]")?.getBoundingClientRect()
+      ?? inputRef.current?.getBoundingClientRect();
+    if (rect) {
+      setListPos({ top: rect.bottom + window.scrollY + 2, left: rect.left + window.scrollX, width: Math.max(rect.width, 230) });
+    }
+    setOpen(true);
+  }
+
+  function commit(opt: Responsible) {
+    const id = opt.id ? String(opt.id) : "";
+    setText(id ? opt.full_name : "");
+    onSelect(id);
+    setOpen(false);
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setHighlighted(h => Math.min(h + 1, filtered.length - 1)); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); setHighlighted(h => Math.max(h - 1, 0)); return; }
+    if (e.key === "Enter" && open && filtered[highlighted]) { e.preventDefault(); commit(filtered[highlighted]); return; }
+    if (e.key === "Escape")    { setOpen(false); return; }
+    onKeyDown?.(e);
+  }
+
+  const list = open && filtered.length > 0 && listPos ? createPortal(
+    <div
+      onMouseDown={e => e.preventDefault()}
+      style={{
+        position: "absolute",
+        top: listPos.top, left: listPos.left,
+        width: listPos.width,
+        zIndex: 99999,
+        background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10,
+        boxShadow: "0 6px 24px -6px rgba(0,0,0,0.18)",
+        maxHeight: 220, overflowY: "auto", padding: 4,
+      }}
+    >
+      {filtered.map((r, i) => (
+        <div
+          key={r.id || "none"}
+          onMouseDown={() => commit(r)}
+          onMouseEnter={() => setHighlighted(i)}
+          style={{
+            padding: "7px 12px", borderRadius: 7, cursor: "pointer",
+            background: i === highlighted ? "#EBF3FE" : "transparent",
+            fontSize: 13, color: r.id ? "#1A2329" : "#9BA3AB",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            display: "flex", alignItems: "center", gap: 6,
+          }}
+        >
+          {String(r.id || "") === currentId && (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2A6FDB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+          <span style={{ flex: 1 }}>
+            {r.full_name}{r.role && <span style={{ color: "#8E97A0" }}> · {r.role}</span>}
+          </span>
+        </div>
+      ))}
+    </div>,
+    document.body
+  ) : null;
+
+  return (
+    <div data-combobox-anchor style={{ width: "100%" }}>
+      <input
+        ref={inputRef}
+        data-sheet-field="responsible"
+        value={text}
+        placeholder="Sin responsable"
+        onChange={e => { setText(e.target.value); setHighlighted(0); openList(); }}
+        onFocus={openList}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={handleKey}
+        style={{
+          width: "100%", boxSizing: "border-box",
+          background: "transparent", border: "none", outline: "none",
+          fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif",
+          color: "#1A2329", padding: 0,
+        }}
+      />
+      {list}
+    </div>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -130,6 +248,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
     const [editing, setEditing] = useState<EditState | null>(null);
     const [showNewRow, setShowNewRow] = useState(false);
+    const [openDropdownFor, setOpenDropdownFor] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // ── Clipboard paste state ────────────────────────────────────────────────
@@ -185,7 +304,23 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       setShowNewRow(false);
     }
 
-    useImperativeHandle(ref, () => ({ startNewRow }));
+    useImperativeHandle(ref, () => ({
+      startNewRow,
+      focusTask: (taskId: number, field: Field) => {
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+        startEdit(task, field);
+        if (field === "responsible") setOpenDropdownFor(taskId);
+        setTimeout(() => {
+          const row = containerRef.current?.querySelector(`[data-task-row="${taskId}"]`);
+          row?.scrollIntoView({ behavior: "smooth", block: "center" });
+          if (field !== "responsible") {
+            const el = row?.querySelector<HTMLElement>(`[data-sheet-field="${field}"]`);
+            el?.focus();
+          }
+        }, 80);
+      },
+    }));
 
     // ── Bulk create from paste preview ────────────────────────────────────────
 
@@ -389,7 +524,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           const isCompleted = dStatus === "completada";
 
           return (
-            <div key={task.id} style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8" }}>
+            <div key={task.id} data-task-row={task.id} style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8" }}>
 
               {/* # */}
               <div style={cellStyle(0, { color: "#9BA3AB", fontSize: 11.5, fontWeight: 600, justifyContent: "center", cursor: "default" })}>
@@ -418,38 +553,34 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 )}
               </div>
 
-              {/* Responsable — always a select so first click opens it natively */}
+              {/* Responsable — combobox con búsqueda */}
               <div style={{
-                ...cellStyle(2),
+                ...cellStyle(2), position: "relative",
                 boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
                 background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
-                cursor: "pointer",
-              }}>
-                <select
-                  data-sheet-field="responsible"
-                  value={isEditing ? editing!.responsibleId : (task.responsible_id ? String(task.responsible_id) : "")}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (isEditing && editing!.taskId === task.id) {
-                      setEditing((s) => s ? { ...s, responsibleId: v } : s);
-                    } else {
-                      setEditing({ ...makeEdit(task, "responsible"), responsibleId: v });
+                cursor: "text",
+              }}
+                onClick={() => { if (!isEditing || editing!.taskId !== task.id) startEdit(task, "responsible"); }}
+              >
+                {isEditing && editing!.taskId === task.id ? (
+                  <ResponsableCombobox
+                    currentId={editing!.responsibleId}
+                    options={activeResponsibles}
+                    autoFocus={openDropdownFor === task.id}
+                    onSelect={(id) => {
+                      setEditing(s => s ? { ...s, responsibleId: id } : s);
+                      setOpenDropdownFor(null);
+                    }}
+                    onKeyDown={(e) => handleKeyDown(e as unknown as KeyboardEvent<HTMLInputElement>, "responsible")}
+                  />
+                ) : (
+                  <span style={{ fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: task.responsible_id ? "#1A2329" : "#9BA3AB", userSelect: "none" }}>
+                    {task.responsible_id
+                      ? (() => { const r = activeResponsibles.find(x => x.id === task.responsible_id); return r ? `${r.full_name}${r.role ? ` · ${r.role}` : ""}` : "Sin responsable"; })()
+                      : "Sin responsable"
                     }
-                  }}
-                  onFocus={() => startEdit(task, "responsible")}
-                  onKeyDown={(e) => editing && handleKeyDown(e, "responsible")}
-                  style={{
-                    ...selectStyle,
-                    color: (isEditing ? editing!.responsibleId : task.responsible_id) ? "#1A2329" : "#9BA3AB",
-                  }}
-                >
-                  <option value="">Sin responsable</option>
-                  {activeResponsibles.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.full_name}{r.role ? ` · ${r.role}` : ""}
-                    </option>
-                  ))}
-                </select>
+                  </span>
+                )}
               </div>
 
               {/* Inicio */}

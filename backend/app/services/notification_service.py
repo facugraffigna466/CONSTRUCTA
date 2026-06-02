@@ -21,6 +21,7 @@ from app.models.responsible import Responsible
 from app.models.task import Task
 from app.repositories.alert import AlertRepository
 from app.repositories.calendar import CalendarRepository
+from app.repositories.historial import HistorialRepository
 from app.repositories.message import MessageRepository
 from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
@@ -41,6 +42,7 @@ class NotificationService:
         self.resp_repo = ResponsibleRepository(session)
         self.msg_repo = MessageRepository(session)
         self.alert_repo = AlertRepository(session)
+        self.historial = HistorialRepository(session)
         self.settings_repo = SettingsRepository(session)
         self.calendar_repo = CalendarRepository(session)
         self.conv_service = ConversationService(session)
@@ -156,6 +158,14 @@ class NotificationService:
                     obra_id=task.obra_id,
                     task_id=task.id,
                 )
+                await self.historial.log(
+                    obra_id=task.obra_id,
+                    task_id=task.id,
+                    event_type="alert_created",
+                    description=msg,
+                    payload={"alert_type": "task_overdue"},
+                    triggered_by="system",
+                )
                 count += 1
         return count
 
@@ -214,6 +224,14 @@ class NotificationService:
                         message=msg,
                         obra_id=task.obra_id,
                         task_id=task.id,
+                    )
+                    await self.historial.log(
+                        obra_id=task.obra_id,
+                        task_id=task.id,
+                        event_type="alert_created",
+                        description=msg,
+                        payload={"alert_type": "no_response"},
+                        triggered_by="system",
                     )
                     count += 1
 
