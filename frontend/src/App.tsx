@@ -43,7 +43,7 @@ function App() {
   const [activePage, setActivePage]     = useState<Page>("panel");
   const [selectedObra, setSelectedObra] = useState<Obra | null>(null);
   const [activeTab, setActiveTab]       = useState<ObraTab>("resumen");
-  const [obraCounts, setObraCounts]     = useState({ tasks: 0, alerts: 0, responsibles: 0 });
+  const [obraCounts, setObraCounts]     = useState({ tasks: 0, alerts: 0 });
   const [showWizard, setShowWizard]     = useState(false);
   const [focusAlert, setFocusAlert]     = useState<{ taskId: number; field: AlertFocusField } | null>(null);
   const [pinnedObras, setPinnedObras]   = useState<Obra[]>(() => {
@@ -51,7 +51,7 @@ function App() {
     catch { return []; }
   });
 
-  const handleObraCounts = useCallback((counts: { tasks: number; alerts: number; responsibles: number }) => {
+  const handleObraCounts = useCallback((counts: { tasks: number; alerts: number }) => {
     setObraCounts(counts);
   }, []);
 
@@ -96,7 +96,7 @@ function App() {
     setSelectedObra(obra);
     setActivePage("panel");
     setActiveTab("resumen");
-    setObraCounts({ tasks: 0, alerts: 0, responsibles: 0 });
+    setObraCounts({ tasks: 0, alerts: 0 });
     setFocusAlert(null); // reset manual navigation
   }
 

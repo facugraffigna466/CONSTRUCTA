@@ -27,7 +27,7 @@ export interface Obra {
 
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos";
 
-export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial";
+export type ObraTab = "resumen" | "tareas" | "alertas" | "historial";
 
 export interface Responsible {
   id: number;

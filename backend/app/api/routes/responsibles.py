@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.deps import AdminUser, CurrentUser, CurrentUserId, DbSession
 from app.schemas.responsible import (
     ActiveTaskBrief,
     ResponsibleCreate,
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/responsibles", tags=["responsibles"])
 
 @router.post("", response_model=ResponsibleRead, status_code=status.HTTP_201_CREATED)
 async def create_responsible(
-    data: ResponsibleCreate, db: DbSession, _: CurrentUserId
+    data: ResponsibleCreate, db: DbSession, _: AdminUser
 ):
     return await ResponsibleService(db).create(data)
 
@@ -62,19 +62,19 @@ async def get_responsible(
 
 @router.patch("/{responsible_id}", response_model=ResponsibleRead)
 async def update_responsible(
-    responsible_id: int, data: ResponsibleUpdate, db: DbSession, _: CurrentUserId
+    responsible_id: int, data: ResponsibleUpdate, db: DbSession, _: AdminUser
 ):
     return await ResponsibleService(db).update(responsible_id, data)
 
 
 @router.patch("/{responsible_id}/reactivate", response_model=ResponsibleRead)
-async def reactivate_responsible(responsible_id: int, db: DbSession, _: CurrentUserId):
+async def reactivate_responsible(responsible_id: int, db: DbSession, _: AdminUser):
     """Re-activate an inactive responsible. No task reassignment is performed."""
     return await ResponsibleService(db).reactivate(responsible_id)
 
 
 @router.delete("/{responsible_id}", response_model=ResponsibleRead)
-async def deactivate_responsible(responsible_id: int, db: DbSession, current_user: CurrentUser):
+async def deactivate_responsible(responsible_id: int, db: DbSession, current_user: AdminUser):
     """Soft-delete: sets is_active=False. Does not remove from DB."""
     actor = {
         "id": current_user.id,

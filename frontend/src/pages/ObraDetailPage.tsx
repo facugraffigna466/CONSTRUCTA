@@ -14,7 +14,6 @@ import { TaskFormModal } from "../components/TaskFormModal";
 import { TaskTable } from "../components/TaskTable";
 import { TaskSheetView, type SheetViewHandle } from "../components/TaskSheetView";
 import { ImportModal } from "../components/ImportModal";
-import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import { useAlertSocket } from "../hooks/useAlertSocket";
 import { useTaskSocket } from "../hooks/useTaskSocket";
 import { useCan } from "../hooks/usePermission";
@@ -58,7 +57,7 @@ interface ObraDetailPageProps {
   obra: Obra;
   activeTab: ObraTab;
   onTabChange: (tab: ObraTab) => void;
-  onCounts?: (counts: { tasks: number; alerts: number; responsibles: number }) => void;
+  onCounts?: (counts: { tasks: number; alerts: number }) => void;
   focusAlert?: { taskId: number; field: AlertFocusField } | null;
 }
 
@@ -228,7 +227,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
   const onCountsRef = useRef(onCounts);
   useEffect(() => { onCountsRef.current = onCounts; });
   useEffect(() => {
-    onCountsRef.current?.({ tasks: tasks.length, alerts: unreadAlerts, responsibles: responsibles.length });
+    onCountsRef.current?.({ tasks: tasks.length, alerts: unreadAlerts });
   }, [tasks.length, unreadAlerts, responsibles.length]);
 
   const initials = getInitials(obra.name);
@@ -519,8 +518,6 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
         );
       }
 
-      case "responsables":
-        return <ObraResponsablesTab responsibles={responsibles} tasks={tasks} onRefresh={() => loadData(true)} />;
 
       case "alertas":
         return (

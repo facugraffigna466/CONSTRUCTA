@@ -22,6 +22,14 @@ import {
   type SystemHealth,
   type SystemSettings,
 } from "../api/settings";
+import {
+  fetchResponsibles,
+  createResponsible,
+  updateResponsible,
+  deactivateResponsible,
+  reactivateResponsible,
+} from "../api/responsibles";
+import type { Responsible } from "../types";
 import { fetchObras } from "../api/obras";
 import {
   fetchCalendar,
@@ -490,6 +498,139 @@ const AVATAR_COLORS = ["#FF6B35", "#2A6FDB", "#1F8A5B", "#9A4DC9", "#C97D0E", "#
 
 function getInitials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
+}
+
+// ─── TeamSection ─────────────────────────────────────────────────────────────
+
+const E164 = /^\+\d{7,15}$/;
+
+function getInitialsTeam(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
+}
+const AVATAR_COLORS_T = ["#E76A2D","#3A6BD9","#1F9A5A","#9A4DC9","#D03A3A","#E89B14"];
+function avatarColorTeam(name: string) {
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return AVATAR_COLORS_T[h % AVATAR_COLORS_T.length];
+}
+
+function TeamSection() {
+  const [members, setMembers] = useState<Responsible[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState({ full_name: "", whatsapp_number: "", role: "" });
+  const [editId, setEditId] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetchResponsibles().then(data => { setMembers(data); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    if (!form.full_name.trim() || form.full_name.trim().length < 2) return setError("El nombre es obligatorio (mínimo 2 caracteres).");
+    if (!editId && !form.whatsapp_number.trim()) return setError("El número de WhatsApp es obligatorio.");
+    if (!editId && !E164.test(form.whatsapp_number.trim())) return setError("Formato inválido — usá E.164: +5491112345678");
+    setSaving(true); setError(null);
+    try {
+      if (editId) {
+        const updated = await updateResponsible(editId, { full_name: form.full_name.trim(), role: form.role.trim() || null });
+        setMembers(prev => prev.map(m => m.id === editId ? updated : m));
+      } else {
+        const created = await createResponsible({ full_name: form.full_name.trim(), whatsapp_number: form.whatsapp_number.trim(), role: form.role.trim() || null });
+        setMembers(prev => [...prev, created]);
+      }
+      setForm({ full_name: "", whatsapp_number: "", role: "" }); setEditId(null);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      setError(status === 409 ? "Ya existe un responsable con ese número de WhatsApp." : "Error al guardar. Intentá de nuevo.");
+    } finally { setSaving(false); }
+  }
+
+  function startEdit(m: Responsible) {
+    setEditId(m.id); setForm({ full_name: m.full_name, whatsapp_number: m.whatsapp_number, role: m.role ?? "" }); setError(null);
+  }
+  function cancelEdit() { setEditId(null); setForm({ full_name: "", whatsapp_number: "", role: "" }); setError(null); }
+
+  async function toggleActive(m: Responsible) {
+    const updated = m.is_active ? await deactivateResponsible(m.id) : await reactivateResponsible(m.id);
+    setMembers(prev => prev.map(x => x.id === m.id ? updated : x));
+  }
+
+  const iStyle: CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 11px", fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#1A2329", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 9, outline: "none" };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: C.text1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Equipo de la empresa</h3>
+          <p style={{ margin: "3px 0 0", fontSize: 12, color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Estos responsables están disponibles para asignar tareas en cualquier obra.
+          </p>
+        </div>
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: C.text2, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 99, padding: "3px 10px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          {members.filter(m => m.is_active).length} activos
+        </span>
+      </div>
+
+      {/* Formulario */}
+      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Nombre</label>
+            <input style={iStyle} placeholder="Juan Pérez" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>WhatsApp {editId && <span style={{ color: C.text2, fontWeight: 400 }}>(no editable)</span>}</label>
+            <input style={{ ...iStyle, background: editId ? C.bg : "#fff", color: editId ? C.text2 : "#1A2329" }} placeholder="+5491112345678" value={form.whatsapp_number} onChange={e => { if (!editId) setForm(f => ({ ...f, whatsapp_number: e.target.value })); }} readOnly={!!editId} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Rol <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+            <input style={iStyle} placeholder="Electricista, Capataz..." value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} />
+          </div>
+        </div>
+        {error && <p style={{ margin: "0 0 10px", fontSize: 12, color: "#D03A3A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{error}</p>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          {editId && <button onClick={cancelEdit} style={{ padding: "7px 14px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#fff", border: `1px solid ${C.border}`, cursor: "pointer", color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cancelar</button>}
+          <button onClick={handleSave} disabled={saving} style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: C.secondary, border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            {saving ? "Guardando..." : editId ? "Guardar cambios" : "+ Agregar al equipo"}
+          </button>
+        </div>
+      </div>
+
+      {/* Lista */}
+      {loading ? (
+        <p style={{ fontSize: 13, color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cargando...</p>
+      ) : members.length === 0 ? (
+        <p style={{ fontSize: 13, color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin miembros todavía.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {members.map(m => {
+            const color = avatarColorTeam(m.full_name);
+            return (
+              <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 12, background: "#fff", border: `1px solid ${C.border}`, borderRadius: 12, padding: "10px 14px", opacity: m.is_active ? 1 : 0.5 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 99, background: color, color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {getInitialsTeam(m.full_name)}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.text1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.full_name}</span>
+                    {m.role && <span style={{ fontSize: 11, color: C.text2, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 99, padding: "2px 8px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>}
+                    {!m.is_active && <span style={{ fontSize: 11, color: "#D03A3A", background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 99, padding: "2px 8px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inactivo</span>}
+                  </div>
+                  <span style={{ fontSize: 11.5, color: C.text2, fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => startEdit(m)} style={{ padding: "5px 10px", fontSize: 11.5, fontWeight: 600, borderRadius: 7, background: "#fff", border: `1px solid ${C.border}`, cursor: "pointer", color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Editar</button>
+                  <button onClick={() => toggleActive(m)} style={{ padding: "5px 10px", fontSize: 11.5, fontWeight: 600, borderRadius: 7, background: m.is_active ? "#FCE5E5" : "#E4F3EC", border: `1px solid ${m.is_active ? "#F0B0B0" : "#BFE3CE"}`, cursor: "pointer", color: m.is_active ? "#D03A3A" : "#1F8A5B", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    {m.is_active ? "Desactivar" : "Reactivar"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ConfiguracionPage() {
@@ -1106,6 +1247,13 @@ export function ConfiguracionPage() {
           <Card style={{ marginTop: 8 }}>
             <CalendarSection canEdit={canEdit} />
           </Card>
+
+          {/* ═══ EQUIPO DE LA EMPRESA ═══ */}
+          {canEdit && (
+            <Card style={{ marginTop: 8 }}>
+              <TeamSection />
+            </Card>
+          )}
 
           {/* ═══ SAVE BAR ═══ */}
           {dirty && canEdit && (
