@@ -513,49 +513,98 @@ function avatarColorTeam(name: string) {
   return AVATAR_COLORS_T[h % AVATAR_COLORS_T.length];
 }
 
+const BLANK_FORM = { full_name: "", whatsapp_number: "", role: "" };
+
+function TeamMemberModal({ member, onSave, onClose }: {
+  member: Responsible | null; // null = create mode
+  onSave: (m: Responsible) => void;
+  onClose: () => void;
+}) {
+  const [form, setForm] = useState(member ? { full_name: member.full_name, whatsapp_number: member.whatsapp_number, role: member.role ?? "" } : BLANK_FORM);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const isEdit = !!member;
+  const iStyle: CSSProperties = { width: "100%", boxSizing: "border-box", padding: "9px 12px", fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#1A2329", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10, outline: "none" };
+
+  async function handleSave() {
+    if (!form.full_name.trim() || form.full_name.trim().length < 2) return setError("El nombre es obligatorio (mínimo 2 caracteres).");
+    if (!isEdit) {
+      if (!form.whatsapp_number.trim()) return setError("El número de WhatsApp es obligatorio.");
+      if (!E164.test(form.whatsapp_number.trim())) return setError("Formato inválido — usá E.164: +5491112345678");
+    }
+    setSaving(true); setError(null);
+    try {
+      let result: Responsible;
+      if (isEdit) {
+        result = await updateResponsible(member.id, { full_name: form.full_name.trim(), role: form.role.trim() || null });
+      } else {
+        result = await createResponsible({ full_name: form.full_name.trim(), whatsapp_number: form.whatsapp_number.trim(), role: form.role.trim() || null });
+      }
+      onSave(result);
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      setError(status === 409 ? "Ya existe un responsable con ese número de WhatsApp." : "Error al guardar.");
+    } finally { setSaving(false); }
+  }
+
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,22,28,0.45)", backdropFilter: "blur(3px)" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 480, boxShadow: "0 24px 60px -16px rgba(0,0,0,0.3)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1A2329" }}>{isEdit ? "Editar miembro" : "Agregar al equipo"}</h3>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "#F4F5F4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Nombre</label>
+            <input style={iStyle} placeholder="Juan Pérez" autoFocus value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>
+              WhatsApp {isEdit && <span style={{ fontWeight: 400, textTransform: "none" }}>(no editable)</span>}
+            </label>
+            <input style={{ ...iStyle, background: isEdit ? "#F9FAF8" : "#fff", color: isEdit ? "#8E97A0" : "#1A2329" }} placeholder="+5491112345678" value={form.whatsapp_number} readOnly={isEdit} onChange={e => { if (!isEdit) setForm(f => ({ ...f, whatsapp_number: e.target.value })); }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Rol <span style={{ fontWeight: 400, textTransform: "none" }}>(opcional)</span></label>
+            <input style={iStyle} placeholder="Electricista, Capataz, Arquitecto..." value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} onKeyDown={e => { if (e.key === "Enter") handleSave(); }} />
+          </div>
+        </div>
+
+        {error && <p style={{ margin: "12px 0 0", fontSize: 12, color: "#D03A3A" }}>{error}</p>}
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 22 }}>
+          <button onClick={onClose} style={{ padding: "9px 16px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", color: "#5B6770" }}>Cancelar</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding: "9px 18px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, boxShadow: "0 4px 12px -4px rgba(255,107,53,0.5)" }}>
+            {saving ? "Guardando..." : isEdit ? "Guardar cambios" : "Agregar al equipo"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TeamSection() {
   const [members, setMembers] = useState<Responsible[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ full_name: "", whatsapp_number: "", role: "" });
-  const [editId, setEditId] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [modalMember, setModalMember] = useState<Responsible | null | "new">(null);
 
   useEffect(() => {
     fetchResponsibles().then(data => { setMembers(data); setLoading(false); }).catch(() => setLoading(false));
   }, []);
 
-  async function handleSave() {
-    if (!form.full_name.trim() || form.full_name.trim().length < 2) return setError("El nombre es obligatorio (mínimo 2 caracteres).");
-    if (!editId && !form.whatsapp_number.trim()) return setError("El número de WhatsApp es obligatorio.");
-    if (!editId && !E164.test(form.whatsapp_number.trim())) return setError("Formato inválido — usá E.164: +5491112345678");
-    setSaving(true); setError(null);
-    try {
-      if (editId) {
-        const updated = await updateResponsible(editId, { full_name: form.full_name.trim(), role: form.role.trim() || null });
-        setMembers(prev => prev.map(m => m.id === editId ? updated : m));
-      } else {
-        const created = await createResponsible({ full_name: form.full_name.trim(), whatsapp_number: form.whatsapp_number.trim(), role: form.role.trim() || null });
-        setMembers(prev => [...prev, created]);
-      }
-      setForm({ full_name: "", whatsapp_number: "", role: "" }); setEditId(null);
-    } catch (e: unknown) {
-      const status = (e as { response?: { status?: number } })?.response?.status;
-      setError(status === 409 ? "Ya existe un responsable con ese número de WhatsApp." : "Error al guardar. Intentá de nuevo.");
-    } finally { setSaving(false); }
+  function handleSaved(saved: Responsible) {
+    setMembers(prev => prev.some(m => m.id === saved.id) ? prev.map(m => m.id === saved.id ? saved : m) : [...prev, saved]);
+    setModalMember(null);
   }
-
-  function startEdit(m: Responsible) {
-    setEditId(m.id); setForm({ full_name: m.full_name, whatsapp_number: m.whatsapp_number, role: m.role ?? "" }); setError(null);
-  }
-  function cancelEdit() { setEditId(null); setForm({ full_name: "", whatsapp_number: "", role: "" }); setError(null); }
 
   async function toggleActive(m: Responsible) {
     const updated = m.is_active ? await deactivateResponsible(m.id) : await reactivateResponsible(m.id);
     setMembers(prev => prev.map(x => x.id === m.id ? updated : x));
   }
-
-  const iStyle: CSSProperties = { width: "100%", boxSizing: "border-box", padding: "8px 11px", fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif", color: "#1A2329", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 9, outline: "none" };
 
   return (
     <div>
@@ -566,34 +615,9 @@ function TeamSection() {
             Estos responsables están disponibles para asignar tareas en cualquier obra.
           </p>
         </div>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: C.text2, background: C.bgCard, border: `1px solid ${C.border}`, borderRadius: 99, padding: "3px 10px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          {members.filter(m => m.is_active).length} activos
-        </span>
-      </div>
-
-      {/* Formulario */}
-      <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-          <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Nombre</label>
-            <input style={iStyle} placeholder="Juan Pérez" value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
-          </div>
-          <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>WhatsApp {editId && <span style={{ color: C.text2, fontWeight: 400 }}>(no editable)</span>}</label>
-            <input style={{ ...iStyle, background: editId ? C.bg : "#fff", color: editId ? C.text2 : "#1A2329" }} placeholder="+5491112345678" value={form.whatsapp_number} onChange={e => { if (!editId) setForm(f => ({ ...f, whatsapp_number: e.target.value })); }} readOnly={!!editId} />
-          </div>
-          <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Rol <span style={{ fontWeight: 400 }}>(opcional)</span></label>
-            <input style={iStyle} placeholder="Electricista, Capataz..." value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} />
-          </div>
-        </div>
-        {error && <p style={{ margin: "0 0 10px", fontSize: 12, color: "#D03A3A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{error}</p>}
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          {editId && <button onClick={cancelEdit} style={{ padding: "7px 14px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#fff", border: `1px solid ${C.border}`, cursor: "pointer", color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cancelar</button>}
-          <button onClick={handleSave} disabled={saving} style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: C.secondary, border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            {saving ? "Guardando..." : editId ? "Guardar cambios" : "+ Agregar al equipo"}
-          </button>
-        </div>
+        <button onClick={() => setModalMember("new")} style={{ padding: "7px 14px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: "0 4px 10px -4px rgba(255,107,53,0.45)" }}>
+          + Agregar
+        </button>
       </div>
 
       {/* Lista */}
@@ -619,7 +643,7 @@ function TeamSection() {
                   <span style={{ fontSize: 11.5, color: C.text2, fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => startEdit(m)} style={{ padding: "5px 10px", fontSize: 11.5, fontWeight: 600, borderRadius: 7, background: "#fff", border: `1px solid ${C.border}`, cursor: "pointer", color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Editar</button>
+                  <button onClick={() => setModalMember(m)} style={{ padding: "5px 10px", fontSize: 11.5, fontWeight: 600, borderRadius: 7, background: "#fff", border: `1px solid ${C.border}`, cursor: "pointer", color: C.text2, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Editar</button>
                   <button onClick={() => toggleActive(m)} style={{ padding: "5px 10px", fontSize: 11.5, fontWeight: 600, borderRadius: 7, background: m.is_active ? "#FCE5E5" : "#E4F3EC", border: `1px solid ${m.is_active ? "#F0B0B0" : "#BFE3CE"}`, cursor: "pointer", color: m.is_active ? "#D03A3A" : "#1F8A5B", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     {m.is_active ? "Desactivar" : "Reactivar"}
                   </button>
@@ -628,6 +652,14 @@ function TeamSection() {
             );
           })}
         </div>
+      )}
+
+      {modalMember !== null && (
+        <TeamMemberModal
+          member={modalMember === "new" ? null : modalMember}
+          onSave={handleSaved}
+          onClose={() => setModalMember(null)}
+        />
       )}
     </div>
   );
