@@ -9,6 +9,43 @@ const TYPE_META: Record<Alert["type"], { icon: string; color: string; label: str
   reschedule_requested:  { icon: "📅", color: "#3A6BD9", label: "Reprogramación solicitada" },
 };
 
+function AlertRow({ alert, onAlertClick, setOpen }: { alert: Alert; onAlertClick: (a: Alert) => void; setOpen: (v: boolean) => void }) {
+  const meta = TYPE_META[alert.type] ?? { icon: "⚠️", color: "#C97D0E", label: alert.type };
+  return (
+    <div
+      onClick={() => { if (alert.obra_id) { setOpen(false); onAlertClick(alert); } }}
+      style={{
+        display: "flex", alignItems: "flex-start", gap: 10,
+        padding: "10px 14px", background: "#FFF8F6",
+        borderBottom: "1px solid #F4F5F4",
+        cursor: alert.obra_id ? "pointer" : "default",
+        transition: "background 0.1s",
+      }}
+      onMouseEnter={e => { if (alert.obra_id) e.currentTarget.style.background = "#FFF0EB"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "#FFF8F6"; }}
+    >
+      <div style={{ paddingTop: 4, flexShrink: 0 }}>
+        <div style={{ width: 7, height: 7, borderRadius: 99, background: meta.color }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: meta.color, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          {meta.icon} {meta.label}
+        </span>
+        <p style={{
+          margin: "2px 0 0", fontSize: 12, color: "#1A2329",
+          fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.4,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {alert.message}
+        </p>
+        <span style={{ fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>
+          {timeAgo(alert.created_at)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function timeAgo(iso: string): string {
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
   if (diff < 60) return "ahora";
@@ -21,9 +58,11 @@ interface Props {
   alerts: Alert[];
   unreadCount: number;
   onAlertClick: (alert: Alert) => void;
+  obraNames?: Map<number, string>;
+  groupByObra?: boolean;
 }
 
-export function AlertBell({ alerts, unreadCount, onAlertClick }: Props) {
+export function AlertBell({ alerts, unreadCount, onAlertClick, obraNames, groupByObra }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -56,7 +95,8 @@ export function AlertBell({ alerts, unreadCount, onAlertClick }: Props) {
     return () => el.removeEventListener("wheel", blockScroll);
   }, [open]);
 
-  const recent = alerts;
+  // Solo mostrar no leídas
+  const recent = alerts.filter(a => !a.is_read);
 
   const hasUnread = unreadCount > 0;
 
@@ -156,57 +196,39 @@ export function AlertBell({ alerts, unreadCount, onAlertClick }: Props) {
           {recent.length === 0 ? (
             <div style={{ padding: "24px 14px", textAlign: "center" }}>
               <p style={{ margin: 0, fontSize: 13, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Sin alertas recientes
+                Sin alertas pendientes
               </p>
             </div>
           ) : (
             <div data-scroll-list style={{ maxHeight: 360, overflowY: "auto", overscrollBehavior: "contain" }}>
-              {recent.map(alert => {
-                const meta = TYPE_META[alert.type] ?? { icon: "⚠️", color: "#C97D0E", label: alert.type };
-                return (
-                  <div
-                    key={alert.id}
-                    onClick={() => { if (alert.obra_id) { setOpen(false); onAlertClick(alert); } }}
-                    style={{
-                      display: "flex", alignItems: "flex-start", gap: 10,
-                      padding: "10px 14px",
-                      background: alert.is_read ? "transparent" : "#FFF8F6",
-                      borderBottom: "1px solid #F4F5F4",
-                      cursor: alert.obra_id ? "pointer" : "default",
-                      transition: "background 0.1s",
-                    }}
-                    onMouseEnter={e => { if (alert.obra_id) e.currentTarget.style.background = alert.is_read ? "#F9FAF8" : "#FFF0EB"; }}
-                    onMouseLeave={e => { e.currentTarget.style.background = alert.is_read ? "transparent" : "#FFF8F6"; }}
-                  >
-                    {/* Dot unread */}
-                    <div style={{ paddingTop: 4, flexShrink: 0 }}>
-                      <div style={{
-                        width: 7, height: 7, borderRadius: 99,
-                        background: alert.is_read ? "#E6E7E5" : meta.color,
-                        transition: "background 0.2s",
-                      }} />
+              {(() => {
+                if (!groupByObra) {
+                  // Vista dentro de una obra — lista plana
+                  return recent.map(alert => <AlertRow key={alert.id} alert={alert} onAlertClick={onAlertClick} setOpen={setOpen} />);
+                }
+                // Vista panel — agrupar por obra
+                const groups = new Map<number | null, Alert[]>();
+                for (const a of recent) {
+                  const key = a.obra_id ?? null;
+                  if (!groups.has(key)) groups.set(key, []);
+                  groups.get(key)!.push(a);
+                }
+                return Array.from(groups.entries()).map(([obraId, groupAlerts]) => (
+                  <div key={obraId ?? "sin-obra"}>
+                    <div style={{
+                      padding: "8px 14px 4px",
+                      fontSize: 10, fontWeight: 700, letterSpacing: "0.09em",
+                      textTransform: "uppercase", color: "#8E97A0",
+                      fontFamily: "'Plus Jakarta Sans', sans-serif",
+                      borderBottom: "1px solid #F0F1EF",
+                      background: "#FAFAFA",
+                    }}>
+                      {obraId && obraNames?.get(obraId) ? obraNames.get(obraId) : "Sin obra"}
                     </div>
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: meta.color, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                          {meta.icon} {meta.label}
-                        </span>
-                      </div>
-                      <p style={{
-                        margin: 0, fontSize: 12, color: alert.is_read ? "#8E97A0" : "#1A2329",
-                        fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.4,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      }}>
-                        {alert.message}
-                      </p>
-                      <span style={{ fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>
-                        {timeAgo(alert.created_at)}
-                      </span>
-                    </div>
+                    {groupAlerts.map(alert => <AlertRow key={alert.id} alert={alert} onAlertClick={onAlertClick} setOpen={setOpen} />)}
                   </div>
-                );
-              })}
+                ));
+              })()}
             </div>
           )}
         </div>

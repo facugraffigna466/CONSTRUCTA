@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import socket from "../lib/socket";
 import { fetchAlerts, markAlertRead } from "../api/alerts";
+import { fetchObras } from "../api/obras";
 import type { Alert } from "../types";
 
 export interface GlobalAlertsState {
   alerts: Alert[];
   unreadCount: number;
+  obraNames: Map<number, string>;
   toastAlert: Alert | null;
   markRead: (id: number) => Promise<void>;
   clearToast: () => void;
@@ -15,6 +17,7 @@ const CRITICAL_TYPES: Alert["type"][] = ["task_blocked", "task_overdue"];
 
 export function useGlobalAlerts(): GlobalAlertsState {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [obraNames, setObraNames] = useState<Map<number, string>>(new Map());
   const [toastAlert, setToastAlert] = useState<Alert | null>(null);
   const mountedRef = useRef(true);
 
@@ -22,6 +25,9 @@ export function useGlobalAlerts(): GlobalAlertsState {
     mountedRef.current = true;
     fetchAlerts().then(data => {
       if (mountedRef.current) setAlerts(data);
+    }).catch(() => {});
+    fetchObras().then(obras => {
+      if (mountedRef.current) setObraNames(new Map(obras.map(o => [o.id, o.name])));
     }).catch(() => {});
     return () => { mountedRef.current = false; };
   }, []);
@@ -69,5 +75,5 @@ export function useGlobalAlerts(): GlobalAlertsState {
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
-  return { alerts, unreadCount, toastAlert, markRead, clearToast };
+  return { alerts, unreadCount, obraNames, toastAlert, markRead, clearToast };
 }

@@ -46,7 +46,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { user, role } = useUser();
   const onlineUsers = useOnlineUsers();
-  const { alerts, unreadCount, toastAlert, markRead, clearToast } = useGlobalAlerts();
+  const { alerts, unreadCount, obraNames, toastAlert, markRead, clearToast } = useGlobalAlerts();
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [showInvite, setShowInvite]           = useState(false);
   const [showProfile, setShowProfile]         = useState(false);
@@ -202,7 +202,7 @@ export function AppLayout({
                 ? alerts.filter(a => a.obra_id === selectedObra.id)
                 : alerts;
               const visibleUnread = visibleAlerts.filter(a => !a.is_read).length;
-              return <AlertBell alerts={visibleAlerts} unreadCount={visibleUnread} onAlertClick={a => onAlertClick?.(a)} />;
+              return <AlertBell alerts={visibleAlerts} unreadCount={visibleUnread} onAlertClick={a => onAlertClick?.(a)} obraNames={obraNames} groupByObra={!selectedObra} />;
             })()}
 
             {/* User avatar + dropdown */}
