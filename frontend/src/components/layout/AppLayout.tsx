@@ -20,6 +20,7 @@ interface AppLayoutProps {
   activePage: Page;
   onNavigate: (page: Page) => void;
   onLogout: () => void;
+  onAlertClick?: (alert: import("../../types").Alert) => void;
   pinnedObras?: Obra[];
   currentUser?: { name: string; email: string; initials: string; color: string; avatar_url?: string | null };
   selectedObra?: Obra | null;
@@ -35,6 +36,7 @@ export function AppLayout({
   activePage,
   onNavigate,
   onLogout,
+  onAlertClick,
   pinnedObras = [],
   currentUser,
   selectedObra,
@@ -200,7 +202,7 @@ export function AppLayout({
                 ? alerts.filter(a => a.obra_id === selectedObra.id)
                 : alerts;
               const visibleUnread = visibleAlerts.filter(a => !a.is_read).length;
-              return <AlertBell alerts={visibleAlerts} unreadCount={visibleUnread} onMarkRead={markRead} />;
+              return <AlertBell alerts={visibleAlerts} unreadCount={visibleUnread} onAlertClick={a => onAlertClick?.(a)} />;
             })()}
 
             {/* User avatar + dropdown */}

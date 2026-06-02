@@ -20,10 +20,10 @@ function timeAgo(iso: string): string {
 interface Props {
   alerts: Alert[];
   unreadCount: number;
-  onMarkRead: (id: number) => Promise<void>;
+  onAlertClick: (alert: Alert) => void;
 }
 
-export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
+export function AlertBell({ alerts, unreadCount, onAlertClick }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -166,16 +166,16 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
                 return (
                   <div
                     key={alert.id}
-                    onClick={() => { if (!alert.is_read) onMarkRead(alert.id); }}
+                    onClick={() => { if (alert.obra_id) { setOpen(false); onAlertClick(alert); } }}
                     style={{
                       display: "flex", alignItems: "flex-start", gap: 10,
                       padding: "10px 14px",
                       background: alert.is_read ? "transparent" : "#FFF8F6",
                       borderBottom: "1px solid #F4F5F4",
-                      cursor: alert.is_read ? "default" : "pointer",
+                      cursor: alert.obra_id ? "pointer" : "default",
                       transition: "background 0.1s",
                     }}
-                    onMouseEnter={e => { if (!alert.is_read) e.currentTarget.style.background = "#FFF0EB"; }}
+                    onMouseEnter={e => { if (alert.obra_id) e.currentTarget.style.background = alert.is_read ? "#F9FAF8" : "#FFF0EB"; }}
                     onMouseLeave={e => { e.currentTarget.style.background = alert.is_read ? "transparent" : "#FFF8F6"; }}
                   >
                     {/* Dot unread */}

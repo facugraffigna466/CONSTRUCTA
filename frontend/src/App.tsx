@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { clearToken, getToken, setToken } from "./lib/tokenStorage";
+import { fetchObra } from "./api/obras";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ActivityToast } from "./components/ActivityToast";
 import { ObraSetupWizard } from "./components/ObraSetupWizard";
@@ -14,7 +15,7 @@ import { PortfolioPage } from "./pages/PortfolioPage";
 import { Spinner } from "./components/Spinner";
 import { useUser } from "./context/UserContext";
 import { useActivityFeed } from "./hooks/useActivityFeed";
-import type { Obra, ObraTab, Page } from "./types";
+import type { Alert, Obra, ObraTab, Page } from "./types";
 
 // Extract invite token from URL if present: /invite/{token}
 function getInviteToken(): string | null {
@@ -96,6 +97,15 @@ function App() {
     setObraCounts({ tasks: 0, alerts: 0, responsibles: 0 });
   }
 
+  async function handleAlertClick(alert: Alert) {
+    if (!alert.obra_id) return;
+    try {
+      const obra = await fetchObra(alert.obra_id);
+      handleSelectObra(obra);
+      setActiveTab("tareas");
+    } catch { /* silently ignore if obra was deleted */ }
+  }
+
   function handleObraCreated(obra: Obra) {
     setShowWizard(false);
     setSelectedObra(obra);
@@ -168,6 +178,7 @@ function App() {
         activePage={activePage}
         onNavigate={handleNavigate}
         onLogout={() => { clearToken(); setAuthed(false); }}
+        onAlertClick={handleAlertClick}
         pinnedObras={pinnedObras}
         currentUser={user}
         selectedObra={selectedObra}
