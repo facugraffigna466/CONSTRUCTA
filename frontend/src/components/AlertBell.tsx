@@ -40,7 +40,7 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, [open]);
 
-  const recent = alerts.slice(0, 5);
+  const recent = alerts;
 
   const hasUnread = unreadCount > 0;
 
@@ -144,7 +144,7 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
               </p>
             </div>
           ) : (
-            <div>
+            <div style={{ maxHeight: 360, overflowY: "auto", overscrollBehavior: "contain" }}>
               {recent.map(alert => {
                 const meta = TYPE_META[alert.type] ?? { icon: "⚠️", color: "#C97D0E", label: alert.type };
                 return (
