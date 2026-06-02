@@ -7,6 +7,7 @@ import React, {
   useState,
   type KeyboardEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { createTask, updateTask } from "../api/tasks";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
@@ -106,21 +107,30 @@ interface ComboboxProps {
 function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDown }: ComboboxProps) {
   const currentLabel = options.find(r => String(r.id) === currentId)?.full_name ?? "";
   const [text, setText] = useState(currentLabel);
-  const [open, setOpen] = useState(!!autoFocus);
+  const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
+  const [listPos, setListPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
 
   const all = [{ id: 0, full_name: "Sin responsable", role: null } as unknown as Responsible, ...options];
-  const filtered = text
+  const filtered = text.trim()
     ? all.filter(r => r.full_name.toLowerCase().includes(text.toLowerCase()) || (r.role ?? "").toLowerCase().includes(text.toLowerCase()))
     : all;
 
-  // Siempre enfocar y abrir al montar — ya sea por click o por navegación desde alerta
+  // Enfocar al montar y abrir la lista
   useEffect(() => {
     inputRef.current?.focus();
+    openList();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function openList() {
+    const rect = inputRef.current?.closest("[data-task-row]")?.querySelector("[data-combobox-anchor]")?.getBoundingClientRect()
+      ?? inputRef.current?.getBoundingClientRect();
+    if (rect) {
+      setListPos({ top: rect.bottom + window.scrollY + 2, left: rect.left + window.scrollX, width: Math.max(rect.width, 230) });
+    }
     setOpen(true);
-  }, []);
+  }
 
   function commit(opt: Responsible) {
     const id = opt.id ? String(opt.id) : "";
@@ -137,60 +147,65 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
     onKeyDown?.(e);
   }
 
+  const list = open && filtered.length > 0 && listPos ? createPortal(
+    <div
+      onMouseDown={e => e.preventDefault()}
+      style={{
+        position: "absolute",
+        top: listPos.top, left: listPos.left,
+        width: listPos.width,
+        zIndex: 99999,
+        background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10,
+        boxShadow: "0 6px 24px -6px rgba(0,0,0,0.18)",
+        maxHeight: 220, overflowY: "auto", padding: 4,
+      }}
+    >
+      {filtered.map((r, i) => (
+        <div
+          key={r.id || "none"}
+          onMouseDown={() => commit(r)}
+          onMouseEnter={() => setHighlighted(i)}
+          style={{
+            padding: "7px 12px", borderRadius: 7, cursor: "pointer",
+            background: i === highlighted ? "#EBF3FE" : "transparent",
+            fontSize: 13, color: r.id ? "#1A2329" : "#9BA3AB",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            display: "flex", alignItems: "center", gap: 6,
+          }}
+        >
+          {String(r.id || "") === currentId && (
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2A6FDB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
+          <span style={{ flex: 1 }}>
+            {r.full_name}{r.role && <span style={{ color: "#8E97A0" }}> · {r.role}</span>}
+          </span>
+        </div>
+      ))}
+    </div>,
+    document.body
+  ) : null;
+
   return (
-    <div style={{ position: "relative", width: "100%" }}>
+    <div data-combobox-anchor style={{ width: "100%" }}>
       <input
         ref={inputRef}
         data-sheet-field="responsible"
         value={text}
         placeholder="Sin responsable"
-        onChange={e => { setText(e.target.value); setOpen(true); setHighlighted(0); }}
-        onFocus={() => setOpen(true)}
+        onChange={e => { setText(e.target.value); setHighlighted(0); openList(); }}
+        onFocus={openList}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={handleKey}
         style={{
           width: "100%", boxSizing: "border-box",
           background: "transparent", border: "none", outline: "none",
           fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif",
-          color: text ? "#1A2329" : "#9BA3AB", padding: 0,
+          color: "#1A2329", padding: 0,
         }}
       />
-      {open && filtered.length > 0 && (
-        <div ref={listRef} style={{
-          position: "absolute", top: "calc(100% + 4px)", left: -12, zIndex: 9999,
-          background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10,
-          boxShadow: "0 6px 24px -6px rgba(0,0,0,0.18)",
-          minWidth: 230, maxHeight: 220, overflowY: "auto", padding: 4,
-        }}>
-          {filtered.map((r, i) => {
-            const isHighlighted = i === highlighted;
-            return (
-              <div
-                key={r.id || "none"}
-                onMouseDown={() => commit(r)}
-                onMouseEnter={() => setHighlighted(i)}
-                style={{
-                  padding: "7px 12px", borderRadius: 7, cursor: "pointer",
-                  background: isHighlighted ? "#EBF3FE" : "transparent",
-                  fontSize: 13, color: r.id ? "#1A2329" : "#9BA3AB",
-                  fontFamily: "'Plus Jakarta Sans', sans-serif",
-                  display: "flex", alignItems: "center", gap: 6,
-                }}
-              >
-                {String(r.id || "") === currentId && (
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                    <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="#2A6FDB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-                <span style={{ flex: 1 }}>
-                  {r.full_name}
-                  {r.role && <span style={{ color: "#8E97A0" }}> · {r.role}</span>}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {list}
     </div>
   );
 }
