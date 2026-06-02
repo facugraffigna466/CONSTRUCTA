@@ -10,6 +10,9 @@ class ObraCreate(BaseModel):
     image_url: str | None = None
     start_date: date | None = None
     expected_end_date: date | None = None
+    client_name: str | None = None
+    client_email: str | None = None
+    client_phone: str | None = None
 
     @model_validator(mode="after")
     def end_after_start(self) -> "ObraCreate":
@@ -28,6 +31,9 @@ class ObraUpdate(BaseModel):
     start_date: date | None = None
     expected_end_date: date | None = None
     actual_end_date: date | None = None
+    client_name: str | None = None
+    client_email: str | None = None
+    client_phone: str | None = None
 
     @model_validator(mode="after")
     def validate_dates(self) -> "ObraUpdate":
@@ -50,6 +56,9 @@ class ObraRead(BaseModel):
     start_date: date | None
     expected_end_date: date | None
     actual_end_date: date | None
+    client_name: str | None = None
+    client_email: str | None = None
+    client_phone: str | None = None
     created_at: datetime
     updated_at: datetime
 

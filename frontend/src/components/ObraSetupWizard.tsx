@@ -1,11 +1,11 @@
-import { useState, useRef, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
+import { useState, useRef, useEffect, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
 import {
   X, Plus, Trash2, Pencil, AlertTriangle, CheckCircle2,
   ChevronLeft, ChevronRight, Loader2, Upload, ImageOff, Building2,
 } from "lucide-react";
 import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
-import { createResponsible } from "../api/responsibles";
+import { createResponsible, lookupResponsibleByWhatsapp } from "../api/responsibles";
 import { createTask } from "../api/tasks";
 import type { Obra } from "../types";
 
@@ -14,6 +14,7 @@ import type { Obra } from "../types";
 interface ObraFormData {
   name: string; location: string; description: string;
   image_url: string; start_date: string; expected_end_date: string;
+  client_name: string; client_email: string; client_phone: string;
 }
 interface DraftResponsible {
   _key: string; full_name: string; whatsapp_number: string; role: string;
@@ -278,7 +279,8 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
       <div>
         <FieldLabel>Nombre de la obra</FieldLabel>
         <input style={iStyle(!!errors.name)} placeholder="Ej: Edificio Palermo III"
@@ -287,79 +289,65 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
         <FieldError msg={errors.name} />
       </div>
 
+      {/* Foto — barra horizontal */}
+      <div>
+        <FieldLabel optional>Foto de la obra</FieldLabel>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
+          style={{ display: "none" }} onChange={handleInputChange} />
+        {preview && !imgLoadError ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 10, padding: "8px 12px" }}>
+            <div style={{ position: "relative", width: 48, height: 48, borderRadius: 8, overflow: "hidden", flexShrink: 0 }}>
+              <img src={preview} alt="Preview" onError={() => setImgLoadError(true)}
+                style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              {uploading && (
+                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Loader2 style={{ width: 14, height: 14, color: "#fff", animation: "spin 1s linear infinite" }} />
+                </div>
+              )}
+            </div>
+            <span style={{ flex: 1, fontSize: 12.5, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {uploading ? "Subiendo..." : "Foto cargada"}
+            </span>
+            <button type="button" onClick={() => fileRef.current?.click()}
+              style={{ fontSize: 12, color: "#5B6770", background: "#fff", padding: "4px 10px", borderRadius: 7, border: "1px solid #E6E7E5", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>
+              Cambiar
+            </button>
+            <button type="button" onClick={clearImage}
+              style={{ width: 28, height: 28, borderRadius: 7, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+              <X style={{ width: 12, height: 12 }} />
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()} onDrop={handleDrop}
+            style={{
+              width: "100%", padding: "10px 14px", borderRadius: 10,
+              border: "1.5px dashed #C7CAC6", background: "#F9FAF8",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+              transition: "border-color 0.15s, background 0.15s", boxSizing: "border-box",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#FF6B35"; e.currentTarget.style.background = "rgba(255,107,53,0.03)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "#C7CAC6"; e.currentTarget.style.background = "#F9FAF8"; }}
+          >
+            {imgLoadError
+              ? <ImageOff style={{ width: 18, height: 18, color: "#C7CAC6", flexShrink: 0 }} />
+              : <Upload style={{ width: 18, height: 18, color: "#ADAAA4", flexShrink: 0 }} />
+            }
+            <div style={{ textAlign: "left" }}>
+              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agregar foto de la obra</p>
+              <p style={{ margin: 0, fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>JPG · PNG · WebP — máx. 5 MB</p>
+            </div>
+          </button>
+        )}
+        {uploadError && <FieldError msg={uploadError} />}
+      </div>
+
       <div>
         <FieldLabel>Ubicación</FieldLabel>
         <input style={iStyle(!!errors.location)} placeholder="Ej: Av. Santa Fe 1500, CABA"
           value={data.location} onChange={set("location")} maxLength={255}
           onFocus={e => onFocus(e, !!errors.location)} onBlur={e => onBlur(e, !!errors.location)} />
         <FieldError msg={errors.location} />
-      </div>
-
-      <div>
-        <FieldLabel optional>Descripción</FieldLabel>
-        <textarea style={{ ...iStyle(), resize: "none" } as React.CSSProperties}
-          placeholder="Descripción breve del proyecto..." rows={2}
-          value={data.description} onChange={set("description")}
-          onFocus={onFocus} onBlur={onBlur} />
-      </div>
-
-      {/* Image upload */}
-      <div>
-        <FieldLabel optional>Foto de la obra</FieldLabel>
-        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
-          style={{ display: "none" }} onChange={handleInputChange} />
-
-        {preview && !imgLoadError ? (
-          <div style={{ position: "relative", height: 140, borderRadius: 12, overflow: "hidden", border: "1px solid #E6E7E5" }}>
-            <img src={preview} alt="Preview" onError={() => setImgLoadError(true)}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            {uploading ? (
-              <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.50)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                <Loader2 style={{ width: 18, height: 18, color: "#fff", animation: "spin 1s linear infinite" }} />
-                <span style={{ color: "#fff", fontSize: 12, fontFamily: "'JetBrains Mono', monospace" }}>Subiendo...</span>
-              </div>
-            ) : (
-              <div className="img-hover-overlay" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, background: "rgba(0,0,0,0)", transition: "background 0.2s" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.30)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "rgba(0,0,0,0)")}>
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  style={{ fontSize: 11, color: "#fff", background: "rgba(0,0,0,0.6)", padding: "5px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600 }}>
-                  Cambiar
-                </button>
-                <button type="button" onClick={clearImage}
-                  style={{ width: 28, height: 28, borderRadius: 8, background: "rgba(0,0,0,0.6)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-                  <X style={{ width: 12, height: 12 }} />
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div
-            role="button" tabIndex={0}
-            onClick={() => fileRef.current?.click()}
-            onKeyDown={e => e.key === "Enter" && fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={handleDrop}
-            style={{
-              height: 130, borderRadius: 12, border: "1.5px dashed #C7CAC6",
-              cursor: "pointer", display: "flex", flexDirection: "column",
-              alignItems: "center", justifyContent: "center", gap: 10,
-              background: "#F9FAF8", transition: "border-color 0.15s, background 0.15s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "#FF6B35"; (e.currentTarget as HTMLElement).style.background = "rgba(255,107,53,0.03)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "#C7CAC6"; (e.currentTarget as HTMLElement).style.background = "#F9FAF8"; }}
-          >
-            {imgLoadError
-              ? <ImageOff style={{ width: 22, height: 22, color: "#C7CAC6" }} />
-              : <Upload style={{ width: 22, height: 22, color: "#ADAAA4" }} />
-            }
-            <div style={{ textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Hacé click o arrastrá una foto</p>
-              <p style={{ margin: "3px 0 0", fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>JPG · PNG · WebP — máx. 5 MB</p>
-            </div>
-          </div>
-        )}
-        {uploadError && <FieldError msg={uploadError} />}
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -375,9 +363,28 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
           <FieldError msg={errors.expected_end_date} />
         </div>
       </div>
+
+      {/* Comitente — siempre visible */}
+      <div style={{ borderTop: "1px solid #F0F1EF", paddingTop: 14 }}>
+        <FieldLabel optional>Comitente</FieldLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input style={iStyle()} placeholder="Nombre del comitente"
+            value={data.client_name} onChange={(e) => onChange({ ...data, client_name: e.target.value })}
+            maxLength={255} onFocus={onFocus} onBlur={onBlur} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <input style={iStyle()} type="email" placeholder="Email"
+              value={data.client_email} onChange={(e) => onChange({ ...data, client_email: e.target.value })}
+              maxLength={255} onFocus={onFocus} onBlur={onBlur} />
+            <input style={iStyle()} placeholder="Teléfono"
+              value={data.client_phone} onChange={(e) => onChange({ ...data, client_phone: e.target.value })}
+              maxLength={50} onFocus={onFocus} onBlur={onBlur} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
+
 
 // ─── Step 2 — Responsables ────────────────────────────────────────────────────
 
@@ -385,6 +392,12 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
   responsibles: DraftResponsible[]; form: RespForm; onFormChange: (f: RespForm) => void;
   error: string | null; onAdd: () => void; onRemove: (k: string) => void; onEdit: (k: string) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (listRef.current && responsibles.length > 0) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [responsibles.length]);
   function set(field: keyof RespForm) {
     return (e: ChangeEvent<HTMLInputElement>) => onFormChange({ ...form, [field]: e.target.value });
   }
@@ -430,7 +443,7 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
       </div>
 
       {/* List */}
-      <div style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
+      <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
         {responsibles.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
@@ -477,6 +490,13 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
   onFormChange: (f: TaskForm) => void; error: string | null;
   onAdd: () => void; onRemove: (k: string) => void; onEdit: (k: string) => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (listRef.current && tasks.length > 0) {
+      listRef.current.scrollTop = listRef.current.scrollHeight;
+    }
+  }, [tasks.length]);
+
   function set(field: keyof TaskForm) {
     return (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       onFormChange({ ...form, [field]: e.target.value });
@@ -520,13 +540,6 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
               onFocus={onFocus} onBlur={onBlur} />
           </div>
         </div>
-        <div style={{ marginBottom: 10 }}>
-          <FieldLabel optional>Descripción</FieldLabel>
-          <textarea style={{ ...iStyle(), resize: "none" } as React.CSSProperties}
-            placeholder="Descripción adicional..." rows={2}
-            value={form.description} onChange={set("description")}
-            onFocus={onFocus} onBlur={onBlur} />
-        </div>
         {error && <div style={{ marginBottom: 10 }}><InlineError msg={error} /></div>}
         <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <PrimaryBtn onClick={onAdd}>
@@ -537,7 +550,7 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
       </div>
 
       {/* List */}
-      <div style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
+      <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
         {tasks.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
@@ -585,57 +598,133 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
 
 // ─── Step 4 — Confirmación ────────────────────────────────────────────────────
 
+const TASK_PREVIEW = 4;
+
 function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
   obraData: ObraFormData; responsibles: DraftResponsible[]; tasks: DraftTask[];
   tasksWithoutResp: number; error: string | null;
 }) {
+  const extraTasks = tasks.length > TASK_PREVIEW ? tasks.length - TASK_PREVIEW : 0;
+  const visibleTasks = tasks.slice(0, TASK_PREVIEW);
+
+  const SectionLabel = ({ children }: { children: string }) => (
+    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {children}
+    </span>
+  );
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <p style={{ margin: 0, fontSize: 13, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         Revisá el resumen antes de crear la obra.
       </p>
 
-      {/* Summary card */}
-      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderLeft: "4px solid #FF6B35", borderRadius: 12, padding: "18px 20px" }}>
-        <div style={{ marginBottom: 14 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Obra</span>
-          <p style={{ margin: "4px 0 0", fontSize: 18, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.015em", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{obraData.name}</p>
-          {obraData.location && <p style={{ margin: "3px 0 0", fontSize: 13, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{obraData.location}</p>}
-          {obraData.description && <p style={{ margin: "6px 0 0", fontSize: 12, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{obraData.description}</p>}
-        </div>
+      {/* ── Obra ── */}
+      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderLeft: "4px solid #FF6B35", borderRadius: 12, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 6 }}>
+        <SectionLabel>Obra</SectionLabel>
+        <p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.015em", fontFamily: "'Plus Jakarta Sans', sans-serif", lineHeight: 1.2 }}>
+          {obraData.name}
+        </p>
 
-        {(obraData.start_date || obraData.expected_end_date) && (
-          <div style={{ marginBottom: 14 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Período</span>
-            <p style={{ margin: "4px 0 0", fontSize: 13, color: "#1A2329", fontFamily: "'JetBrains Mono', monospace" }}>
+        {/* Meta row: location · dates · comitente */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
+          {obraData.location && (
+            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              📍 {obraData.location}
+            </span>
+          )}
+          {(obraData.start_date || obraData.expected_end_date) && (
+            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'JetBrains Mono', monospace" }}>
               {formatDate(obraData.start_date)} → {formatDate(obraData.expected_end_date)}
-            </p>
-          </div>
-        )}
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", paddingTop: 14, borderTop: "1px solid #F0F1EF", gap: 0 }}>
-          {[
-            { value: responsibles.length, label: "Responsables", color: "#1A2329" },
-            { value: tasks.length, label: "Tareas", color: "#1A2329" },
-            { value: tasksWithoutResp, label: "Sin responsable", color: tasksWithoutResp > 0 ? "#C97D0E" : "#1F8A5B" },
-          ].map(({ value, label, color }) => (
-            <div key={label} style={{ textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: 28, fontWeight: 700, color, fontFamily: "'Plus Jakarta Sans', sans-serif", letterSpacing: "-0.025em" }}>{value}</p>
-              <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{label}</p>
-            </div>
-          ))}
+            </span>
+          )}
+          {obraData.client_name && (
+            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              · Comitente: <strong style={{ color: "#1A2329", fontWeight: 600 }}>{obraData.client_name}</strong>
+            </span>
+          )}
         </div>
       </div>
 
-      {tasksWithoutResp > 0 && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "#FDF1DE", border: "1px solid #E89B14", borderRadius: 10, padding: "10px 14px" }}>
-          <AlertTriangle style={{ width: 13, height: 13, color: "#C97D0E", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ margin: 0, fontSize: 12, color: "#8B5E0A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            <strong>{tasksWithoutResp} tarea{tasksWithoutResp > 1 ? "s" : ""} sin responsable.</strong>{" "}
-            Podés asignarlos después desde el detalle de la obra.
-          </p>
+      {/* ── Responsables ── */}
+      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <SectionLabel>Responsables</SectionLabel>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            {responsibles.length === 0 ? "Ninguno" : `${responsibles.length}`}
+          </span>
         </div>
-      )}
+        {responsibles.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Podés agregarlos después desde el detalle de la obra.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {responsibles.map(r => {
+              const color = avatarColor(r.full_name);
+              const initials = getInitials(r.full_name);
+              return (
+                <div key={r._key} style={{ display: "flex", alignItems: "center", gap: 6, background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 99, padding: "4px 10px 4px 4px" }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 99, background: color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{initials}</span>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" }}>
+                    {r.full_name}{r.role ? <span style={{ color: "#8E97A0" }}> · {r.role}</span> : null}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Tareas ── */}
+      <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <SectionLabel>Tareas</SectionLabel>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {tasksWithoutResp > 0 && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 600, color: "#C97D0E", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <AlertTriangle style={{ width: 10, height: 10 }} />
+                {tasksWithoutResp} sin responsable
+              </span>
+            )}
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {tasks.length === 0 ? "Ninguna" : `${tasks.length}`}
+            </span>
+          </div>
+        </div>
+        {tasks.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 12, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Podés agregarlas después desde el detalle de la obra.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {visibleTasks.map((t, i) => {
+              const resp = responsibles.find(r => r._key === t.responsible_key);
+              const sinResp = !t.responsible_key;
+              return (
+                <div key={t._key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace", minWidth: 16, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ fontSize: 12.5, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t.title}
+                  </span>
+                  {sinResp ? (
+                    <span style={{ fontSize: 10.5, color: "#C97D0E", fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>sin resp.</span>
+                  ) : (
+                    <span style={{ fontSize: 10.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>{resp?.full_name.split(" ")[0]}</span>
+                  )}
+                </div>
+              );
+            })}
+            {extraTasks > 0 && (
+              <p style={{ margin: "2px 0 0 24px", fontSize: 11.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                + {extraTasks} tarea{extraTasks > 1 ? "s" : ""} más
+              </p>
+            )}
+          </div>
+        )}
+      </div>
 
       {error && <InlineError msg={error} />}
     </div>
@@ -673,11 +762,16 @@ export interface ObraSetupWizardProps {
 }
 
 export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
   const [createdObra, setCreatedObra] = useState<Obra | null>(null);
 
-  const [obraData, setObraData] = useState<ObraFormData>({ name: "", location: "", description: "", image_url: "", start_date: "", expected_end_date: "" });
+  const [obraData, setObraData] = useState<ObraFormData>({ name: "", location: "", description: "", image_url: "", start_date: "", expected_end_date: "", client_name: "", client_email: "", client_phone: "" });
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
 
   const [responsibles, setResponsibles] = useState<DraftResponsible[]>([]);
@@ -752,11 +846,28 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
         name: obraData.name.trim(), location: obraData.location.trim() || null,
         description: obraData.description.trim() || null, image_url: obraData.image_url.trim() || null,
         start_date: obraData.start_date || null, expected_end_date: obraData.expected_end_date || null,
+        client_name: obraData.client_name.trim() || null,
+        client_email: obraData.client_email.trim() || null,
+        client_phone: obraData.client_phone.trim() || null,
       });
       const keyToId = new Map<string, number>();
       for (const r of responsibles) {
-        const created = await createResponsible({ full_name: r.full_name, whatsapp_number: r.whatsapp_number, role: r.role || null });
-        keyToId.set(r._key, created.id);
+        let id: number;
+        try {
+          const created = await createResponsible({ full_name: r.full_name, whatsapp_number: r.whatsapp_number, role: r.role || null });
+          id = created.id;
+        } catch (err: unknown) {
+          // 409 = número ya registrado → reutilizar el existente
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status === 409) {
+            const existing = await lookupResponsibleByWhatsapp(r.whatsapp_number);
+            if (!existing) throw err;
+            id = existing.id;
+          } else {
+            throw err;
+          }
+        }
+        keyToId.set(r._key, id);
       }
       for (let i = 0; i < tasks.length; i++) {
         const t = tasks[i];
@@ -836,14 +947,28 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
           </button>
         </div>
 
-        {/* ── Content ── */}
-        <div style={{ padding: "24px 28px", flex: 1, overflowY: "auto" }}>
-          {!done && <StepBar current={step} />}
-          {!done && step === 1 && <Step1 data={obraData} onChange={setObraData} errors={step1Errors} />}
-          {!done && step === 2 && <Step2 responsibles={responsibles} form={respForm} onFormChange={setRespForm} error={respError} onAdd={addResponsible} onRemove={removeResponsible} onEdit={editResponsible} />}
-          {!done && step === 3 && <Step3 tasks={tasks} responsibles={responsibles} form={taskForm} onFormChange={setTaskForm} error={taskError} onAdd={addTask} onRemove={removeTask} onEdit={editTask} />}
-          {!done && step === 4 && <Step4 obraData={obraData} responsibles={responsibles} tasks={tasks} tasksWithoutResp={tasksWithoutResp} error={submitError} />}
-          {done && createdObra && <SuccessView obra={createdObra} onNavigate={() => onCreated(createdObra)} />}
+        {/* ── StepBar — siempre visible, fuera del scroll ── */}
+        {!done && (
+          <div style={{ padding: "16px 28px 0", flexShrink: 0 }}>
+            <StepBar current={step} />
+          </div>
+        )}
+
+        {/* ── Content scrolleable ── */}
+        <div style={{ position: "relative", flex: 1, overflow: "hidden" }}>
+          <div style={{ padding: "20px 28px 24px", height: "100%", overflowY: "auto" }}>
+            {!done && step === 1 && <Step1 data={obraData} onChange={setObraData} errors={step1Errors} />}
+            {!done && step === 2 && <Step2 responsibles={responsibles} form={respForm} onFormChange={setRespForm} error={respError} onAdd={addResponsible} onRemove={removeResponsible} onEdit={editResponsible} />}
+            {!done && step === 3 && <Step3 tasks={tasks} responsibles={responsibles} form={taskForm} onFormChange={setTaskForm} error={taskError} onAdd={addTask} onRemove={removeTask} onEdit={editTask} />}
+            {!done && step === 4 && <Step4 obraData={obraData} responsibles={responsibles} tasks={tasks} tasksWithoutResp={tasksWithoutResp} error={submitError} />}
+            {done && createdObra && <SuccessView obra={createdObra} onNavigate={() => onCreated(createdObra)} />}
+          </div>
+          {/* Gradiente inferior — indica que hay más contenido para scrollear */}
+          <div style={{
+            position: "absolute", bottom: 0, left: 0, right: 0, height: 40,
+            background: "linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.95))",
+            pointerEvents: "none",
+          }} />
         </div>
 
         {/* ── Footer ── */}

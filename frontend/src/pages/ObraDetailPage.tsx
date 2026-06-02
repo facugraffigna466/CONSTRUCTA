@@ -647,6 +647,19 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts }: ObraD
                   </>
                 )}
 
+                {obra.client_name && (
+                  <>
+                    <span style={{ color: "#D5D7D3" }}>·</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0", flexShrink: 0 }}>
+                        <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.4" fill="none"/>
+                        <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/>
+                      </svg>
+                      {obra.client_name}
+                    </span>
+                  </>
+                )}
+
                 {obra.expected_end_date && (
                   <>
                     <span style={{ color: "#D5D7D3" }}>·</span>
