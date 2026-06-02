@@ -45,8 +45,19 @@ export function useGlobalAlerts(): GlobalAlertsState {
         setToastAlert(alert);
       }
     }
+
+    function handleAlertsResolved(payload: { taskId: number; obraId: number }) {
+      setAlerts(prev =>
+        prev.map(a => a.task_id === payload.taskId ? { ...a, is_read: true } : a)
+      );
+    }
+
     socket.on("alert_created", handleAlertCreated);
-    return () => { socket.off("alert_created", handleAlertCreated); };
+    socket.on("alerts_resolved", handleAlertsResolved);
+    return () => {
+      socket.off("alert_created", handleAlertCreated);
+      socket.off("alerts_resolved", handleAlertsResolved);
+    };
   }, []);
 
   const markRead = useCallback(async (id: number) => {

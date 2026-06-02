@@ -248,6 +248,13 @@ async def emit_alert_created(alert) -> None:
     logger.debug("alert_created alertId=%d obraId=%s", alert.id, alert.obra_id)
 
 
+async def emit_alerts_resolved(task_id: int, obra_id: int) -> None:
+    payload = {"taskId": task_id, "obraId": obra_id}
+    if obra_id:
+        await sio.emit("alerts_resolved", payload, room=f"obra_{obra_id}")
+    logger.debug("alerts_resolved taskId=%d obraId=%s", task_id, obra_id)
+
+
 async def emit_task_deleted(task_id: int, obra_id: int, title: str, actor: dict | None = None) -> None:
     payload = {
         "taskId": task_id,
