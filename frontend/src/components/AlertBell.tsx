@@ -42,41 +42,62 @@ export function AlertBell({ alerts, unreadCount, onMarkRead }: Props) {
 
   const recent = alerts.slice(0, 5);
 
+  const hasUnread = unreadCount > 0;
+
   return (
     <div style={{ position: "relative" }}>
       <button
         ref={btnRef}
         onClick={() => setOpen(v => !v)}
-        title="Alertas"
+        title={hasUnread ? `${unreadCount} alerta${unreadCount > 1 ? "s" : ""} sin leer` : "Alertas"}
         style={{
           position: "relative",
-          width: 34, height: 34, borderRadius: 99,
-          background: open ? "#F0F1EF" : "#fff",
-          border: "1px solid #E6E7E5",
+          width: 36, height: 36, borderRadius: 99,
+          background: open
+            ? (hasUnread ? "rgba(255,107,53,0.18)" : "#F0F1EF")
+            : (hasUnread ? "rgba(255,107,53,0.10)" : "#fff"),
+          border: `1.5px solid ${hasUnread ? "rgba(255,107,53,0.35)" : "#E6E7E5"}`,
           cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#5B6770", transition: "background 0.15s, border-color 0.15s",
+          color: hasUnread ? "#FF6B35" : "#5B6770",
+          transition: "background 0.15s, border-color 0.15s, color 0.15s",
           flexShrink: 0,
         }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = "#F4F5F4"; }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = "#fff"; }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = hasUnread ? "rgba(255,107,53,0.18)" : "#F4F5F4";
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = open
+            ? (hasUnread ? "rgba(255,107,53,0.18)" : "#F0F1EF")
+            : (hasUnread ? "rgba(255,107,53,0.10)" : "#fff");
+        }}
       >
-        {/* Bell icon */}
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-          <path d="M8 1.5A4.5 4.5 0 0 0 3.5 6v2.5L2 10.5h12L12.5 8.5V6A4.5 4.5 0 0 0 8 1.5z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round"/>
-          <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+        {/* Bell icon — filled when unread */}
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M8 1.5A4.5 4.5 0 0 0 3.5 6v2.5L2 10.5h12L12.5 8.5V6A4.5 4.5 0 0 0 8 1.5z"
+            stroke="currentColor" strokeWidth="1.5"
+            fill={hasUnread ? "currentColor" : "none"}
+            fillOpacity={hasUnread ? 0.15 : 0}
+            strokeLinejoin="round"
+          />
+          <path d="M6.5 13a1.5 1.5 0 0 0 3 0" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          {hasUnread && (
+            <circle cx="11.5" cy="4" r="2.5" fill="#D03A3A" stroke="#fff" strokeWidth="1.2"/>
+          )}
         </svg>
 
-        {/* Badge */}
+        {/* Badge numérico */}
         {unreadCount > 0 && (
           <div style={{
-            position: "absolute", top: -3, right: -3,
-            minWidth: 16, height: 16, borderRadius: 99,
+            position: "absolute", top: -4, right: -4,
+            minWidth: 18, height: 18, borderRadius: 99,
             background: "#D03A3A", color: "#fff",
-            fontSize: 9, fontWeight: 700,
+            fontSize: 9.5, fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontFamily: "'Plus Jakarta Sans', sans-serif",
             border: "2px solid #F4F5F4",
-            padding: "0 3px",
+            padding: "0 4px",
+            letterSpacing: "-0.02em",
           }}>
             {unreadCount > 99 ? "99+" : unreadCount}
           </div>
