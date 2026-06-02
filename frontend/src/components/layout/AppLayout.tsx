@@ -5,9 +5,12 @@ import { useRef, useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
 import { useUser, ROLE_LABELS, ROLE_COLORS } from "../../context/UserContext";
 import { useOnlineUsers } from "../../hooks/useOnlineUsers";
+import { useGlobalAlerts } from "../../hooks/useGlobalAlerts";
 import { UserAvatarTooltip } from "../ui/UserAvatarTooltip";
 import { InviteModal } from "../InviteModal";
 import { UserProfileModal } from "../UserProfileModal";
+import { AlertBell } from "../AlertBell";
+import { CriticalAlertToast } from "../CriticalAlertToast";
 import type { Obra, ObraTab, Page } from "../../types";
 
 interface AppLayoutProps {
@@ -41,6 +44,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { user, role } = useUser();
   const onlineUsers = useOnlineUsers();
+  const { alerts, unreadCount, toastAlert, markRead, clearToast } = useGlobalAlerts();
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [showInvite, setShowInvite]           = useState(false);
   const [showProfile, setShowProfile]         = useState(false);
@@ -190,6 +194,9 @@ export function AppLayout({
               </div>
             )}
 
+            {/* Alert bell */}
+            <AlertBell alerts={alerts} unreadCount={unreadCount} onMarkRead={markRead} />
+
             {/* User avatar + dropdown */}
             <div style={{ position: "relative" }}>
               <div
@@ -284,6 +291,7 @@ export function AppLayout({
 
       {showInvite   && <InviteModal       onClose={() => setShowInvite(false)} />}
       {showProfile  && <UserProfileModal  onClose={() => setShowProfile(false)} />}
+      <CriticalAlertToast alert={toastAlert} onDismiss={clearToast} />
     </div>
   );
 }
