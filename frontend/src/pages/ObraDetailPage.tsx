@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { fetchAlerts, markAlertRead } from "../api/alerts";
 import { fetchHistorial } from "../api/historial";
-import { fetchResponsibles } from "../api/responsibles";
+import { fetchObraTeam } from "../api/obraTeam";
 import { fetchTasksByObra, updateTaskStatus } from "../api/tasks";
 import { exportObraExcel } from "../api/exports";
 import { AlertasTab } from "../components/AlertasTab";
@@ -96,15 +96,23 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     setError(null);
     try {
       const tasksData = await fetchTasksByObra(obra.id);
-      const [allAlerts, historialData, responsiblesData] = await Promise.all([
+      const [allAlerts, historialData, obraTeam] = await Promise.all([
         fetchAlerts(),
         fetchHistorial(obra.id),
-        fetchResponsibles(),
+        fetchObraTeam(obra.id),
       ]);
       setTasks(tasksData);
       setAlerts(allAlerts.filter((a) => a.obra_id === obra.id));
       setHistorial(historialData);
-      setResponsibles(responsiblesData);
+      // Convertir ObraTeamMember[] → Responsible[] para compatibilidad con componentes hijos
+      setResponsibles(obraTeam.map(m => ({
+        id: m.responsible_id,
+        full_name: m.full_name,
+        whatsapp_number: m.whatsapp_number,
+        role: m.role,
+        is_active: m.is_active,
+        created_at: "",
+      })));
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
