@@ -21,6 +21,7 @@ export async function fetchResponsibles(): Promise<Responsible[]> {
 
 export interface ResponsibleUpdatePayload {
   full_name?: string;
+  whatsapp_number?: string;
   role?: string | null;
 }
 

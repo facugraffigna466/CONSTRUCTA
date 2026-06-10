@@ -103,21 +103,25 @@ function EditMemberModal({ member, obraId, onSaved, onClose }: {
   member: ObraTeamMember; obraId: number; onSaved: (m: ObraTeamMember) => void; onClose: () => void;
 }) {
   const [name, setName] = useState(member.full_name);
+  const [phone, setPhone] = useState(member.whatsapp_number);
   const [role, setRole] = useState(member.role ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const E164 = /^\+\d{7,15}$/;
+
   async function save() {
     if (!name.trim() || name.trim().length < 2) return setError("El nombre es obligatorio (mínimo 2 caracteres).");
+    if (!phone.trim() || !E164.test(phone.trim())) return setError("Formato de WhatsApp inválido — usá E.164: +5491112345678");
     setSaving(true); setError(null);
     try {
-      // Update name in global directory
-      await updateResponsible(member.responsible_id, { full_name: name.trim(), role: role.trim() || null });
-      // Update role in this obra
+      await updateResponsible(member.responsible_id, { full_name: name.trim(), whatsapp_number: phone.trim(), role: role.trim() || null });
       const updated = await updateObraTeamMemberRole(obraId, member.responsible_id, role.trim() || null);
-      onSaved({ ...updated, full_name: name.trim() });
-    } catch { setError("Error al guardar. Intentá de nuevo."); }
-    finally { setSaving(false); }
+      onSaved({ ...updated, full_name: name.trim(), whatsapp_number: phone.trim() });
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      setError(status === 409 ? "Ese número de WhatsApp ya está en uso por otro responsable." : "Error al guardar. Intentá de nuevo.");
+    } finally { setSaving(false); }
   }
 
   return (
@@ -136,8 +140,13 @@ function EditMemberModal({ member, obraId, onSaved, onClose }: {
             <input style={BASE} autoFocus placeholder="Juan Pérez" value={name} onChange={e => setName(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>WhatsApp <span style={{ fontWeight: 400, textTransform: "none" }}>(no editable — clave del chatbot)</span></label>
-            <input style={{ ...BASE, background: "#F9FAF8", color: "#8E97A0" }} value={member.whatsapp_number} readOnly />
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>WhatsApp</label>
+            <input style={BASE} placeholder="+5491112345678" value={phone} onChange={e => setPhone(e.target.value)} />
+            {phone !== member.whatsapp_number && (
+              <p style={{ margin: "5px 0 0", fontSize: 11.5, color: "#C97D0E", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                ⚠ Si este responsable usa el chatbot, cambiarlo hará que deje de ser reconocido por su número anterior.
+              </p>
+            )}
           </div>
           <div>
             <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Rol en esta obra <span style={{ fontWeight: 400 }}>(opcional)</span></label>
