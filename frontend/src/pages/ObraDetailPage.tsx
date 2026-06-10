@@ -19,6 +19,7 @@ import { useTaskSocket } from "../hooks/useTaskSocket";
 import { useCan } from "../hooks/usePermission";
 import { useEditingSimulation } from "../hooks/useEditingSimulation";
 import { useViewingUsers } from "../hooks/useOnlineUsers";
+import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import type { Alert, HistorialEvento, Obra, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
 
 // ── Visual helpers ─────────────────────────────────────────────────────────────
@@ -518,6 +519,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
         );
       }
 
+
+      case "responsables":
+        return <ObraResponsablesTab obraId={obra.id} />;
 
       case "alertas":
         return (

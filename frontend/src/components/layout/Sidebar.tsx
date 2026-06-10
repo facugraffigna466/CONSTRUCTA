@@ -235,6 +235,12 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
               icon={<ClipboardDocumentListIcon style={ICON_SIZE} />}
             />
             <NavItem
+              label="Responsables"
+              active={activePage === "panel" && activeTab === "responsables"}
+              onClick={() => onTabChange("responsables")}
+              icon={<UserPlusIcon style={ICON_SIZE} />}
+            />
+            <NavItem
               label="Alertas"
               active={activePage === "panel" && activeTab === "alertas"}
               count={obraCounts?.alerts}
