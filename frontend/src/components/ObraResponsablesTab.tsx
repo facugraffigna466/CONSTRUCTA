@@ -95,31 +95,86 @@ function AutocompleteInput({ value, onChange, onSelect, suggestions, placeholder
   );
 }
 
-// ── Edit role modal ───────────────────────────────────────────────────────────
+// ── Edit member modal ─────────────────────────────────────────────────────────
 
-function EditRoleModal({ member, obraId, onSaved, onClose }: {
+import { updateResponsible } from "../api/responsibles";
+
+function EditMemberModal({ member, obraId, onSaved, onClose }: {
   member: ObraTeamMember; obraId: number; onSaved: (m: ObraTeamMember) => void; onClose: () => void;
 }) {
+  const [name, setName] = useState(member.full_name);
   const [role, setRole] = useState(member.role ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    setSaving(true);
-    const updated = await updateObraTeamMemberRole(obraId, member.responsible_id, role.trim() || null);
-    onSaved(updated);
-    setSaving(false);
+    if (!name.trim() || name.trim().length < 2) return setError("El nombre es obligatorio (mínimo 2 caracteres).");
+    setSaving(true); setError(null);
+    try {
+      // Update name in global directory
+      await updateResponsible(member.responsible_id, { full_name: name.trim(), role: role.trim() || null });
+      // Update role in this obra
+      const updated = await updateObraTeamMemberRole(obraId, member.responsible_id, role.trim() || null);
+      onSaved({ ...updated, full_name: name.trim() });
+    } catch { setError("Error al guardar. Intentá de nuevo."); }
+    finally { setSaving(false); }
   }
 
   return (
-    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,22,28,0.45)", backdropFilter: "blur(3px)" }}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 380, boxShadow: "0 24px 60px -16px rgba(0,0,0,0.3)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        <h3 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 700, color: "#1A2329" }}>Editar rol en esta obra</h3>
-        <p style={{ margin: "0 0 18px", fontSize: 13, color: "#5B6770" }}>{member.full_name}</p>
-        <input style={BASE} placeholder="Capataz, Electricista, Director..." autoFocus value={role} onChange={e => setRole(e.target.value)} onKeyDown={e => { if (e.key === "Enter") save(); }} />
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,22,28,0.45)", backdropFilter: "blur(3px)" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 440, boxShadow: "0 24px 60px -16px rgba(0,0,0,0.3)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1A2329" }}>Editar responsable</h3>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "#F4F5F4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Nombre</label>
+            <input style={BASE} autoFocus placeholder="Juan Pérez" value={name} onChange={e => setName(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>WhatsApp <span style={{ fontWeight: 400, textTransform: "none" }}>(no editable — clave del chatbot)</span></label>
+            <input style={{ ...BASE, background: "#F9FAF8", color: "#8E97A0" }} value={member.whatsapp_number} readOnly />
+          </div>
+          <div>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Rol en esta obra <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+            <input style={BASE} placeholder="Capataz, Electricista, Director..." value={role} onChange={e => setRole(e.target.value)} onKeyDown={e => { if (e.key === "Enter") save(); }} />
+          </div>
+        </div>
+        {error && <p style={{ margin: "10px 0 0", fontSize: 12, color: "#D03A3A" }}>{error}</p>}
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 22 }}>
           <button onClick={onClose} style={{ padding: "9px 16px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", color: "#5B6770" }}>Cancelar</button>
-          <button onClick={save} disabled={saving} style={{ padding: "9px 18px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1 }}>
-            {saving ? "Guardando..." : "Guardar"}
+          <button onClick={save} disabled={saving} style={{ padding: "9px 18px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, boxShadow: "0 4px 12px -4px rgba(255,107,53,0.5)" }}>
+            {saving ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Remove confirm ────────────────────────────────────────────────────────────
+
+function RemoveConfirm({ member, onConfirm, onClose }: {
+  member: ObraTeamMember; onConfirm: () => Promise<void>; onClose: () => void;
+}) {
+  const [removing, setRemoving] = useState(false);
+  async function confirm() { setRemoving(true); await onConfirm(); setRemoving(false); }
+  return (
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,22,28,0.45)", backdropFilter: "blur(3px)" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 400, boxShadow: "0 24px 60px -16px rgba(0,0,0,0.3)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <h3 style={{ margin: "0 0 8px", fontSize: 16, fontWeight: 700, color: "#1A2329" }}>¿Quitar del equipo?</h3>
+        <p style={{ margin: "0 0 6px", fontSize: 13, color: "#5B6770", lineHeight: 1.5 }}>
+          <strong style={{ color: "#1A2329" }}>{member.full_name}</strong> dejará de aparecer en esta obra. No se elimina del directorio global — podés volver a agregarlo cuando quieras.
+        </p>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+          <button onClick={onClose} style={{ padding: "9px 16px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", color: "#5B6770" }}>Cancelar</button>
+          <button onClick={confirm} disabled={removing} style={{ padding: "9px 18px", fontSize: 13, fontWeight: 600, borderRadius: 10, background: "#D03A3A", border: "none", color: "#fff", cursor: "pointer", opacity: removing ? 0.7 : 1 }}>
+            {removing ? "Quitando..." : "Sí, quitar"}
           </button>
         </div>
       </div>
@@ -146,6 +201,7 @@ export function ObraResponsablesTab({ obraId }: Props) {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [editingMember, setEditingMember] = useState<ObraTeamMember | null>(null);
+  const [removingMember, setRemovingMember] = useState<ObraTeamMember | null>(null);
 
   useEffect(() => {
     Promise.all([fetchObraTeam(obraId), fetchResponsibles()]).then(([t, all]) => {
@@ -194,6 +250,7 @@ export function ObraResponsablesTab({ obraId }: Props) {
   async function handleRemove(m: ObraTeamMember) {
     await removeObraTeamMember(obraId, m.responsible_id);
     setTeam(prev => prev.filter(x => x.responsible_id !== m.responsible_id));
+    setRemovingMember(null);
   }
 
   if (loading) return <p style={{ padding: 24, fontSize: 13, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cargando...</p>;
@@ -280,13 +337,13 @@ export function ObraResponsablesTab({ obraId }: Props) {
                 </div>
                 {isAdmin && (
                   <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => setEditingMember(m)} title="Editar rol"
+                    <button onClick={() => setEditingMember(m)} title="Editar"
                       style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
                       onMouseEnter={e => { e.currentTarget.style.background = "#EAF1FB"; e.currentTarget.style.color = "#2A6FDB"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
                       <Pencil style={{ width: 13, height: 13 }} />
                     </button>
-                    <button onClick={() => handleRemove(m)} title="Quitar de la obra"
+                    <button onClick={() => setRemovingMember(m)} title="Quitar de la obra"
                       style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
                       onMouseEnter={e => { e.currentTarget.style.background = "#FCE5E5"; e.currentTarget.style.color = "#D03A3A"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
@@ -301,11 +358,18 @@ export function ObraResponsablesTab({ obraId }: Props) {
       )}
 
       {editingMember && (
-        <EditRoleModal
+        <EditMemberModal
           member={editingMember}
           obraId={obraId}
           onSaved={updated => { setTeam(prev => prev.map(m => m.responsible_id === updated.responsible_id ? updated : m)); setEditingMember(null); }}
           onClose={() => setEditingMember(null)}
+        />
+      )}
+      {removingMember && (
+        <RemoveConfirm
+          member={removingMember}
+          onConfirm={() => handleRemove(removingMember)}
+          onClose={() => setRemovingMember(null)}
         />
       )}
     </div>
