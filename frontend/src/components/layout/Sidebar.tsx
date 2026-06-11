@@ -30,7 +30,7 @@ interface SidebarProps {
   selectedObra?: Obra | null;
   activeTab?: ObraTab;
   onTabChange?: (tab: ObraTab) => void;
-  obraCounts?: { tasks: number; alerts: number; responsibles: number };
+  obraCounts?: { tasks: number; alerts: number };
   currentUser?: { name: string; initials: string; color: string; roleLabel: string };
   collapsed?: boolean;
   onToggle?: () => void;
@@ -237,7 +237,6 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
             <NavItem
               label="Responsables"
               active={activePage === "panel" && activeTab === "responsables"}
-              count={obraCounts?.responsibles}
               onClick={() => onTabChange("responsables")}
               icon={<UserPlusIcon style={ICON_SIZE} />}
             />

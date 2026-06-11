@@ -22,7 +22,14 @@ class ResponsibleCreate(BaseModel):
 class ResponsibleUpdate(BaseModel):
     full_name: str | None = Field(None, min_length=2, max_length=255)
     role: str | None = Field(None, max_length=100)
-    # whatsapp_number is NOT updatable — it is the chatbot identity
+    whatsapp_number: str | None = Field(None, description="E.164 format. Changing this breaks chatbot recognition.")
+
+    @field_validator("whatsapp_number")
+    @classmethod
+    def validate_phone(cls, v: str | None) -> str | None:
+        if v is not None and not _E164_RE.match(v):
+            raise ValueError("whatsapp_number must be in E.164 format: +5491112345678")
+        return v
 
 
 class ResponsibleRead(BaseModel):

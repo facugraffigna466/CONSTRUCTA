@@ -49,6 +49,10 @@ class ResponsibleService:
         changes = data.model_dump(exclude_none=True)
         if not changes:
             return await self.get_or_raise(responsible_id)
+        if "whatsapp_number" in changes:
+            existing = await self.repo.get_by_whatsapp(changes["whatsapp_number"])
+            if existing and existing.id != responsible_id:
+                raise ConflictError(f"A responsible with number {changes['whatsapp_number']} already exists")
         updated = await self.repo.update_fields(responsible_id, **changes)
         return updated  # type: ignore[return-value]
 

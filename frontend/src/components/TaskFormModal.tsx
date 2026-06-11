@@ -351,7 +351,12 @@ export function TaskFormModal({
                 </div>
               )}
               <select
-                style={{ ...inputStyle(), cursor: "pointer", appearance: "none" } as React.CSSProperties}
+                style={{
+                  ...inputStyle(), cursor: "pointer", appearance: "none",
+                  paddingRight: 34,
+                  backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 16 16' fill='none'><path d='M4 6l4 4 4-4' stroke='%238E97A0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")`,
+                  backgroundRepeat: "no-repeat", backgroundPosition: "right 12px center",
+                } as React.CSSProperties}
                 value={responsibleId}
                 onChange={(e: ChangeEvent<HTMLSelectElement>) => setResponsibleId(e.target.value)}
                 onFocus={ev => onFocusInput(ev)}

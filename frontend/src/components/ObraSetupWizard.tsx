@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
+import { useUser } from "../context/UserContext";
 import {
   X, Plus, Trash2, Pencil, AlertTriangle, CheckCircle2,
   ChevronLeft, ChevronRight, Loader2, Upload, ImageOff, Building2,
@@ -392,6 +393,8 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
   responsibles: DraftResponsible[]; form: RespForm; onFormChange: (f: RespForm) => void;
   error: string | null; onAdd: () => void; onRemove: (k: string) => void; onEdit: (k: string) => void;
 }) {
+  const { role } = useUser();
+  const isAdmin = role === "admin";
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (listRef.current && responsibles.length > 0) {
@@ -408,11 +411,13 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <p style={{ margin: 0, fontSize: 13, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        Agregá las personas responsables. Podés omitir este paso y agregarlos después.
+        {isAdmin
+          ? "Agregá los responsables del equipo para esta obra. Podés omitir este paso."
+          : "Solo los administradores pueden agregar responsables. Podés asignarlos a tareas desde el detalle de la obra."}
       </p>
 
-      {/* Add form */}
-      <div style={{ background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 12, padding: "16px" }}>
+      {/* Add form — solo admins */}
+      {isAdmin && <div style={{ background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 12, padding: "16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
           <div>
             <FieldLabel>Nombre</FieldLabel>
@@ -440,7 +445,7 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
             Agregar responsable
           </PrimaryBtn>
         </div>
-      </div>
+      </div>}
 
       {/* List */}
       <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>

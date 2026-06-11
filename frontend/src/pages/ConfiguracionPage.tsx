@@ -492,6 +492,7 @@ function getInitials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
 }
 
+
 export function ConfiguracionPage() {
   const canEdit   = usePermission("configuracion.edit");
   const [form, setForm]               = useState<SystemSettings>(DEFAULT_SETTINGS);

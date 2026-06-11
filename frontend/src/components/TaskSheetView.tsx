@@ -194,9 +194,9 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
         data-sheet-field="responsible"
         value={text}
         placeholder="Sin responsable"
-        onChange={e => { setText(e.target.value); setHighlighted(0); openList(); }}
+        onChange={e => { const v = e.target.value; setText(v); setHighlighted(0); openList(); if (!v.trim()) onSelect(""); }}
         onFocus={openList}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onBlur={() => setTimeout(() => { setOpen(false); if (!text.trim()) onSelect(""); }, 150)}
         onKeyDown={handleKey}
         style={{
           width: "100%", boxSizing: "border-box",
@@ -259,7 +259,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     // Focus the right input whenever activeField changes (for non-select fields)
     useEffect(() => {
       if (!editing) return;
-      if (editing.activeField === "responsible" || editing.activeField === "taskStatus") return;
+      if (editing.activeField === "taskStatus") return;
       const el = document.querySelector<HTMLElement>(`[data-sheet-field="${editing.activeField}"]`);
       el?.focus();
     }, [editing?.taskId, editing?.activeField]);
@@ -560,7 +560,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
                 cursor: "text",
               }}
-                onClick={() => { if (!isEditing || editing!.taskId !== task.id) startEdit(task, "responsible"); }}
+                onClick={() => startEdit(task, "responsible")}
               >
                 {isEditing && editing!.taskId === task.id ? (
                   <ResponsableCombobox
@@ -769,11 +769,15 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 <input data-sheet-field="title" value={editing?.title ?? ""} onChange={(e) => setEditing((s) => s ? { ...s, title: e.target.value, error: null } : s)} onKeyDown={(e) => editing && handleKeyDown(e, "title")} onFocus={() => setEditing((s) => s ? { ...s, activeField: "title" } : s)} style={{ ...inputStyle, fontWeight: 600 }} placeholder="Nuevo título…" />
               </div>
               {/* Responsable */}
-              <div style={{ ...cellStyle(2), boxShadow: editing?.activeField === "responsible" ? ACTIVE_CELL_SHADOW : "none", background: editing?.activeField === "responsible" ? "#EBF3FE" : undefined }}>
-                <select data-sheet-field="responsible" value={editing?.responsibleId ?? ""} onChange={(e) => setEditing((s) => s ? { ...s, responsibleId: e.target.value } : s)} onKeyDown={(e) => editing && handleKeyDown(e, "responsible")} onFocus={() => setEditing((s) => s ? { ...s, activeField: "responsible" } : s)} style={selectStyle}>
-                  <option value="">Sin responsable</option>
-                  {activeResponsibles.map((r) => <option key={r.id} value={r.id}>{r.full_name}{r.role ? ` · ${r.role}` : ""}</option>)}
-                </select>
+              <div style={{ ...cellStyle(2), boxShadow: editing?.activeField === "responsible" ? ACTIVE_CELL_SHADOW : "none", background: editing?.activeField === "responsible" ? "#EBF3FE" : undefined, cursor: "text" }}
+                onClick={() => setEditing((s) => s ? { ...s, activeField: "responsible" } : s)}
+              >
+                <ResponsableCombobox
+                  currentId={editing?.responsibleId ?? ""}
+                  options={activeResponsibles}
+                  onSelect={(id) => setEditing((s) => s ? { ...s, responsibleId: id } : s)}
+                  onKeyDown={(e) => editing && handleKeyDown(e as unknown as KeyboardEvent<HTMLInputElement>, "responsible")}
+                />
               </div>
               {/* Inicio */}
               <div style={{ ...cellStyle(3), boxShadow: editing?.activeField === "start" ? ACTIVE_CELL_SHADOW : "none", background: editing?.activeField === "start" ? "#EBF3FE" : undefined }}>

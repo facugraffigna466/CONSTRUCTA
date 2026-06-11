@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
 import { fetchAlerts, markAlertRead } from "../api/alerts";
 import { fetchHistorial } from "../api/historial";
-import { fetchResponsibles } from "../api/responsibles";
+import { fetchObraTeam } from "../api/obraTeam";
 import { fetchTasksByObra, updateTaskStatus } from "../api/tasks";
 import { exportObraExcel } from "../api/exports";
 import { AlertasTab } from "../components/AlertasTab";
@@ -14,12 +14,12 @@ import { TaskFormModal } from "../components/TaskFormModal";
 import { TaskTable } from "../components/TaskTable";
 import { TaskSheetView, type SheetViewHandle } from "../components/TaskSheetView";
 import { ImportModal } from "../components/ImportModal";
-import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import { useAlertSocket } from "../hooks/useAlertSocket";
 import { useTaskSocket } from "../hooks/useTaskSocket";
 import { useCan } from "../hooks/usePermission";
 import { useEditingSimulation } from "../hooks/useEditingSimulation";
 import { useViewingUsers } from "../hooks/useOnlineUsers";
+import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import type { Alert, HistorialEvento, Obra, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
 
 // ── Visual helpers ─────────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ interface ObraDetailPageProps {
   obra: Obra;
   activeTab: ObraTab;
   onTabChange: (tab: ObraTab) => void;
-  onCounts?: (counts: { tasks: number; alerts: number; responsibles: number }) => void;
+  onCounts?: (counts: { tasks: number; alerts: number }) => void;
   focusAlert?: { taskId: number; field: AlertFocusField } | null;
 }
 
@@ -96,15 +96,23 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     setError(null);
     try {
       const tasksData = await fetchTasksByObra(obra.id);
-      const [allAlerts, historialData, responsiblesData] = await Promise.all([
+      const [allAlerts, historialData, obraTeam] = await Promise.all([
         fetchAlerts(),
         fetchHistorial(obra.id),
-        fetchResponsibles(),
+        fetchObraTeam(obra.id),
       ]);
       setTasks(tasksData);
       setAlerts(allAlerts.filter((a) => a.obra_id === obra.id));
       setHistorial(historialData);
-      setResponsibles(responsiblesData);
+      // Convertir ObraTeamMember[] → Responsible[] para compatibilidad con componentes hijos
+      setResponsibles(obraTeam.map(m => ({
+        id: m.responsible_id,
+        full_name: m.full_name,
+        whatsapp_number: m.whatsapp_number,
+        role: m.role,
+        is_active: m.is_active,
+        created_at: "",
+      })));
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (status === 403) {
@@ -228,7 +236,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
   const onCountsRef = useRef(onCounts);
   useEffect(() => { onCountsRef.current = onCounts; });
   useEffect(() => {
-    onCountsRef.current?.({ tasks: tasks.length, alerts: unreadAlerts, responsibles: responsibles.length });
+    onCountsRef.current?.({ tasks: tasks.length, alerts: unreadAlerts });
   }, [tasks.length, unreadAlerts, responsibles.length]);
 
   const initials = getInitials(obra.name);
@@ -519,8 +527,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
         );
       }
 
+
       case "responsables":
-        return <ObraResponsablesTab responsibles={responsibles} tasks={tasks} onRefresh={() => loadData(true)} />;
+        return <ObraResponsablesTab obraId={obra.id} onTeamChanged={() => loadData(true)} />;
 
       case "alertas":
         return (

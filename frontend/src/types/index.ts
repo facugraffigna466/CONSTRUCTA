@@ -29,6 +29,14 @@ export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupue
 
 export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial";
 
+export interface ObraTeamMember {
+  responsible_id: number;
+  full_name: string;
+  whatsapp_number: string;
+  role: string | null;
+  is_active: boolean;
+}
+
 export interface Responsible {
   id: number;
   full_name: string;
