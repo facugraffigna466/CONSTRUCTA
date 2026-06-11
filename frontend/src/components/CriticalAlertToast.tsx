@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type JSX } from "react";
 import type { Alert } from "../types";
 
 const DISMISS_MS = 8000;

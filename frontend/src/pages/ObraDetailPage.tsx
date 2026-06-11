@@ -8,7 +8,7 @@ import { exportObraExcel } from "../api/exports";
 import { AlertasTab } from "../components/AlertasTab";
 import { HistorialPanel } from "../components/HistorialPanel";
 import { ResumenTab } from "../components/ResumenTab";
-import { Spinner } from "../components/Spinner";
+import { TabSkeleton } from "../components/TabSkeleton";
 import { TaskDeleteConfirm } from "../components/TaskDeleteConfirm";
 import { TaskFormModal } from "../components/TaskFormModal";
 import { TaskTable } from "../components/TaskTable";
@@ -58,7 +58,7 @@ interface ObraDetailPageProps {
   obra: Obra;
   activeTab: ObraTab;
   onTabChange: (tab: ObraTab) => void;
-  onCounts?: (counts: { tasks: number; alerts: number }) => void;
+  onCounts?: (counts: { tasks: number; alerts: number; responsibles: number }) => void;
   focusAlert?: { taskId: number; field: AlertFocusField } | null;
 }
 
@@ -172,6 +172,8 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
           start_date: payload.startDate, due_date: payload.dueDate,
           start_time: payload.startTime, due_time: payload.dueTime,
           order_index: payload.orderIndex, depends_on_id: null, completed_date: null,
+          parent_task_id: null, dependency_ids: [], dependency_links: [],
+          is_milestone: false, estimated_progress: 0,
           created_at: payload.createdAt, updated_at: payload.updatedAt,
         };
         return [...prev, newTask];
@@ -236,7 +238,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
   const onCountsRef = useRef(onCounts);
   useEffect(() => { onCountsRef.current = onCounts; });
   useEffect(() => {
-    onCountsRef.current?.({ tasks: tasks.length, alerts: unreadAlerts });
+    onCountsRef.current?.({ tasks: tasks.length, alerts: unreadAlerts, responsibles: responsibles.length });
   }, [tasks.length, unreadAlerts, responsibles.length]);
 
   const initials = getInitials(obra.name);
@@ -245,7 +247,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
 
   // ── Tab content ─────────────────────────────────────────────────────────────
   function renderTab() {
-    if (loading) return <Spinner />;
+    if (loading) return <TabSkeleton />;
 
     switch (activeTab) {
       case "resumen":
@@ -263,8 +265,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             onViewAlerts={() => onTabChange("alertas")}
             onViewTareas={() => onTabChange("tareas")}
             onViewHistorial={() => onTabChange("historial")}
-            onEditTask={(t) => setTaskToEdit(t)}
-            onDeleteTask={(t) => setTaskToDelete(t)}
+            onEditTask={(t: Task) => setTaskToEdit(t)}
             onTaskRescheduled={() => loadData(true)}
             onStatusChange={handleStatusChange}
           />

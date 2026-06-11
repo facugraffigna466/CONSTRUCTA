@@ -1,5 +1,4 @@
 import { apiClient } from "./client";
-import type { Task } from "../types";
 
 export interface ImportPreviewRow {
   row_index: number;

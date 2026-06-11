@@ -1226,7 +1226,7 @@ export function GanttTimeline({
                                   cursor: "pointer",
                                   zIndex: isSel ? 3 : 1,
                                 }}
-                                onClick={() => onTaskClick(task)}
+                                onClick={() => { setSelectedId(task.id); onEditTask(task); }}
                               />
                             );
                           })()

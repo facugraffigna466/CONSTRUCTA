@@ -299,7 +299,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
   const [members,    setMembers]    = useState<Map<number, ApiUser>>(new Map());
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [, setRefreshing] = useState(false);
   const [filter,     setFilter]     = useState<ObraFilter>("todas");
   const [search,     setSearch]     = useState("");
 

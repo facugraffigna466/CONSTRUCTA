@@ -64,6 +64,11 @@ export function taskFromCreatedPayload(p: TaskCreatedPayload): Task {
     order_index: p.orderIndex,
     depends_on_id: null,
     completed_date: null,
+    parent_task_id: null,
+    dependency_ids: [],
+    dependency_links: [],
+    is_milestone: false,
+    estimated_progress: 0,
     created_at: p.createdAt,
     updated_at: p.updatedAt,
   };
