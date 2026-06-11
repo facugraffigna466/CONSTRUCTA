@@ -1077,8 +1077,6 @@ export function GanttTimeline({
               if (dateHeaderInnerRef.current)
                 dateHeaderInnerRef.current.style.transform = `translateX(-${e.currentTarget.scrollLeft}px)`;
             }}>
-              <div style={{ width: gridWidth, minWidth: "100%" }}>
-
               {/* Bar rows */}
               <div
                 ref={railRef}
@@ -1087,6 +1085,7 @@ export function GanttTimeline({
                 onDrop={handleDrop}
                 style={{
                   position: "relative",
+                  width: gridWidth, minWidth: "100%",
                   outline: isDragOver ? "2px solid #E76A2D" : "none",
                   outlineOffset: -2,
                   minHeight: ROW_H * Math.max(3, displayItems.length),
@@ -1545,7 +1544,7 @@ export function GanttTimeline({
                   );
                 })()}
 
-              </div>{/* end width:gridWidth */}
+            </div>{/* end railRef = scrollable bars area */}
             </div>{/* end scrollRef */}
           </div>{/* end right flex-column */}
         </div>{/* end body flex */}
