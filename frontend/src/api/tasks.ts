@@ -59,6 +59,26 @@ export async function updateTask(
   return data;
 }
 
+export interface CascadeAffectedTask {
+  task_id: number;
+  title: string;
+  old_start: string | null;
+  old_due: string | null;
+  new_start: string | null;
+  new_due: string | null;
+}
+
+export async function fetchCascadePreview(
+  taskId: number,
+  newDates: { start_date: string | null; due_date: string | null },
+): Promise<CascadeAffectedTask[]> {
+  const { data } = await apiClient.post<{ affected: CascadeAffectedTask[] }>(
+    `/tasks/${taskId}/cascade-preview`,
+    newDates,
+  );
+  return data.affected;
+}
+
 export async function updateTaskStatus(
   id: number,
   status: string,

@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent, type ChangeEvent } from "react";
-import { X, AlertTriangle, Loader2, ClipboardList } from "lucide-react";
-import { createTask, updateTask } from "../api/tasks";
+import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-react";
+import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
+import type { CascadeAffectedTask } from "../api/tasks";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
 import type { DependencyType, Responsible, Task } from "../types";
 
@@ -56,6 +57,12 @@ function addDays(dateStr: string, days: number): string {
 
 function diffDays(a: string, b: string): number {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
+}
+
+function fmtShortDate(d: string | null): string {
+  if (!d) return "—";
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y}`;
 }
 
 function FieldLabel({ children, optional }: { children: React.ReactNode; optional?: boolean }) {
@@ -149,6 +156,7 @@ export function TaskFormModal({
   const [errors,   setErrors]   = useState<Record<string, string>>({});
   const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [cascadePrompt, setCascadePrompt] = useState<CascadeAffectedTask[] | null>(null);
 
   function validate() {
     const e: Record<string, string> = {};
@@ -163,6 +171,31 @@ export function TaskFormModal({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!validate()) return;
+
+    // Edición con fechas cambiadas → chequear dependientes antes de guardar
+    if (mode === "edit" && task) {
+      const datesChanged =
+        (startDate || null) !== (task.start_date ?? null) ||
+        (dueDate   || null) !== (task.due_date   ?? null);
+      if (datesChanged) {
+        setSaving(true);
+        try {
+          const affected = await fetchCascadePreview(task.id, {
+            start_date: startDate || null,
+            due_date:   dueDate   || null,
+          });
+          if (affected.length > 0) {
+            setCascadePrompt(affected);
+            setSaving(false);
+            return;
+          }
+        } catch { /* si el preview falla, guardamos sin cascade */ }
+      }
+    }
+    await doSave(false);
+  }
+
+  async function doSave(cascade: boolean) {
     setSaving(true);
     setApiError(null);
     try {
@@ -183,7 +216,7 @@ export function TaskFormModal({
       if (mode === "create") {
         saved = await createTask({ ...payload, obra_id: obraId, order_index: taskCount });
       } else {
-        saved = await updateTask(task!.id, payload);
+        saved = await updateTask(task!.id, { ...payload, cascade_dates: cascade });
       }
       onSaved(saved);
     } catch (err) {
@@ -697,6 +730,102 @@ export function TaskFormModal({
           </div>
         </form>
       </div>
+
+      {/* ── Confirmación de cascade: la tarea tiene dependientes ── */}
+      {cascadePrompt && (
+        <div style={{
+          position: "fixed", inset: 0, zIndex: 60,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: "rgba(15,22,28,0.45)", padding: 16,
+        }}>
+          <div style={{
+            background: "#fff", borderRadius: 14, width: "100%", maxWidth: 440,
+            boxShadow: "0 24px 48px -12px rgba(15,22,28,0.35)",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+            padding: "20px 22px",
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                background: "#FFF4E8", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <GitBranch style={{ width: 16, height: 16, color: "#FF6B35" }} />
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <h3 style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: "#1A2329" }}>
+                  Esta tarea tiene {cascadePrompt.length} tarea{cascadePrompt.length !== 1 ? "s" : ""} dependiente{cascadePrompt.length !== 1 ? "s" : ""}
+                </h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#5B6770", lineHeight: 1.45 }}>
+                  Con las nuevas fechas, esta{cascadePrompt.length !== 1 ? "s" : ""} tarea{cascadePrompt.length !== 1 ? "s" : ""} quedaría{cascadePrompt.length !== 1 ? "n" : ""} desfasada{cascadePrompt.length !== 1 ? "s" : ""}. ¿Reprogramarla{cascadePrompt.length !== 1 ? "s" : ""} automáticamente?
+                </p>
+              </div>
+            </div>
+
+            <div style={{
+              margin: "14px 0 0", maxHeight: 132, overflowY: "auto",
+              border: "1px solid #F0EBE2", borderRadius: 10, padding: "8px 12px",
+            }}>
+              {cascadePrompt.map(a => (
+                <div key={a.task_id} style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  gap: 10, padding: "4px 0", fontSize: 12,
+                }}>
+                  <span style={{
+                    fontWeight: 600, color: "#1A2329", whiteSpace: "nowrap",
+                    overflow: "hidden", textOverflow: "ellipsis",
+                  }} title={a.title}>{a.title}</span>
+                  <span style={{ flexShrink: 0, color: "#5B6770", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+                    {fmtShortDate(a.old_start ?? a.old_due)} <span style={{ color: "#FF6B35", fontWeight: 700 }}>→</span> {fmtShortDate(a.new_start ?? a.new_due)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => setCascadePrompt(null)}
+                style={{
+                  padding: "8px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+                  color: "#8E97A0", background: "#fff", border: "none", cursor: "pointer",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                }}
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => doSave(false)}
+                style={{
+                  padding: "8px 16px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+                  color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5",
+                  cursor: saving ? "not-allowed" : "pointer",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                }}
+              >
+                No, solo esta tarea
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => doSave(true)}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "8px 16px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+                  background: saving ? "#F0A882" : "#FF6B35", color: "#fff", border: "none",
+                  cursor: saving ? "not-allowed" : "pointer",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                }}
+              >
+                {saving && <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} />}
+                Sí, reprogramar {cascadePrompt.length}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
