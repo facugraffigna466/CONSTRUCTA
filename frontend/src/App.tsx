@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { clearToken, getToken, setToken } from "./lib/tokenStorage";
 import { fetchObra } from "./api/obras";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -10,6 +10,7 @@ import { PresupuestosPage } from "./pages/PresupuestosPage";
 import { ConfiguracionPage } from "./pages/ConfiguracionPage";
 import { EquipoPage } from "./pages/EquipoPage";
 import { LoginPage } from "./pages/LoginPage";
+import { OnboardingModal, isOnboardingDone } from "./components/OnboardingModal";
 import { ObraDetailPage } from "./pages/ObraDetailPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { Spinner } from "./components/Spinner";
@@ -59,6 +60,11 @@ function App() {
     setActiveTab(tab);
     setActivePage("panel");
   }, []);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  useEffect(() => {
+    if (authed && !userLoading && !isOnboardingDone()) setShowOnboarding(true);
+  }, [authed, userLoading]);
 
   const inviteToken                     = getInviteToken();
 
@@ -201,6 +207,8 @@ function App() {
       >
         {renderPage()}
       </AppLayout>
+
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
 
       {showWizard && (
         <ObraSetupWizard

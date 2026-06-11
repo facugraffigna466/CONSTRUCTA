@@ -1093,3 +1093,15 @@ Completar la Etapa 2.1 del roadmap (`feature/gantt-improvements`). La rama ya te
 ### Validation
 - Test del parser con XML realista (namespace, WBS 2 niveles, FS+lag 2d vía LinkLag, SS+lag 1d vía Lag, hito, recurso asignado, sin namespace) — todos pasaron.
 - `npm run build` ✓ · import de app.main ✓.
+
+---
+
+## 2026-06-11 — Etapa 2.3: guía de completitud + onboarding
+
+### Changes made
+- **ObraCompletenessChecklist (nuevo):** banner colapsable en ObraDetailPage (entre header y tabs) con anillo de progreso. Evalúa 5 criterios: imagen, comitente, responsables, tareas, fechas (≥80% de tareas con fecha). Se oculta si el puntaje ≥80%. Cada ítem pendiente es clickeable y navega al tab correspondiente. Colapso persistido en localStorage por obra.
+- **OnboardingModal (nuevo):** tour de bienvenida de 3 pasos (Creá tu obra → Sumá responsables → Cargá tareas con fechas) tras el primer login. Botones Siguiente/Saltar, dots de progreso. `localStorage("onboarding_done")`.
+- App.tsx: muestra el onboarding post-auth si no está marcado como hecho.
+
+### Validation
+- `npm run build` ✓
