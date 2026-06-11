@@ -34,6 +34,22 @@ function isOverdue(task: Task): boolean {
   );
 }
 
+const SOON_LIMIT = (() => {
+  const d = new Date();
+  d.setDate(d.getDate() + 3);
+  return d.toISOString().slice(0, 10);
+})();
+
+function isDueSoon(task: Task): boolean {
+  return (
+    task.due_date !== null &&
+    task.due_date >= TODAY &&
+    task.due_date <= SOON_LIMIT &&
+    task.status !== "completada" &&
+    task.status !== "cancelada"
+  );
+}
+
 function avatarColor(name: string): string {
   let h = 0;
   for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -221,6 +237,7 @@ export function TaskTable({
 }: TaskTableProps) {
   const hasActions = !!(onEdit || onDelete);
   const levelMap = buildLevelMap(tasks);
+  const [hoveredId, setHoveredId] = useState<number | null>(null);
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const [statusFilter,      setStatusFilter]      = useState<Set<TaskStatus>>(new Set());
@@ -490,13 +507,17 @@ export function TaskTable({
           const style       = STATUS_STYLE[task.status];
           const editor      = editingMap?.get(task.id);
           const overdue     = isOverdue(task);
+          const dueSoon     = !overdue && isDueSoon(task);
           const isHighlight = highlightedTaskId === task.id;
           const isDanger    = task.status === "bloqueada" || overdue;
           const level       = levelMap.get(task.id) ?? 0;
+          const isHovered   = hoveredId === task.id;
 
           return (
             <li
               key={task.id}
+              onMouseEnter={() => setHoveredId(task.id)}
+              onMouseLeave={() => setHoveredId(prev => (prev === task.id ? null : prev))}
               style={{
                 display: "grid",
                 gridTemplateColumns: hasActions
@@ -508,10 +529,14 @@ export function TaskTable({
                 borderBottom: idx < displayRows.length - 1 ? "1px solid #F2F0EC" : "none",
                 background: isHighlight
                   ? "rgba(255,107,53,0.06)"
-                  : "transparent",
+                  : isHovered
+                    ? "#F6F4EF"
+                    : idx % 2 === 1
+                      ? "#FBFAF7"
+                      : "transparent",
                 outline: isHighlight ? "1.5px solid rgba(255,107,53,0.2)" : "none",
                 outlineOffset: -1,
-                transition: "background 0.5s ease",
+                transition: "background 0.15s ease",
                 position: "relative",
               }}
             >
@@ -525,7 +550,19 @@ export function TaskTable({
               )}
 
               {/* ── Task name + description ── */}
-              <div style={{ paddingLeft: level * 16, paddingRight: 8, paddingTop: 10, paddingBottom: 10, minWidth: 0 }}>
+              <div style={{ paddingLeft: level * 16, paddingRight: 8, paddingTop: 10, paddingBottom: 10, minWidth: 0, position: "relative" }}>
+                {/* Conector visual de subtarea (└) */}
+                {level > 0 && (
+                  <div style={{
+                    position: "absolute",
+                    left: level * 16 - 12, top: 0, bottom: "50%",
+                    width: 9,
+                    borderLeft: "1.5px solid #DDD6C9",
+                    borderBottom: "1.5px solid #DDD6C9",
+                    borderBottomLeftRadius: 5,
+                    pointerEvents: "none",
+                  }} />
+                )}
                 <div style={{
                   fontSize: 13.5, fontWeight: 600, color: "#1A2329",
                   overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -612,11 +649,26 @@ export function TaskTable({
                     Vencida
                   </div>
                 )}
+                {dueSoon && (
+                  <div style={{
+                    display: "inline-block", marginLeft: 6,
+                    padding: "1px 5px", borderRadius: 4,
+                    fontSize: 9.5, fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                    background: "#FDF1DE", color: "#C97D0E",
+                  }}>
+                    {task.due_date === TODAY ? "Vence hoy" : "Por vencer"}
+                  </div>
+                )}
               </div>
 
-              {/* ── Actions ── */}
+              {/* ── Actions — visibles al hover ── */}
               {hasActions && (
-                <div style={{ display: "flex", alignItems: "center", gap: 2, paddingRight: 12 }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 2, paddingRight: 12,
+                  opacity: isHovered ? 1 : 0,
+                  transition: "opacity 0.15s ease",
+                }}>
                   {onEdit && (
                     <button
                       onClick={() => onEdit(task)}

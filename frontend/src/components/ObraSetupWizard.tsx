@@ -269,7 +269,7 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
     e.target.value = "";
   }
 
-  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
+  function handleDrop(e: React.DragEvent<HTMLElement>) {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (file) handleFile(file);

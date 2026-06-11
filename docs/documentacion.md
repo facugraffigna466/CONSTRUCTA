@@ -1060,3 +1060,17 @@ Completar la Etapa 2.1 del roadmap (`feature/gantt-improvements`). La rama ya te
 - Merge de `feature/gantt-improvements` → Etapa 2.1 completa.
 - Siguiente según plan: Etapa 1.5 (task-visualization-polish) o 2.2 (import MS Project XML — la rama remota `feature/ms-project-integration` quedó obsoleta, hay que rehacerla sobre main).
 - Stash `plans-monetization pendiente` (stash@{0}) sigue guardado para la Fase 3. El stash@{1} "gantt WIP" quedó obsoleto (su contenido ya está commiteado) y se puede descartar.
+
+---
+
+## 2026-06-11 — Etapa 1.5: pulido visual de tareas + reparación del build
+
+### Changes made
+**TaskTable:** zebra striping, hover de fila con fondo suave, botones editar/eliminar visibles solo al hover, badge ámbar "Vence hoy / Por vencer" (≤3 días), conector visual └ en subtareas indentadas.
+**TaskSheetView:** paleta de estados unificada con TaskTable/Gantt (pendiente azul, en progreso ámbar, etc.) + íconos lucide en pills; header sticky al scroll; resize manual de columnas (drag en borde del header, persistido en localStorage por obra); subtareas indentadas con conector; fila de totales (Σ tareas, días planificados, avance promedio); **fix funcional**: el estado editado en la planilla ahora se guarda vía POST /tasks/{id}/status (antes se mandaba en el PATCH y el backend lo ignoraba silenciosamente).
+**TabSkeleton (nuevo):** skeleton loader con shimmer que reemplaza al Spinner en ObraDetailPage.
+**Reparación del build (preexistente):** main no compilaba con TypeScript 6 (`tsc -b`). Fixes: baseUrl deprecado removido de tsconfig; `onTaskClick` indefinido en milestone del Gantt (bug real → onEditTask); AlertasTab sin estilo para reschedule_requested; payloads de socket sin los campos nuevos de Task; ObraCreatePayload sin campos de comitente; obraCounts sin responsibles; imports/variables muertas en 6 archivos.
+
+### Validation
+- `npm run build` — ✓ built (0 errores TS).
+- ESLint — 0 errores nuevos en archivos tocados.

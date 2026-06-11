@@ -8,18 +8,20 @@ import React, {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { createTask, updateTask } from "../api/tasks";
+import { Clock, RefreshCw, CheckCircle2, AlertOctagon, XCircle } from "lucide-react";
+import { createTask, updateTask, updateTaskStatus } from "../api/tasks";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STATUS_STYLE: Record<TaskStatus, { label: string; bg: string; color: string; dot: string }> = {
-  pendiente:   { label: "Pendiente",   bg: "#F0F1EF", color: "#5B6770", dot: "#8E97A0" },
-  en_progreso: { label: "En progreso", bg: "#E4F3EC", color: "#136E47", dot: "#1F8A5B" },
-  bloqueada:   { label: "Bloqueada",   bg: "#FCE5E5", color: "#A82B2B", dot: "#D03A3A" },
-  completada:  { label: "Completada",  bg: "#E4F3EC", color: "#136E47", dot: "#1F8A5B" },
-  cancelada:   { label: "Cancelada",   bg: "#F0F1EF", color: "#5B6770", dot: "#8E97A0" },
+// Paleta unificada con TaskTable / Gantt / Alertas
+const STATUS_STYLE: Record<TaskStatus, { label: string; bg: string; color: string; dot: string; Icon: React.ComponentType<{ style?: React.CSSProperties }> }> = {
+  pendiente:   { label: "Pendiente",   bg: "#EBF3FF", color: "#2A62C9", dot: "#3B82F6", Icon: Clock },
+  en_progreso: { label: "En progreso", bg: "#FFFBEB", color: "#B45309", dot: "#D97706", Icon: RefreshCw },
+  bloqueada:   { label: "Bloqueada",   bg: "#FCE5E5", color: "#A82B2B", dot: "#D03A3A", Icon: AlertOctagon },
+  completada:  { label: "Completada",  bg: "#E4F3EC", color: "#136E47", dot: "#1F8A5B", Icon: CheckCircle2 },
+  cancelada:   { label: "Cancelada",   bg: "#F4F5F4", color: "#5B6770", dot: "#8E97A0", Icon: XCircle },
 };
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -60,6 +62,36 @@ function calcDuration(start: string, due: string): string {
   if (!start || !due) return "1";
   const d = diffDays(start, due) + 1;
   return d > 0 ? String(d) : "1";
+}
+
+function buildLevelMap(tasks: Task[]): Map<number, number> {
+  const parentOf = new Map(tasks.map(t => [t.id, t.parent_task_id]));
+  const memo = new Map<number, number>();
+  function level(id: number): number {
+    if (memo.has(id)) return memo.get(id)!;
+    const pid = parentOf.get(id);
+    const result = pid ? 1 + level(pid) : 0;
+    memo.set(id, result);
+    return result;
+  }
+  tasks.forEach(t => level(t.id));
+  return memo;
+}
+
+function StatusPill({ status }: { status: TaskStatus }) {
+  const st = STATUS_STYLE[status];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "3px 9px", borderRadius: 99,
+      fontSize: 11.5, fontWeight: 600,
+      background: st.bg, color: st.color,
+      pointerEvents: "none",
+    }}>
+      <st.Icon style={{ width: 11, height: 11, flexShrink: 0 }} />
+      {st.label}
+    </span>
+  );
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -104,7 +136,7 @@ interface ComboboxProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
-function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDown }: ComboboxProps) {
+function ResponsableCombobox({ currentId, options, onSelect, onKeyDown }: ComboboxProps) {
   const currentLabel = options.find(r => String(r.id) === currentId)?.full_name ?? "";
   const [text, setText] = useState(currentLabel);
   const [open, setOpen] = useState(false);
@@ -251,6 +283,43 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     const [openDropdownFor, setOpenDropdownFor] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
+    // ── Anchos de columna (resize manual, persistido por obra) ───────────────
+    const [colWidths, setColWidths] = useState<string[]>(() => {
+      try {
+        const saved = localStorage.getItem(`sheet_colw_${obraId}`);
+        const parsed = saved ? JSON.parse(saved) : null;
+        return Array.isArray(parsed) && parsed.length === COL_WIDTHS.length ? parsed : [...COL_WIDTHS];
+      } catch { return [...COL_WIDTHS]; }
+    });
+    const colResizeRef = useRef<{ idx: number; startX: number; startW: number } | null>(null);
+
+    function startColResize(e: React.MouseEvent, idx: number) {
+      e.preventDefault();
+      e.stopPropagation();
+      const headerCell = (e.currentTarget as HTMLElement).parentElement;
+      const startW = headerCell
+        ? headerCell.getBoundingClientRect().width
+        : parseInt(colWidths[idx], 10) || 100;
+      colResizeRef.current = { idx, startX: e.clientX, startW };
+      function onMove(ev: MouseEvent) {
+        const cur = colResizeRef.current;
+        if (!cur) return;
+        const w = Math.max(56, Math.round(cur.startW + (ev.clientX - cur.startX)));
+        setColWidths(prev => prev.map((p, i) => (i === cur.idx ? `${w}px` : p)));
+      }
+      function onUp() {
+        colResizeRef.current = null;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+        setColWidths(prev => {
+          try { localStorage.setItem(`sheet_colw_${obraId}`, JSON.stringify(prev)); } catch { /* ignore */ }
+          return prev;
+        });
+      }
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    }
+
     // ── Clipboard paste state ────────────────────────────────────────────────
     const [pastePreview, setPastePreview] = useState<ParsedRow[] | null>(null);
     const [bulkSaving, setBulkSaving] = useState(false);
@@ -376,8 +445,12 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               start_date: state.startDate || null,
               due_date: state.dueDate || null,
               estimated_progress: prog,
-              status: state.taskStatus,
             });
+            // El estado va por su propio endpoint (PATCH no acepta status)
+            const original = tasks.find(t => t.id === state.taskId);
+            if (original && original.status !== state.taskStatus) {
+              saved = await updateTaskStatus(state.taskId, state.taskStatus);
+            }
           }
           onTaskSaved(saved);
           if (andNewRow) {
@@ -391,7 +464,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           setEditing((e) => e ? { ...e, saving: false, error: "No se pudo guardar la tarea." } : e);
         }
       },
-      [obraId, onTaskSaved]
+      [obraId, onTaskSaved, tasks]
     );
 
     // ── keyboard navigation ──────────────────────────────────────────────────
@@ -452,18 +525,14 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       fontFamily: "'Plus Jakarta Sans', sans-serif",
     };
 
-    const selectStyle: React.CSSProperties = {
-      ...inputStyle,
-      appearance: "none",
-      cursor: "pointer",
-    };
-
     const rowBase: React.CSSProperties = {
       display: "grid",
-      gridTemplateColumns: COL_WIDTHS.join(" "),
+      gridTemplateColumns: colWidths.join(" "),
     };
 
     // ─── per-cell helpers ─────────────────────────────────────────────────────
+
+    const levelMap = buildLevelMap(tasks);
 
     const isEditingRow = (id: number) => editing?.taskId === id;
     const isActiveCell = (id: number, field: Field) => editing?.taskId === id && editing.activeField === field;
@@ -489,22 +558,34 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           background: "#fff",
           border: "1px solid #D5D9D5",
           borderRadius: 14,
-          overflow: "hidden",
+          overflow: "clip",
           fontFamily: "'Plus Jakarta Sans', sans-serif",
           outline: "none",
         }}
       >
-        {/* ── Header row ── */}
-        <div style={{ ...rowBase, background: "#F0F2F0" }}>
+        {/* ── Header row — sticky al scroll vertical ── */}
+        <div style={{ ...rowBase, background: "#F0F2F0", position: "sticky", top: 0, zIndex: 5 }}>
           {COLS.map((col, i) => (
-            <div key={col} style={headerCellStyle(i)}>{col}</div>
+            <div key={col} style={{ ...headerCellStyle(i), position: "relative" }}>
+              {col}
+              {/* Handle de resize — arrastrá el borde derecho */}
+              {i >= 2 && (
+                <div
+                  onMouseDown={e => startColResize(e, i)}
+                  title="Arrastrá para ajustar el ancho"
+                  style={{
+                    position: "absolute", right: -4, top: 0, bottom: 0, width: 8,
+                    cursor: "col-resize", zIndex: 2,
+                  }}
+                />
+              )}
+            </div>
           ))}
         </div>
 
         {/* ── Task rows ── */}
         {tasks.map((task, idx) => {
-          const st = STATUS_STYLE[task.status];
-          const responsible = responsibles.find((r) => r.id === task.responsible_id);
+          const level = levelMap.get(task.id) ?? 0;
           const isEditing = isEditingRow(task.id);
           const isOverdue =
             !!task.due_date &&
@@ -519,7 +600,6 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           const dDue     = isEditing ? editing!.dueDate    : task.due_date;
           const dDur     = isEditing ? (editing!.duration ? `${editing!.duration}d` : "—") : (durDays !== null ? `${durDays}d` : "—");
           const dStatus  = isEditing ? editing!.taskStatus : task.status;
-          const dSt      = STATUS_STYLE[dStatus];
           const dProg    = isEditing ? (parseInt(editing!.progress, 10) || 0) : task.estimated_progress;
           const isCompleted = dStatus === "completada";
 
@@ -532,7 +612,25 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               </div>
 
               {/* Tarea */}
-              <div style={activeCellStyle(task.id, "title", 1)} onClick={() => startEdit(task, "title")}>
+              <div
+                style={activeCellStyle(task.id, "title", 1, {
+                  paddingLeft: 10 + level * 16,
+                  position: "relative",
+                })}
+                onClick={() => startEdit(task, "title")}
+              >
+                {/* Conector visual de subtarea (└) */}
+                {level > 0 && (
+                  <div style={{
+                    position: "absolute",
+                    left: 10 + level * 16 - 12, top: 0, bottom: "50%",
+                    width: 9,
+                    borderLeft: "1.5px solid #D8D2C6",
+                    borderBottom: "1.5px solid #D8D2C6",
+                    borderBottomLeftRadius: 5,
+                    pointerEvents: "none",
+                  }} />
+                )}
                 {isActiveCell(task.id, "title") ? (
                   <input
                     data-sheet-field="title"
@@ -721,16 +819,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     ))}
                   </select>
                 ) : (
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", gap: 5,
-                    padding: "3px 9px", borderRadius: 99,
-                    fontSize: 11.5, fontWeight: 600,
-                    background: dSt.bg, color: dSt.color,
-                    pointerEvents: "none",
-                  }}>
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: dSt.dot, flexShrink: 0 }} />
-                    {dSt.label}
-                  </span>
+                  <StatusPill status={dStatus} />
                 )}
               </div>
             </div>
@@ -798,10 +887,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               <div style={cellStyle(6, { color: "#C4C9C6", fontSize: 12 })}>—</div>
               {/* Estado — not editable for new row */}
               <div style={cellStyle(7)}>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, fontSize: 11.5, fontWeight: 600, background: "#F0F1EF", color: "#5B6770" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#8E97A0", flexShrink: 0 }} />
-                  Pendiente
-                </span>
+                <StatusPill status="pendiente" />
               </div>
             </div>
 
@@ -839,7 +925,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
             {pastePreview.map((row, i) => {
               const previewDur = row.startDate && row.dueDate ? `${diffDays(row.startDate, row.dueDate) + 1}d` : "—";
               return (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: COL_WIDTHS.join(" "), background: i % 2 === 0 ? "#FFFBF8" : "#FFF6F1", opacity: bulkSaving ? 0.5 : 1 }}>
+                <div key={i} style={{ ...rowBase, background: i % 2 === 0 ? "#FFFBF8" : "#FFF6F1", opacity: bulkSaving ? 0.5 : 1 }}>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 11.5, fontWeight: 600, color: "#9BA3AB", justifyContent: "center", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER }}>{tasks.length + i + 1}</div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 13, fontWeight: 600, color: "#1A2329", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER, overflow: "hidden" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</span></div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER }}>Sin asignar</div>
@@ -848,15 +934,49 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: row.dueDate ? "#1A2329" : "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER, fontVariantNumeric: "tabular-nums" }}>{row.dueDate ? fmtDate(row.dueDate) : "—"}</div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12, color: "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER }}>—</div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", borderBottom: "1px solid #FFE8D8" }}>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, fontSize: 11.5, fontWeight: 600, background: "#F0F1EF", color: "#5B6770" }}>
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#8E97A0", flexShrink: 0 }} />Pendiente
-                    </span>
+                    <StatusPill status="pendiente" />
                   </div>
                 </div>
               );
             })}
           </div>
         )}
+
+        {/* ── Totals footer ── */}
+        {tasks.length > 0 && (() => {
+          const withDates  = tasks.filter(t => t.start_date && t.due_date);
+          const totalDays  = withDates.reduce((acc, t) => acc + diffDays(t.start_date!, t.due_date!) + 1, 0);
+          const measurable = tasks.filter(t => !t.is_milestone && t.status !== "cancelada");
+          const avg        = measurable.length
+            ? Math.round(measurable.reduce((a, t) => a + (t.estimated_progress ?? 0), 0) / measurable.length)
+            : 0;
+          return (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 18,
+              padding: "8px 12px", background: "#F6F7F6",
+              borderTop: HEADER_BORDER, borderBottom: CELL_BORDER,
+              fontSize: 11.5, color: "#5B6770",
+            }}>
+              <span style={{ fontWeight: 700, color: "#3E4A52" }}>
+                Σ {tasks.length} tarea{tasks.length !== 1 ? "s" : ""}
+              </span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                <strong style={{ color: "#3E4A52" }}>{totalDays}</strong> días planificados
+              </span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                Avance promedio
+                <span style={{ width: 64, height: 4, borderRadius: 99, background: "#E2E4E2", overflow: "hidden", display: "inline-block" }}>
+                  <span style={{
+                    display: "block", height: "100%", borderRadius: 99,
+                    width: `${avg}%`,
+                    background: avg === 100 ? "#1F8A5B" : "#FF6B35",
+                  }} />
+                </span>
+                <strong style={{ color: "#3E4A52", fontVariantNumeric: "tabular-nums" }}>{avg}%</strong>
+              </span>
+            </div>
+          );
+        })()}
 
         {/* ── Add row button ── */}
         {!isNewRow && (

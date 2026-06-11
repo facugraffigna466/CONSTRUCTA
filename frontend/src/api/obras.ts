@@ -18,6 +18,9 @@ export interface ObraCreatePayload {
   image_url?: string | null;
   start_date?: string | null;
   expected_end_date?: string | null;
+  client_name?: string | null;
+  client_email?: string | null;
+  client_phone?: string | null;
 }
 
 export async function createObra(payload: ObraCreatePayload): Promise<Obra> {

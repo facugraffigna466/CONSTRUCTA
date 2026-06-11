@@ -46,7 +46,7 @@ export function AppLayout({
 }: AppLayoutProps) {
   const { user, role } = useUser();
   const onlineUsers = useOnlineUsers();
-  const { alerts, unreadCount, obraNames, toastAlert, markRead, clearToast } = useGlobalAlerts();
+  const { alerts, obraNames, toastAlert, clearToast } = useGlobalAlerts();
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [showInvite, setShowInvite]           = useState(false);
   const [showProfile, setShowProfile]         = useState(false);
