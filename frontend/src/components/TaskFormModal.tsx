@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent, type ChangeEvent } from "react";
 import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-react";
 import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
 import type { CascadeAffectedTask } from "../api/tasks";
+import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
 import type { DependencyType, Responsible, Task } from "../types";
 
@@ -157,6 +158,7 @@ export function TaskFormModal({
   const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [cascadePrompt, setCascadePrompt] = useState<CascadeAffectedTask[] | null>(null);
+  const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
 
   function validate() {
     const e: Record<string, string> = {};
@@ -220,6 +222,8 @@ export function TaskFormModal({
       }
       onSaved(saved);
     } catch (err) {
+      const limitInfo = getPlanLimitError(err);
+      if (limitInfo) { setPlanLimit(limitInfo); setSaving(false); return; }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data = (err as any)?.response?.data;
       console.error(data || err);
@@ -730,6 +734,8 @@ export function TaskFormModal({
           </div>
         </form>
       </div>
+
+      {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
 
       {/* ── Confirmación de cascade: la tarea tiene dependientes ── */}
       {cascadePrompt && (

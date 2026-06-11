@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
+import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { createResponsible, lookupResponsibleByWhatsapp } from "../api/responsibles";
 import { createTask } from "../api/tasks";
 import type { Obra } from "../types";
@@ -789,6 +790,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
 
   function validateStep1() {
     const errs: Record<string, string> = {};
@@ -845,7 +847,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
   }
 
   async function handleSubmit() {
-    setSubmitting(true); setSubmitError(null);
+    setSubmitting(true); setSubmitError(null); setPlanLimit(null);
     try {
       const obra = await createObra({
         name: obraData.name.trim(), location: obraData.location.trim() || null,
@@ -879,8 +881,13 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
         await createTask({ obra_id: obra.id, title: t.title, description: t.description || null, responsible_id: t.responsible_key ? (keyToId.get(t.responsible_key) ?? null) : null, start_date: t.start_date || null, due_date: t.due_date || null, order_index: i });
       }
       setCreatedObra(obra); setDone(true);
-    } catch {
-      setSubmitError("Error al crear la obra. Verificá los datos e intentá nuevamente.");
+    } catch (err: unknown) {
+      const limitInfo = getPlanLimitError(err);
+      if (limitInfo) {
+        setPlanLimit(limitInfo);
+      } else {
+        setSubmitError("Error al crear la obra. Verificá los datos e intentá nuevamente.");
+      }
     } finally { setSubmitting(false); }
   }
 
@@ -1016,6 +1023,8 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
           </div>
         )}
       </div>
+
+      {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
     </div>
   );
 }

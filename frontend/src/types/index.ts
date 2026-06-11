@@ -25,7 +25,7 @@ export interface Obra {
   total_tasks: number;
 }
 
-export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos";
+export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";
 
 export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial";
 
@@ -138,4 +138,61 @@ export interface CurrentUser {
   color: string;
   role: "admin" | "collaborator";
   avatar_url?: string | null;
+}
+
+export interface Supplier {
+  id: number;
+  tenant_id: number | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  category: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export type MaterialStatus = "pendiente" | "pedido" | "recibido";
+
+export interface TaskMaterial {
+  id: number;
+  task_id: number;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  status: MaterialStatus;
+  created_at: string;
+}
+
+
+export interface Plan {
+  id: number;
+  name: string;
+  max_obras: number | null;
+  max_users: number | null;
+  max_tasks_per_obra: number | null;
+  price_monthly: number | null;
+}
+
+export interface Tenant {
+  id: number;
+  name: string;
+  plan_id: number | null;
+  owner_user_id: number | null;
+  created_at: string;
+  active_until: string | null;
+  plan: Plan | null;
+}
+
+export interface PlanUsage {
+  tenant: Tenant;
+  obras_count: number;
+  users_count: number;
+  tasks_count: number;
+  obras_limit: number | null;
+  users_limit: number | null;
+  tasks_per_obra_limit: number | null;
 }

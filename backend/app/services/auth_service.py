@@ -29,7 +29,26 @@ class AuthService:
             role=role,
             is_active=True,
         )
-        return await self.repo.create(user)
+        user = await self.repo.create(user)
+
+        # Cada registro nuevo arranca con su propia empresa en plan Básico.
+        # (Los invitados NO pasan por acá — heredan el tenant del que invita.)
+        from sqlalchemy import select
+        from app.models.plan import Plan
+        from app.models.tenant import Tenant
+        basico = (await self.repo.session.execute(
+            select(Plan).where(Plan.name == "basico")
+        )).scalar_one_or_none()
+        tenant = Tenant(
+            name=f"Empresa de {data.full_name or data.email}",
+            plan_id=basico.id if basico else None,
+            owner_user_id=user.id,
+        )
+        self.repo.session.add(tenant)
+        await self.repo.session.flush()
+        user.tenant_id = tenant.id
+        await self.repo.session.flush()
+        return user
 
     async def login(self, email: str, password: str) -> str:
         user = await self.repo.get_by_email(email)
@@ -45,7 +64,7 @@ class AuthService:
             )
         return create_access_token(user.id)
 
-    async def invite(self, data: InviteRequest) -> tuple[User, str]:
+    async def invite(self, data: InviteRequest, tenant_id: int | None = None) -> tuple[User, str]:
         if await self.repo.get_by_email(data.email):
             raise ConflictError("Este email ya tiene una cuenta registrada")
         token = secrets.token_urlsafe(32)
@@ -58,6 +77,7 @@ class AuthService:
             is_active=False,
             invitation_token=token,
             invitation_expires_at=expires_at,
+            tenant_id=tenant_id,  # hereda la empresa del admin que invita
         )
         created = await self.repo.create(user)
         return created, token

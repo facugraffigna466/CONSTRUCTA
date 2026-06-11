@@ -1,6 +1,6 @@
 import enum
 from datetime import date, datetime, timezone
-from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, String, Text
+from sqlalchemy import Date, DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -54,7 +54,10 @@ class Obra(Base):
         nullable=False,
     )
 
+    tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
+
     manager: Mapped["User"] = relationship("User", back_populates="obras")
+    tenant: Mapped["Tenant | None"] = relationship("Tenant", back_populates="obras", foreign_keys=[tenant_id])
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="obra", cascade="all, delete-orphan"
     )

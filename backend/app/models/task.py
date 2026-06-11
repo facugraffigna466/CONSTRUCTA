@@ -142,3 +142,6 @@ class Task(Base):
         "HistorialEvento", back_populates="task"
     )
     alerts: Mapped[list["Alert"]] = relationship("Alert", back_populates="task")
+    materials: Mapped[list["TaskMaterial"]] = relationship(
+        "TaskMaterial", back_populates="task", cascade="all, delete-orphan"
+    )

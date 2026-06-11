@@ -5,11 +5,18 @@ import {
   Bell,
   Building2,
   Calendar,
+  Crown,
   MessageCircle,
+  Pencil,
+  Plus,
   RefreshCw,
   Send,
   Server,
+  Trash2,
+  Truck,
+  Users,
   Wifi,
+  X,
   Zap,
 } from "lucide-react";
 import socket from "../lib/socket";
@@ -32,7 +39,14 @@ import {
   type WorkingCalendar,
   type CalendarException,
 } from "../api/calendar";
-import type { Obra } from "../types";
+import { fetchPlanUsage } from "../api/admin";
+import {
+  fetchSuppliers,
+  createSupplier,
+  updateSupplier,
+  deleteSupplier,
+} from "../api/suppliers";
+import type { Obra, PlanUsage, Supplier } from "../types";
 import { Button } from "../components/ui/Button";
 
 // ─── Shared style tokens ──────────────────────────────────────────────────────
@@ -484,6 +498,42 @@ function CalendarSection({ canEdit }: { canEdit: boolean }) {
   );
 }
 
+// ─── Plan usage bar ───────────────────────────────────────────────────────────
+
+function PlanUsageBar({ icon, label, current, limit, note }: {
+  icon: React.ReactNode;
+  label: string;
+  current: number;
+  limit: number | null;
+  note?: string;
+}) {
+  const pct = limit ? Math.min((current / limit) * 100, 100) : 0;
+  const isNearLimit = limit !== null && current / limit >= 0.8;
+  const isAtLimit   = limit !== null && current >= limit;
+  const barColor = isAtLimit ? C.danger : isNearLimit ? C.warn : C.good;
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 500, color: C.text }}>
+          <span style={{ color: C.text2 }}>{icon}</span>
+          {label}
+          {note && <span style={{ fontSize: 11, color: C.text3 }}>({note})</span>}
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, color: isAtLimit ? C.danger : C.text2 }}>
+          {current}{limit !== null ? ` / ${limit}` : ""}
+          {limit === null && <span style={{ fontWeight: 400, color: C.text3 }}> ilimitado</span>}
+        </span>
+      </div>
+      {limit !== null && (
+        <div style={{ height: 6, borderRadius: 99, background: C.bg, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, borderRadius: 99, background: barColor, transition: "width .3s" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 
@@ -508,6 +558,75 @@ export function ConfiguracionPage() {
   const [simResult, setSimResult]     = useState<string | null>(null);
   const [simLoading, setSimLoading]   = useState(false);
 
+  const [planUsage, setPlanUsage]     = useState<PlanUsage | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  // ── Proveedores ──────────────────────────────────────────────────────────────
+  const [suppliers, setSuppliers]           = useState<Supplier[]>([]);
+  const [suppLoading, setSuppLoading]       = useState(false);
+  const [showSupplierForm, setShowSupplierForm] = useState(false);
+  const [editingSupplier, setEditingSupplier]   = useState<Supplier | null>(null);
+  const [suppForm, setSuppForm]             = useState({ name: "", email: "", phone: "", category: "", notes: "" });
+  const [suppSaving, setSuppSaving]         = useState(false);
+  const [suppError, setSuppError]           = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    setSuppLoading(true);
+    fetchSuppliers()
+      .then(setSuppliers)
+      .catch(() => {})
+      .finally(() => setSuppLoading(false));
+  }, [canEdit]);
+
+  function openNewSupplier() {
+    setEditingSupplier(null);
+    setSuppForm({ name: "", email: "", phone: "", category: "", notes: "" });
+    setSuppError(null);
+    setShowSupplierForm(true);
+  }
+
+  function openEditSupplier(s: Supplier) {
+    setEditingSupplier(s);
+    setSuppForm({ name: s.name, email: s.email ?? "", phone: s.phone ?? "", category: s.category ?? "", notes: s.notes ?? "" });
+    setSuppError(null);
+    setShowSupplierForm(true);
+  }
+
+  async function handleSaveSupplier() {
+    if (!suppForm.name.trim()) { setSuppError("El nombre es obligatorio."); return; }
+    setSuppSaving(true);
+    setSuppError(null);
+    try {
+      if (editingSupplier) {
+        const updated = await updateSupplier(editingSupplier.id, {
+          name: suppForm.name.trim(),
+          email: suppForm.email.trim() || null,
+          phone: suppForm.phone.trim() || null,
+          category: suppForm.category.trim() || null,
+          notes: suppForm.notes.trim() || null,
+        });
+        setSuppliers(prev => prev.map(s => s.id === updated.id ? updated : s));
+      } else {
+        const created = await createSupplier({
+          name: suppForm.name.trim(),
+          email: suppForm.email.trim() || null,
+          phone: suppForm.phone.trim() || null,
+          category: suppForm.category.trim() || null,
+          notes: suppForm.notes.trim() || null,
+        });
+        setSuppliers(prev => [...prev, created]);
+      }
+      setShowSupplierForm(false);
+    } catch { setSuppError("No se pudo guardar. Intentá nuevamente."); }
+    finally { setSuppSaving(false); }
+  }
+
+  async function handleDeleteSupplier(id: number) {
+    await deleteSupplier(id);
+    setSuppliers(prev => prev.filter(s => s.id !== id));
+  }
+
   const loadHealth = useCallback(async () => {
     setHealthLoading(true);
     try {
@@ -531,6 +650,11 @@ export function ConfiguracionPage() {
       }
     })();
   }, [loadHealth]);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    fetchPlanUsage().then(setPlanUsage).catch(() => {});
+  }, [canEdit]);
 
   useEffect(() => {
     function onConnect()    { setWsConnected(true);  setLastSync(new Date()); }
@@ -1099,10 +1223,248 @@ export function ConfiguracionPage() {
             </Card>
           </div>
 
+          {/* ═══ TU PLAN ═══ */}
+          {canEdit && planUsage && (
+            <Card style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 9, background: "#FFF1E9", color: C.secondary, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Crown size={15} />
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 14, color: C.text }}>
+                      Tu plan
+                      <span style={{ marginLeft: 8, padding: "2px 9px", borderRadius: 99, background: C.secondary, color: "#fff", fontSize: 11, fontWeight: 600, textTransform: "capitalize" }}>
+                        {planUsage.tenant.plan?.name ?? "Sin plan"}
+                      </span>
+                    </p>
+                    <p style={{ margin: "2px 0 0", fontSize: 12, color: C.text2 }}>{planUsage.tenant.name}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  style={{ padding: "7px 14px", borderRadius: 9, background: C.secondary, color: "#fff", border: "none", fontSize: 12.5, fontWeight: 600, cursor: "pointer", boxShadow: "0 4px 10px -4px rgba(255,107,53,0.5)" }}
+                >
+                  Mejorar plan
+                </button>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <PlanUsageBar
+                  icon={<Building2 size={13} />}
+                  label="Obras"
+                  current={planUsage.obras_count}
+                  limit={planUsage.obras_limit}
+                />
+                <PlanUsageBar
+                  icon={<Users size={13} />}
+                  label="Usuarios"
+                  current={planUsage.users_count}
+                  limit={planUsage.users_limit}
+                />
+                <PlanUsageBar
+                  icon={<Zap size={13} />}
+                  label="Tareas (por obra)"
+                  current={planUsage.tasks_count}
+                  limit={planUsage.tasks_per_obra_limit}
+                  note="total de tareas en el sistema"
+                />
+              </div>
+            </Card>
+          )}
+
+          {/* ═══ PROVEEDORES ═══ */}
+          {canEdit && (
+            <Card style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: "#FFF1E9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Truck size={16} style={{ color: C.secondary }} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.text }}>Proveedores</h3>
+                    <p style={{ margin: 0, fontSize: 12, color: C.text2 }}>{suppliers.length} proveedor{suppliers.length !== 1 ? "es" : ""} registrado{suppliers.length !== 1 ? "s" : ""}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={openNewSupplier}
+                  style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "7px 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 600,
+                    background: C.secondary, color: "#fff", border: "none", cursor: "pointer",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  <Plus size={13} /> Agregar
+                </button>
+              </div>
+
+              {suppLoading ? (
+                <div style={{ textAlign: "center", padding: "20px 0", color: C.text3 }}>Cargando...</div>
+              ) : suppliers.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "24px 0", color: C.text3 }}>
+                  <Truck size={28} style={{ opacity: 0.3, display: "block", margin: "0 auto 8px" }} />
+                  <p style={{ margin: 0, fontSize: 13 }}>No hay proveedores registrados.</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {suppliers.map((s, i) => (
+                    <div key={s.id} style={{
+                      display: "flex", alignItems: "center", gap: 12,
+                      padding: "11px 0",
+                      borderTop: i === 0 ? "none" : `1px solid ${C.line}`,
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                        background: C.bg, display: "flex", alignItems: "center", justifyContent: "center",
+                        fontSize: 14, fontWeight: 700, color: C.text2,
+                      }}>
+                        {s.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: C.text }}>{s.name}</p>
+                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                          {s.category && <span style={{ fontSize: 11.5, color: C.text2 }}>{s.category}</span>}
+                          {s.phone && <span style={{ fontSize: 11.5, color: C.text3 }}>{s.phone}</span>}
+                          {s.email && <span style={{ fontSize: 11.5, color: C.text3 }}>{s.email}</span>}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button
+                          onClick={() => openEditSupplier(s)}
+                          style={{ width: 30, height: 30, border: `1px solid ${C.line}`, borderRadius: 8, background: C.surface, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.text2 }}
+                          title="Editar"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteSupplier(s.id)}
+                          style={{ width: 30, height: 30, border: `1px solid ${C.line}`, borderRadius: 8, background: C.surface, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: C.text3 }}
+                          title="Desactivar"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── Supplier form modal ── */}
+              {showSupplierForm && (
+                <div style={{ position: "fixed", inset: 0, zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,22,28,0.45)", backdropFilter: "blur(3px)" }}>
+                  <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 440, padding: 28, boxShadow: "0 24px 48px -12px rgba(0,0,0,0.25)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+                      <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.text }}>
+                        {editingSupplier ? "Editar proveedor" : "Nuevo proveedor"}
+                      </h3>
+                      <button onClick={() => setShowSupplierForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: C.text3, padding: 4 }}>
+                        <X size={18} />
+                      </button>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {[
+                        { key: "name", label: "Nombre *", placeholder: "Ej: Materiales del Sur" },
+                        { key: "category", label: "Rubro", placeholder: "Ej: Hormigón, Electricidad" },
+                        { key: "phone", label: "Teléfono", placeholder: "+54 9 11 1234-5678" },
+                        { key: "email", label: "Email", placeholder: "contacto@proveedor.com" },
+                        { key: "notes", label: "Notas", placeholder: "Información adicional..." },
+                      ].map(({ key, label, placeholder }) => (
+                        <div key={key}>
+                          <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: C.text2, marginBottom: 5 }}>
+                            {label}
+                          </label>
+                          <input
+                            value={suppForm[key as keyof typeof suppForm]}
+                            onChange={e => setSuppForm(prev => ({ ...prev, [key]: e.target.value }))}
+                            placeholder={placeholder}
+                            style={{
+                              width: "100%", boxSizing: "border-box", padding: "9px 12px",
+                              fontSize: 13, fontFamily: "'Plus Jakarta Sans', sans-serif",
+                              color: C.text, background: "#fff", border: `1px solid ${C.line}`,
+                              borderRadius: 9, outline: "none",
+                            }}
+                            onFocus={e => { e.currentTarget.style.borderColor = C.secondary; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(255,107,53,0.10)"; }}
+                            onBlur={e => { e.currentTarget.style.borderColor = C.line; e.currentTarget.style.boxShadow = "none"; }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    {suppError && (
+                      <p style={{ marginTop: 10, fontSize: 12, color: C.danger }}>{suppError}</p>
+                    )}
+                    <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 20 }}>
+                      <button
+                        onClick={() => setShowSupplierForm(false)}
+                        style={{ padding: "8px 16px", borderRadius: 9, border: `1px solid ${C.line}`, background: "#fff", color: C.text2, fontSize: 13, cursor: "pointer" }}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={handleSaveSupplier}
+                        disabled={suppSaving}
+                        style={{ padding: "8px 18px", borderRadius: 9, background: C.secondary, color: "#fff", border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", opacity: suppSaving ? 0.7 : 1 }}
+                      >
+                        {suppSaving ? "Guardando…" : editingSupplier ? "Guardar cambios" : "Crear proveedor"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
+          )}
+
           {/* ═══ CALENDARIO LABORAL ═══ */}
           <Card style={{ marginTop: 8 }}>
             <CalendarSection canEdit={canEdit} />
           </Card>
+
+          {/* ═══ UPGRADE MODAL ═══ */}
+          {showUpgradeModal && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+              onClick={() => setShowUpgradeModal(false)}>
+              <div style={{ background: C.surface, borderRadius: 18, padding: "32px 28px", maxWidth: 500, width: "100%", boxShadow: "0 24px 56px -16px rgba(0,0,0,0.35)" }}
+                onClick={e => e.stopPropagation()}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, background: "#FFF1E9", color: C.secondary, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Crown size={20} />
+                  </div>
+                  <div>
+                    <h2 style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 20, fontWeight: 700, color: C.text }}>Mejorar tu plan</h2>
+                    <p style={{ margin: "2px 0 0", fontSize: 13, color: C.text2 }}>Desbloqueá más capacidad para tu empresa</p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+                  {[
+                    { name: "Pro", price: "$99/mes", obras: "20 obras", users: "30 usuarios", tasks: "Tareas ilimitadas", highlight: true },
+                    { name: "Enterprise", price: "A consultar", obras: "Obras ilimitadas", users: "Usuarios ilimitados", tasks: "Todo ilimitado", highlight: false },
+                  ].map(p => (
+                    <div key={p.name} style={{ border: `2px solid ${p.highlight ? C.secondary : C.line}`, borderRadius: 12, padding: "14px 16px", background: p.highlight ? "#FFF8F5" : C.surface }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 700, fontSize: 15, color: C.text }}>{p.name}</span>
+                        <span style={{ fontWeight: 700, fontSize: 15, color: p.highlight ? C.secondary : C.text }}>{p.price}</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {[p.obras, p.users, p.tasks].map(f => (
+                          <span key={f} style={{ fontSize: 12, padding: "3px 9px", borderRadius: 99, background: p.highlight ? C.secondary50 : C.bg, color: p.highlight ? C.secondary : C.text2, fontWeight: 500 }}>{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                  <button onClick={() => setShowUpgradeModal(false)} style={{ padding: "9px 16px", borderRadius: 9, border: `1px solid ${C.line}`, background: C.surface, color: C.text2, fontSize: 13, cursor: "pointer" }}>
+                    Ahora no
+                  </button>
+                  <a href="mailto:hola@constructa.app?subject=Quiero mejorar mi plan" style={{ padding: "9px 18px", borderRadius: 9, background: C.secondary, color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                    Contactar para upgrade
+                  </a>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ═══ SAVE BAR ═══ */}
           {dirty && canEdit && (

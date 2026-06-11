@@ -4,6 +4,7 @@ import socketio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.routes import admin as admin_router
 from app.api.routes import alerts, auth, events, notifications, obras, presence, responsibles, tasks, uploads, users, webhooks
 from app.api.routes import settings as settings_router
 from app.api.routes import calendar as calendar_router
@@ -12,6 +13,8 @@ from app.api.routes import exports as exports_router
 from app.api.routes import critical_path as critical_path_router
 from app.api.routes import baseline as baseline_router
 from app.api.routes import obra_team as obra_team_router
+from app.api.routes import suppliers as suppliers_router
+from app.api.routes import task_materials as task_materials_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.core.socket_manager import sio
@@ -66,6 +69,9 @@ fastapi_app.include_router(exports_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(critical_path_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(baseline_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(obra_team_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(admin_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(suppliers_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(task_materials_router.router, prefix=API_PREFIX)
 
 
 # Serve uploaded images — must be a proper route (not StaticFiles) to work
