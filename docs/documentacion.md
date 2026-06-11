@@ -1030,3 +1030,33 @@ No TypeScript errors. The `topAlert` variable was still needed as a guard expres
 
 ### Pending / next steps
 - None — layout refinement complete.
+
+---
+
+## 2026-06-11 — Etapa 2.1 (cierre): cascade automático al reprogramar tareas con dependientes
+
+### Objective
+Completar la Etapa 2.1 del roadmap (`feature/gantt-improvements`). La rama ya tenía sticky date header, subtareas colapsables y tooltips en flechas de dependencia. Faltaba el último ítem: cascade automático al cambiar fechas de una tarea con dependientes.
+
+### Changes made
+**Backend:**
+- `schemas/task.py`: nuevos schemas `CascadePreviewRequest`, `CascadeAffectedTask`, `CascadePreviewResponse`.
+- `services/task_service.py`: nueva función `_compute_cascade()` — recorre el grafo de dependencias en orden topológico (Kahn) y calcula el corrimiento de cada sucesora respetando tipo (FS/SS/FF/SF) + lag_days. Política **push-only** (como "Respect Links" de MS Project con tareas manuales): una sucesora solo se mueve hacia adelante si el cambio viola su dependencia; nunca se adelanta, preservando la holgura que el usuario dejó a propósito. Tareas completadas/canceladas no se mueven. Fechas resultantes se ajustan al próximo día laboral según el calendario de la obra (`next_working_day`). Semántica FS: la sucesora arranca el día siguiente al fin de la predecesora (consistente con el check de violación del Gantt).
+- `services/task_service.py`: `update()` acepta `cascade_dates: bool` — al confirmar, aplica el corrimiento a todas las afectadas, emite `task_updated` por Socket.IO para cada una y registra **UN SOLO** evento de historial `task_cascade_rescheduled` con el detalle completo en el payload.
+- `routes/tasks.py`: nuevo endpoint `POST /tasks/{id}/cascade-preview` (no modifica nada, devuelve las afectadas con fechas viejas y nuevas) + query param `cascade_dates` en `PATCH /tasks/{id}`.
+
+**Frontend:**
+- `api/tasks.ts`: `fetchCascadePreview()` + tipo `CascadeAffectedTask`. El payload `cascade_dates` ya existía en `updateTask` (quedó cableado de antes), ahora el backend lo entiende.
+- `ReschedulingModal.tsx` (drag/resize en Gantt): al abrir consulta el preview; si hay dependientes afectadas muestra panel ámbar con la lista (tarea, fecha vieja → nueva) y los botones pasan a ser "No, solo esta tarea" / "Sí, reprogramar N dependientes".
+- `TaskFormModal.tsx` (edición de fechas en formulario): al guardar con fechas cambiadas consulta el preview; si hay afectadas muestra overlay de confirmación con la misma lista y opciones [Volver] [No, solo esta tarea] [Sí, reprogramar N].
+- `HistorialPanel.tsx`: render del evento `task_cascade_rescheduled` ("X reprogramó N tareas en cascada por el cambio de fechas en [Tarea]" + nombres de las primeras 3).
+
+### Validation
+- Test funcional del algoritmo con repos falsos: cadena FS transitiva con lag, SS, holgura preservada en push +1, pull -2 no mueve nada, completadas intactas, snap a día hábil con calendario Lun-Vie. Todos pasaron.
+- `tsc --noEmit` — 0 errores. ESLint — 0 errores (1 warning preexistente).
+- Import de `app.main` OK, ruta `POST /tasks/{task_id}/cascade-preview` registrada.
+
+### Pending / next steps
+- Merge de `feature/gantt-improvements` → Etapa 2.1 completa.
+- Siguiente según plan: Etapa 1.5 (task-visualization-polish) o 2.2 (import MS Project XML — la rama remota `feature/ms-project-integration` quedó obsoleta, hay que rehacerla sobre main).
+- Stash `plans-monetization pendiente` (stash@{0}) sigue guardado para la Fase 3. El stash@{1} "gantt WIP" quedó obsoleto (su contenido ya está commiteado) y se puede descartar.

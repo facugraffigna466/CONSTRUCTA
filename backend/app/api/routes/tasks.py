@@ -3,7 +3,15 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from app.core.deps import CurrentUser, CurrentUserId, DbSession
-from app.schemas.task import TaskCreate, TaskDueSoonRead, TaskRead, TaskStatusUpdate, TaskUpdate
+from app.schemas.task import (
+    CascadePreviewRequest,
+    CascadePreviewResponse,
+    TaskCreate,
+    TaskDueSoonRead,
+    TaskRead,
+    TaskStatusUpdate,
+    TaskUpdate,
+)
 from app.services.alert_service import AlertService
 from app.services.task_service import TaskService
 
@@ -51,9 +59,25 @@ async def update_task_status(
     return await TaskService(db).apply_status_update_checked(task_id, data, user_id)
 
 
+@router.post("/{task_id}/cascade-preview", response_model=CascadePreviewResponse)
+async def cascade_preview(
+    task_id: int, data: CascadePreviewRequest, db: DbSession, user_id: CurrentUserId
+):
+    """Preview qué tareas dependientes se reprogramarían si esta tarea
+    se moviera a las fechas propuestas. No modifica nada."""
+    affected = await TaskService(db).cascade_preview(
+        task_id, data.start_date, data.due_date, user_id
+    )
+    return {"affected": affected}
+
+
 @router.patch("/{task_id}", response_model=TaskRead)
 async def update_task(
-    task_id: int, data: TaskUpdate, db: DbSession, current_user: CurrentUser
+    task_id: int,
+    data: TaskUpdate,
+    db: DbSession,
+    current_user: CurrentUser,
+    cascade_dates: bool = False,
 ):
     actor = {
         "id": current_user.id,
@@ -61,7 +85,9 @@ async def update_task(
         "role": current_user.role,
         "channel": "web",
     }
-    return await TaskService(db).update(task_id, data, current_user.id, actor=actor)
+    return await TaskService(db).update(
+        task_id, data, current_user.id, actor=actor, cascade_dates=cascade_dates
+    )
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

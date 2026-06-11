@@ -100,6 +100,25 @@ class TaskRead(BaseModel):
         return instance
 
 
+class CascadePreviewRequest(BaseModel):
+    """Proposed new dates for a task, to preview the downstream impact."""
+    start_date: date | None = None
+    due_date: date | None = None
+
+
+class CascadeAffectedTask(BaseModel):
+    task_id: int
+    title: str
+    old_start: date | None
+    old_due: date | None
+    new_start: date | None
+    new_due: date | None
+
+
+class CascadePreviewResponse(BaseModel):
+    affected: list[CascadeAffectedTask]
+
+
 class TaskDueSoonRead(BaseModel):
     """Used by the n8n integration endpoint GET /tasks/due-soon."""
     id: int

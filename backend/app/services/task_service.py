@@ -12,7 +12,7 @@ from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.task import DependencyLinkInput, TaskCreate, TaskDueSoonRead, TaskStatusUpdate, TaskUpdate
-from app.services.calendar_service import is_working_day
+from app.services.calendar_service import is_working_day, next_working_day
 
 _FIELD_LABELS: dict[str, str] = {
     "title":          "título",
@@ -199,6 +199,138 @@ class TaskService:
                     f"La fecha de {field_name} {d.strftime('%d/%m/%Y')} es un día no laboral para esta obra{detail}."
                 )
 
+    # ── cascade reschedule ────────────────────────────────────────────────────
+
+    async def _compute_cascade(
+        self,
+        obra_id: int,
+        source_task_id: int,
+        new_start: date | None,
+        new_due: date | None,
+    ) -> list[dict]:
+        """Compute downstream date shifts if source_task_id moves to the given dates.
+
+        Push-only ("Respect Links" de MS Project con tareas manuales): una tarea
+        sucesora solo se mueve hacia adelante cuando el cambio viola su dependencia.
+        Nunca se adelanta — la holgura que el usuario dejó a propósito se preserva.
+        Tareas completadas/canceladas no se mueven (y frenan la propagación).
+        """
+        tasks = await self.repo.list_by_obra(obra_id)
+        links_map = await self.repo.get_all_dependency_links_by_obra(obra_id)
+        task_map = {t.id: t for t in tasks}
+        cal = await self.calendar_repo.get_for_obra(obra_id)
+
+        successors: dict[int, list[int]] = {}
+        in_degree: dict[int, int] = {t.id: 0 for t in tasks}
+        for t in tasks:
+            for link in links_map.get(t.id, []):
+                dep_id = link["depends_on_id"]
+                if dep_id in task_map:
+                    successors.setdefault(dep_id, []).append(t.id)
+                    in_degree[t.id] += 1
+
+        # Orden topológico (Kahn) sobre toda la obra: una tarea con varios
+        # predecesores se evalúa recién cuando todos ellos ya fueron procesados.
+        from collections import deque
+        queue: deque[int] = deque(tid for tid, deg in in_degree.items() if deg == 0)
+        topo: list[int] = []
+        deg = dict(in_degree)
+        while queue:
+            tid = queue.popleft()
+            topo.append(tid)
+            for sid in successors.get(tid, []):
+                deg[sid] -= 1
+                if deg[sid] == 0:
+                    queue.append(sid)
+        if len(topo) < len(tasks):  # ciclo — no debería pasar (_check_no_cycle)
+            topo = [t.id for t in tasks]
+
+        # Fechas propuestas por tarea; arranca con el override de la tarea origen.
+        proposed: dict[int, tuple[date | None, date | None]] = {
+            source_task_id: (new_start, new_due)
+        }
+
+        def dates_of(tid: int) -> tuple[date | None, date | None]:
+            if tid in proposed:
+                return proposed[tid]
+            t = task_map[tid]
+            return (t.start_date, t.due_date)
+
+        affected: list[dict] = []
+        for tid in topo:
+            if tid == source_task_id:
+                continue
+            t = task_map[tid]
+            if t.status in (TaskStatus.COMPLETADA, TaskStatus.CANCELADA):
+                continue
+            old_s, old_d = t.start_date, t.due_date
+            if old_s is None and old_d is None:
+                continue
+            anchor_start: date = old_s or old_d  # type: ignore[assignment]
+            anchor_finish: date = old_d or old_s  # type: ignore[assignment]
+
+            # Máximo corrimiento (en días) que exigen sus dependencias.
+            shift = 0
+            for link in links_map.get(tid, []):
+                pid = link["depends_on_id"]
+                if pid not in task_map:
+                    continue
+                ps, pd = dates_of(pid)
+                p_start = ps or pd
+                p_finish = pd or ps
+                if p_start is None or p_finish is None:
+                    continue
+                lag = link.get("lag_days") or 0
+                dtype = link.get("dependency_type") or "FS"
+                if dtype == "SS":
+                    required = p_start + timedelta(days=lag)
+                    shift = max(shift, (required - anchor_start).days)
+                elif dtype == "FF":
+                    required = p_finish + timedelta(days=lag)
+                    shift = max(shift, (required - anchor_finish).days)
+                elif dtype == "SF":
+                    required = p_start + timedelta(days=lag)
+                    shift = max(shift, (required - anchor_finish).days)
+                else:  # FS — el sucesor arranca el día siguiente al fin del predecesor
+                    required = p_finish + timedelta(days=lag + 1)
+                    shift = max(shift, (required - anchor_start).days)
+
+            if shift <= 0:
+                continue
+
+            ns = old_s + timedelta(days=shift) if old_s else None
+            nd = old_d + timedelta(days=shift) if old_d else None
+            if cal:
+                duration = (old_d - old_s).days if old_s and old_d else None
+                if ns:
+                    ns = next_working_day(cal, ns)
+                    if duration is not None:
+                        nd = next_working_day(cal, ns + timedelta(days=duration))
+                elif nd:
+                    nd = next_working_day(cal, nd)
+
+            proposed[tid] = (ns, nd)
+            affected.append({
+                "task_id": tid,
+                "title": t.title,
+                "old_start": old_s,
+                "old_due": old_d,
+                "new_start": ns,
+                "new_due": nd,
+            })
+        return affected
+
+    async def cascade_preview(
+        self,
+        task_id: int,
+        new_start: date | None,
+        new_due: date | None,
+        manager_id: int,
+    ) -> list[dict]:
+        task = await self.get_or_raise(task_id)
+        await self._get_obra_and_assert_access(task.obra_id, manager_id)
+        return await self._compute_cascade(task.obra_id, task_id, new_start, new_due)
+
     # ── public methods ────────────────────────────────────────────────────────
 
     async def create(self, data: TaskCreate, manager_id: int, actor: dict | None = None) -> Task:
@@ -292,7 +424,14 @@ class TaskService:
         if resolved:
             await emit_alerts_resolved(task_id, obra_id)
 
-    async def update(self, task_id: int, data: TaskUpdate, manager_id: int, actor: dict | None = None) -> Task:
+    async def update(
+        self,
+        task_id: int,
+        data: TaskUpdate,
+        manager_id: int,
+        actor: dict | None = None,
+        cascade_dates: bool = False,
+    ) -> Task:
         task = await self.get_or_raise(task_id)
         await self._get_obra_and_assert_access(task.obra_id, manager_id)
 
@@ -357,6 +496,51 @@ class TaskService:
                 payload={"changes": real_changes, **({"actor": actor} if actor else {})},
                 triggered_by="user",
             )
+
+        # Cascade: reprogramar dependientes si el usuario lo confirmó.
+        if cascade_dates and (start_changed or due_changed):
+            affected = await self._compute_cascade(
+                task.obra_id, task_id,
+                new_start if isinstance(new_start, date) else None,
+                new_due if isinstance(new_due, date) else None,
+            )
+            for item in affected:
+                shifted = await self.repo.update_fields(
+                    item["task_id"],
+                    start_date=item["new_start"],
+                    due_date=item["new_due"],
+                )
+                if shifted is not None:
+                    shifted._dep_links = await self.repo.get_dependency_links(item["task_id"])
+                    await emit_task_updated(shifted, actor)
+            if affected:
+                source_title = updated.title if updated else task.title
+                await self.historial.log(
+                    obra_id=task.obra_id,
+                    task_id=task_id,
+                    event_type="task_cascade_rescheduled",
+                    description=(
+                        f"Se reprogramaron {len(affected)} "
+                        f"tarea{'s' if len(affected) != 1 else ''} en cascada "
+                        f"por cambio de fechas en '{source_title}'"
+                    ),
+                    payload={
+                        "source_task_id": task_id,
+                        "affected": [
+                            {
+                                "task_id": a["task_id"],
+                                "title": a["title"],
+                                "from_start": str(a["old_start"]) if a["old_start"] else None,
+                                "to_start":   str(a["new_start"]) if a["new_start"] else None,
+                                "from_due":   str(a["old_due"])   if a["old_due"]   else None,
+                                "to_due":     str(a["new_due"])   if a["new_due"]   else None,
+                            }
+                            for a in affected
+                        ],
+                        **({"actor": actor} if actor else {}),
+                    },
+                    triggered_by="user",
+                )
 
         await self._resolve_update_alerts(task_id, changes, task.obra_id)
         updated._dep_links = await self.repo.get_dependency_links(task_id)  # type: ignore[union-attr]

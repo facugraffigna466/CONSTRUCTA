@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { X, AlertTriangle, Calendar, Loader2 } from "lucide-react";
-import { updateTask } from "../api/tasks";
-import type { TaskUpdatePayload } from "../api/tasks";
+import { useEffect, useState } from "react";
+import { X, AlertTriangle, Calendar, Loader2, GitBranch } from "lucide-react";
+import { fetchCascadePreview, updateTask } from "../api/tasks";
+import type { CascadeAffectedTask, TaskUpdatePayload } from "../api/tasks";
 import { Button } from "./ui/Button";
 import type { Task } from "../types";
 
@@ -42,9 +42,25 @@ export function ReschedulingModal({
 }: ReschedulingModalProps) {
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [affected, setAffected] = useState<CascadeAffectedTask[]>([]);
+  const [loadingPreview, setLoadingPreview] = useState(true);
 
   const oldStart = task.start_date;
   const oldDue   = task.due_date;
+
+  // Preview: ¿qué tareas dependientes quedarían desfasadas con las nuevas fechas?
+  useEffect(() => {
+    let cancelled = false;
+    fetchCascadePreview(task.id, {
+      start_date: newStartDate ?? oldStart,
+      due_date:   newDueDate   ?? oldDue,
+    })
+      .then(list => { if (!cancelled) setAffected(list); })
+      .catch(() => { if (!cancelled) setAffected([]); })
+      .finally(() => { if (!cancelled) setLoadingPreview(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.id, newStartDate, newDueDate]);
 
   const oldDuration = oldStart && oldDue ? diffDays(oldStart, oldDue) : null;
   const newDuration = newStartDate && newDueDate ? diffDays(newStartDate, newDueDate) : null;
@@ -54,13 +70,14 @@ export function ReschedulingModal({
     : mode === "resize-end" ? "Ajustar vencimiento de tarea"
     : "Reprogramar tarea";
 
-  async function handleConfirm() {
+  async function handleConfirm(cascade: boolean) {
     setSaving(true);
     setApiError(null);
     try {
       const payload: TaskUpdatePayload = {};
       if (newStartDate !== null) payload.start_date = newStartDate;
       if (newDueDate   !== null) payload.due_date   = newDueDate;
+      if (cascade) payload.cascade_dates = true;
       const saved = await updateTask(task.id, payload);
       onSaved(saved);
     } catch (err) {
@@ -164,15 +181,40 @@ export function ReschedulingModal({
             )
           )}
 
-          {/* Nearby tasks impact */}
-          {nearbyCount > 0 && (
+          {/* Dependent tasks impact (cascade) */}
+          {loadingPreview ? (
+            <p className="flex items-center gap-1.5 text-xs text-constructa-secondaryText">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Verificando tareas dependientes...
+            </p>
+          ) : affected.length > 0 ? (
+            <div className="bg-amber-50 border border-amber-300 rounded px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <GitBranch className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-constructa-text">
+                  <span className="font-semibold">{affected.length} tarea{affected.length !== 1 ? "s" : ""} dependiente{affected.length !== 1 ? "s" : ""}</span>{" "}
+                  quedaría{affected.length !== 1 ? "n" : ""} desfasada{affected.length !== 1 ? "s" : ""} con este cambio. ¿Reprogramarla{affected.length !== 1 ? "s" : ""} automáticamente?
+                </p>
+              </div>
+              <div className="mt-2 max-h-28 overflow-y-auto space-y-1 pl-6">
+                {affected.map(a => (
+                  <div key={a.task_id} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="truncate font-medium text-constructa-text" title={a.title}>{a.title}</span>
+                    <span className="flex-shrink-0 text-constructa-secondaryText">
+                      {fmtDate(a.old_start ?? a.old_due)} <span className="text-amber-600 font-bold">→</span> {fmtDate(a.new_start ?? a.new_due)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : nearbyCount > 0 ? (
             <div className="flex items-start gap-2 bg-constructa-surface border border-constructa-border rounded px-3 py-2.5">
               <AlertTriangle className="w-4 h-4 text-constructa-secondaryText flex-shrink-0 mt-0.5" />
               <p className="text-xs text-constructa-secondaryText">
                 <span className="font-semibold text-constructa-text">{nearbyCount} tarea{nearbyCount !== 1 ? "s" : ""}</span> tienen fechas cercanas (±3 días). No se modificarán automáticamente.
               </p>
             </div>
-          )}
+          ) : null}
 
           {/* API error */}
           {apiError && (
@@ -187,18 +229,36 @@ export function ReschedulingModal({
             <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>
               Cancelar
             </Button>
-            <Button type="button" variant="primary" onClick={handleConfirm} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Guardando...
-                </>
-              ) : mode === "move" ? (
-                "Confirmar reprogramación"
-              ) : (
-                "Confirmar ajuste"
-              )}
-            </Button>
+            {affected.length > 0 ? (
+              <>
+                <Button type="button" variant="secondary" onClick={() => handleConfirm(false)} disabled={saving}>
+                  No, solo esta tarea
+                </Button>
+                <Button type="button" variant="primary" onClick={() => handleConfirm(true)} disabled={saving}>
+                  {saving ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    `Sí, reprogramar ${affected.length} dependiente${affected.length !== 1 ? "s" : ""}`
+                  )}
+                </Button>
+              </>
+            ) : (
+              <Button type="button" variant="primary" onClick={() => handleConfirm(false)} disabled={saving || loadingPreview}>
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Guardando...
+                  </>
+                ) : mode === "move" ? (
+                  "Confirmar reprogramación"
+                ) : (
+                  "Confirmar ajuste"
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

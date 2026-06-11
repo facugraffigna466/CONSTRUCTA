@@ -214,6 +214,19 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
       break;
     }
 
+    case "task_cascade_rescheduled": {
+      const list  = (ev.payload?.affected as { title?: string }[] | undefined) ?? [];
+      const count = list.length;
+      const names = list.slice(0, 3).map(a => a.title).filter(Boolean).join(", ");
+      sentence = (
+        <>{name} reprogramó <strong>{count} tarea{count !== 1 ? "s" : ""}</strong> en cascada por el cambio de fechas en <strong>{taskTitle}</strong>
+          {names && <span style={{ color: "#8E97A0" }}> · {names}{count > 3 ? "…" : ""}</span>}
+        </>
+      );
+      badge = "reschedule";
+      break;
+    }
+
     case "alert_created": {
       const ALERT_LABELS: Record<string, string> = {
         delay_risk:            "Riesgo de demora",
