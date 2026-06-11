@@ -1074,3 +1074,22 @@ Completar la Etapa 2.1 del roadmap (`feature/gantt-improvements`). La rama ya te
 ### Validation
 - `npm run build` — ✓ built (0 errores TS).
 - ESLint — 0 errores nuevos en archivos tocados.
+
+---
+
+## 2026-06-11 — Etapa 2.2: import MS Project XML + plantilla Excel
+
+### Changes made
+**Backend:**
+- `import_service.py`: `parse_msproject_xml()` con `xml.etree.ElementTree` — namespace-agnóstico, salta la fila-resumen del proyecto (UID 0), reconstruye WBS por ParentTaskUID o stack de OutlineLevel, mapea PredecessorLink (Type 0=FF/1=FS/2=SF/3=SS, LinkLag en décimas de minuto ÷4800 o Lag en minutos ÷480 → días), hitos (Milestone=1), y recursos vía Resources+Assignments. `parse_excel()` detecta XML por contenido o MIME y rutea automáticamente.
+- `schemas/imports.py`: `ImportPreviewRow` extendido con `dependency_links` (tipadas con lag), `parent_row`, `is_milestone`; `ImportPreview.source` ("msproject"/"excel").
+- `imports.py` (confirm): crea tareas con `parent_task_id`, `is_milestone` y `dependency_links` — **fix de bug preexistente**: el confirm mandaba `dependency_ids` (campo inexistente en TaskCreate) y las dependencias del Excel se descartaban en silencio.
+- `exports.py`: `GET /exports/template-excel` — .xlsx con hoja "Tareas" (columnas esperadas + 3 filas de ejemplo en gris) y hoja "Instrucciones".
+
+**Frontend:**
+- `ImportModal.tsx`: acepta `.xml`, badge azul "MS Project — se importan subtareas, hitos y dependencias con lag" en el preview, botón "Descargar plantilla" en el paso 1.
+- `api/imports.ts` tipos extendidos; `api/exports.ts` `downloadTemplateExcel()`.
+
+### Validation
+- Test del parser con XML realista (namespace, WBS 2 niveles, FS+lag 2d vía LinkLag, SS+lag 1d vía Lag, hito, recurso asignado, sin namespace) — todos pasaron.
+- `npm run build` ✓ · import de app.main ✓.

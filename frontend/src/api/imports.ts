@@ -1,5 +1,11 @@
 import { apiClient } from "./client";
 
+export interface ImportDepLink {
+  row: number;
+  dependency_type: string;
+  lag_days: number;
+}
+
 export interface ImportPreviewRow {
   row_index: number;
   title: string;
@@ -7,6 +13,9 @@ export interface ImportPreviewRow {
   due_date: string | null;
   responsible_name: string | null;
   depends_on_row: number | null;
+  dependency_links?: ImportDepLink[] | null;
+  parent_row?: number | null;
+  is_milestone?: boolean;
   warning: string | null;
   error: string | null;
 }
@@ -17,6 +26,7 @@ export interface ImportPreview {
   total_rows: number;
   warnings: number;
   errors: number;
+  source?: string;
 }
 
 export interface ImportConfirmResult {

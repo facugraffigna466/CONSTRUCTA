@@ -139,3 +139,74 @@ async def export_tasks_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="obra_{obra_id}_tareas.xlsx"'},
     )
+
+
+# ─── Template de importación ──────────────────────────────────────────────────
+
+@router.get("/template-excel")
+async def download_template_excel(_: CurrentUserId):
+    """Plantilla .xlsx vacía con las columnas que espera el import + instrucciones."""
+    wb = Workbook()
+
+    # Hoja de tareas
+    ws = wb.active
+    ws.title = "Tareas"
+    template_cols = [
+        ("Nombre",       42),
+        ("Inicio",       14),
+        ("Fin",          14),
+        ("Responsable",  24),
+        ("Predecesoras", 14),
+    ]
+    for idx, (label, width) in enumerate(template_cols, start=1):
+        cell = ws.cell(row=1, column=idx, value=label)
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    ws.row_dimensions[1].height = 22
+
+    example_rows = [
+        ("Excavación y movimiento de suelos", "2026-07-01", "2026-07-10", "Juan Pérez", ""),
+        ("Hormigón de fundaciones",           "2026-07-11", "2026-07-25", "Juan Pérez", "1"),
+        ("Mampostería planta baja",           "2026-07-26", "2026-08-15", "",           "2"),
+    ]
+    example_fill = PatternFill("solid", fgColor="F5F0E8")
+    for r, values in enumerate(example_rows, start=2):
+        for c, value in enumerate(values, start=1):
+            cell = ws.cell(row=r, column=c, value=value)
+            cell.fill = example_fill
+            cell.font = Font(size=10, italic=True, color="8E97A0")
+
+    # Hoja de instrucciones
+    inst = wb.create_sheet("Instrucciones")
+    inst.column_dimensions["A"].width = 95
+    lines = [
+        "CÓMO IMPORTAR TAREAS A CONSTRUCTA",
+        "",
+        "1. Completá la hoja 'Tareas'. Las filas de ejemplo (en gris) podés borrarlas o pisarlas.",
+        "2. Columnas:",
+        "   • Nombre — obligatorio. Título de la tarea.",
+        "   • Inicio / Fin — opcional. Formato AAAA-MM-DD o DD/MM/AAAA.",
+        "   • Responsable — opcional. Si coincide con alguien del equipo de la obra, se asigna solo.",
+        "   • Predecesoras — opcional. Número de FILA de la tarea de la que depende (ej: 2).",
+        "3. Guardá el archivo y subilo desde el botón 'Importar' en el tab Tareas de tu obra.",
+        "4. Vas a ver una vista previa antes de confirmar — nada se crea hasta que confirmes.",
+        "",
+        "También podés importar directo un .xml exportado desde MS Project",
+        "(Archivo → Guardar como → XML): se respetan subtareas, hitos, dependencias",
+        "FS/SS/FF/SF con lag y los recursos asignados.",
+    ]
+    for r, text in enumerate(lines, start=1):
+        cell = inst.cell(row=r, column=1, value=text)
+        if r == 1:
+            cell.font = Font(bold=True, size=12)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="constructa_plantilla_tareas.xlsx"'},
+    )

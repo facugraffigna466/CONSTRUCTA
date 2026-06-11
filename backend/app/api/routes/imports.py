@@ -10,7 +10,7 @@ from app.core.deps import CurrentUserId, DbSession
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.imports import ImportConfirmPayload, ImportPreview
-from app.schemas.task import TaskCreate
+from app.schemas.task import DependencyLinkInput, TaskCreate
 from app.services.import_service import parse_excel
 from app.services.task_service import TaskService
 
@@ -19,6 +19,8 @@ ALLOWED_MIME = {
     "application/vnd.ms-excel",
     "text/csv",
     "application/csv",
+    "text/xml",
+    "application/xml",
 }
 MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 
@@ -31,8 +33,8 @@ async def preview_import(
     file: UploadFile = File(...),
 ) -> ImportPreview:
     mime = file.content_type or ""
-    if mime not in ALLOWED_MIME and not file.filename.endswith((".xlsx", ".xls", ".csv")):  # type: ignore[union-attr]
-        raise HTTPException(400, "Solo se aceptan archivos .xlsx o .csv.")
+    if mime not in ALLOWED_MIME and not file.filename.endswith((".xlsx", ".xls", ".csv", ".xml")):  # type: ignore[union-attr]
+        raise HTTPException(400, "Solo se aceptan archivos .xlsx, .csv o .xml (MS Project).")
 
     content = await file.read()
     if len(content) > MAX_BYTES:
@@ -54,11 +56,14 @@ async def confirm_import(
     resp_repo = ResponsibleRepository(db)
     task_repo = TaskRepository(db)
 
-    # Build row_index → task_id map for resolving predecessor references
+    # Build row_index → task_id map for resolving predecessor/parent references
     created_ids: dict[int, int] = {}
     created = 0
     skipped = 0
     errors: list[str] = []
+
+    all_resp = await resp_repo.list_active()
+    base_order = len(await task_repo.list_by_obra(payload.obra_id))
 
     for row in payload.rows:
         if row.error:
@@ -66,15 +71,27 @@ async def confirm_import(
             continue
 
         try:
-            # Resolve dependency from row-index reference
-            dep_ids: list[int] = []
-            if row.depends_on_row is not None and row.depends_on_row in created_ids:
-                dep_ids = [created_ids[row.depends_on_row]]
+            # Dependencias tipadas (MS Project XML) o legado por fila (Excel/CSV)
+            dep_links: list[DependencyLinkInput] = []
+            if row.dependency_links:
+                for dl in row.dependency_links:
+                    if dl.row in created_ids:
+                        dep_links.append(DependencyLinkInput(
+                            depends_on_id=created_ids[dl.row],
+                            dependency_type=dl.dependency_type,
+                            lag_days=dl.lag_days,
+                        ))
+            elif row.depends_on_row is not None and row.depends_on_row in created_ids:
+                dep_links.append(DependencyLinkInput(depends_on_id=created_ids[row.depends_on_row]))
+
+            # WBS: tarea padre (las filas padre vienen antes en el archivo)
+            parent_task_id: int | None = None
+            if row.parent_row is not None and row.parent_row in created_ids:
+                parent_task_id = created_ids[row.parent_row]
 
             # Try to match responsible by name (case-insensitive partial match)
             responsible_id: int | None = None
             if row.responsible_name:
-                all_resp = await resp_repo.list_active()
                 match = next(
                     (r for r in all_resp if row.responsible_name.lower() in r.full_name.lower()),
                     None,
@@ -82,18 +99,16 @@ async def confirm_import(
                 if match:
                     responsible_id = match.id
 
-            # Count current tasks for order_index
-            current_tasks = await task_repo.list_by_obra(payload.obra_id)
-            order_index = len(current_tasks) + created
-
             task_create = TaskCreate(
                 obra_id=payload.obra_id,
                 title=row.title,
                 start_date=row.start_date,
                 due_date=row.due_date,
                 responsible_id=responsible_id,
-                order_index=order_index,
-                dependency_ids=dep_ids if dep_ids else None,
+                order_index=base_order + created,
+                parent_task_id=parent_task_id,
+                is_milestone=row.is_milestone,
+                dependency_links=dep_links or None,
             )
             task = await service.create(task_create, manager_id)
             created_ids[row.row_index] = task.id
