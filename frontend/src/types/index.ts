@@ -27,7 +27,7 @@ export interface Obra {
 
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";
 
-export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial";
+export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial" | "presupuesto";
 
 export interface ObraTeamMember {
   responsible_id: number;
@@ -95,7 +95,7 @@ export interface HistorialEvento {
   created_at: string;
 }
 
-export type AlertType = "task_blocked" | "delay_risk" | "task_overdue" | "no_response" | "reschedule_requested";
+export type AlertType = "task_blocked" | "delay_risk" | "task_overdue" | "no_response" | "reschedule_requested" | "order_received";
 
 export interface Alert {
   id: number;

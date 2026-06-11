@@ -210,3 +210,92 @@ async def download_template_excel(_: CurrentUserId):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": 'attachment; filename="constructa_plantilla_tareas.xlsx"'},
     )
+
+
+# ─── Presupuesto por obra ─────────────────────────────────────────────────────
+
+@router.get("/obras/{obra_id}/presupuesto-excel")
+async def export_presupuesto_excel(obra_id: int, db: DbSession, _: CurrentUserId):
+    """Excel del presupuesto: materiales por tarea con subtotales y totales."""
+    from sqlalchemy import select
+    from app.models.obra import Obra
+    from app.models.supplier import Supplier
+    from app.models.task import Task
+    from app.models.task_material import TaskMaterial
+
+    obra = (await db.execute(select(Obra).where(Obra.id == obra_id))).scalar_one_or_none()
+    if not obra:
+        raise HTTPException(404, "Obra no encontrada")
+
+    result = await db.execute(
+        select(TaskMaterial, Task.title, Supplier.name)
+        .join(Task, TaskMaterial.task_id == Task.id)
+        .outerjoin(Supplier, TaskMaterial.supplier_id == Supplier.id)
+        .where(Task.obra_id == obra_id)
+        .order_by(Task.order_index, Task.id, TaskMaterial.created_at)
+    )
+    rows = result.all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Presupuesto"
+
+    cols = [
+        ("Tarea", 36), ("Ítem", 32), ("Cantidad", 11), ("Unidad", 10),
+        ("Precio unit.", 13), ("Subtotal", 14), ("Estado", 12), ("Proveedor", 22),
+    ]
+    for idx, (label, width) in enumerate(cols, start=1):
+        cell = ws.cell(row=1, column=idx, value=label)
+        cell.fill = HEADER_FILL
+        cell.font = HEADER_FONT
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    ws.row_dimensions[1].height = 22
+
+    MATERIAL_STATUS_LABEL = {"pendiente": "Pendiente", "pedido": "Pedido", "recibido": "Recibido"}
+    MATERIAL_STATUS_COLOR = {"pendiente": "DBEAFE", "pedido": "FEF3C7", "recibido": "D1FAE5"}
+
+    total_estimado = total_recibido = 0.0
+    r = 2
+    for material, task_title, supplier_name in rows:
+        qty = float(material.quantity) if material.quantity is not None else None
+        price = float(material.unit_price) if material.unit_price is not None else None
+        subtotal = (qty or 0) * (price or 0)
+        total_estimado += subtotal
+        if material.status == "recibido":
+            total_recibido += subtotal
+        fill = PatternFill("solid", fgColor=MATERIAL_STATUS_COLOR.get(material.status, "FFFFFF"))
+        values = [task_title, material.name, qty, material.unit or "",
+                  price, subtotal, MATERIAL_STATUS_LABEL.get(material.status, material.status),
+                  supplier_name or ""]
+        for c, value in enumerate(values, start=1):
+            cell = ws.cell(row=r, column=c, value=value)
+            cell.font = Font(size=10)
+            cell.alignment = Alignment(vertical="center")
+            if c == 7:
+                cell.fill = fill
+        for c in (3, 5, 6):
+            ws.cell(row=r, column=c).number_format = "#,##0.00"
+            ws.cell(row=r, column=c).alignment = Alignment(horizontal="right", vertical="center")
+        r += 1
+
+    # Totales
+    r += 1
+    ws.cell(row=r, column=5, value="Total estimado").font = Font(bold=True, size=10)
+    tot = ws.cell(row=r, column=6, value=total_estimado)
+    tot.font = Font(bold=True, size=10)
+    tot.number_format = "#,##0.00"
+    r += 1
+    ws.cell(row=r, column=5, value="Gasto real (recibido)").font = Font(bold=True, size=10, color="1F8A5B")
+    tot2 = ws.cell(row=r, column=6, value=total_recibido)
+    tot2.font = Font(bold=True, size=10, color="1F8A5B")
+    tot2.number_format = "#,##0.00"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="obra_{obra_id}_presupuesto.xlsx"'},
+    )

@@ -29,7 +29,7 @@ CONSTRUCTA es una app de gestión de obras de construcción con un chatbot de Wh
 ```bash
 # Backend
 cd backend
-source venv/bin/activate   # NO usar .venv, usar venv/
+source .venv/bin/activate   # usar .venv (venv/ está incompleto, le faltan deps)
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # Frontend
@@ -158,7 +158,16 @@ CONSTRUCTA/
 
 ---
 
-## Roadmap completo — Plan aprobado
+## Estado del roadmap (actualizado 2026-06-11)
+
+**TODAS las fases del plan están implementadas y mergeadas a main:**
+- Fase 1 completa (1.1 admin ✅, 1.2 comitentes ✅, 1.3 UX alerts ✅, 1.4 equipo global ✅, 1.5 visual polish ✅ tag `etapa-1.5-visual`)
+- Fase 2 completa (2.1 Gantt+cascade ✅ tag `etapa-2.1-gantt`, 2.2 MS Project XML ✅ tag `etapa-2.2-msproject`, 2.3 onboarding ✅ tag `etapa-2.3-onboarding`)
+- Fase 3 completa (planes/tenants/límites 402/panel admin ✅ tag `fase-3-monetizacion`)
+- Fase 4 completa (materiales por tarea, tab Presupuesto, módulo Compras con envío WhatsApp/email, proveedores en Configuración ✅ tag `fase-4-compras`)
+- Migraciones: hasta 0024. Los stashes históricos fueron incorporados y eliminados.
+
+## Roadmap completo — Plan aprobado (histórico)
 
 El plan tiene DOS componentes que trabajan juntos. El archivo completo está en:
 `/Users/agustinllancaman/.claude/plans/tenemos-estas-ideas-y-proud-curry.md`

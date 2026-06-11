@@ -8,6 +8,7 @@ from app.models.responsible import Responsible
 from app.models.task import Task, TaskStatus
 from app.models.supplier import Supplier
 from app.models.task_material import TaskMaterial
+from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
 from app.models.historial import HistorialEvento
 from app.models.message import (
     Message,
@@ -32,6 +33,8 @@ __all__ = [
     "TaskStatus",
     "Supplier",
     "TaskMaterial",
+    "PurchaseOrder",
+    "PurchaseOrderItem",
     "HistorialEvento",
     "Message",
     "MessageDirection",

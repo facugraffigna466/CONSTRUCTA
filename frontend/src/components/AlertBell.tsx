@@ -7,6 +7,7 @@ const TYPE_META: Record<Alert["type"], { icon: string; color: string; label: str
   delay_risk:            { icon: "⚠️", color: "#C97D0E", label: "Riesgo de demora" },
   no_response:           { icon: "💬", color: "#C97D0E", label: "Sin respuesta" },
   reschedule_requested:  { icon: "📅", color: "#3A6BD9", label: "Reprogramación solicitada" },
+  order_received:        { icon: "📦", color: "#1F8A5B", label: "Pedido recibido" },
 };
 
 function AlertRow({ alert, onAlertClick, setOpen, obraName }: { alert: Alert; onAlertClick: (a: Alert) => void; setOpen: (v: boolean) => void; obraName?: string }) {

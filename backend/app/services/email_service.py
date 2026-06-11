@@ -131,3 +131,29 @@ async def send_invite_email(to_email: str, invite_url: str, role: str) -> None:
         logger.error("Brevo API error sending to %s: %s — %s", to_email, exc, exc.response.text)
     except Exception as exc:
         logger.error("Failed to send invite email to %s: %s", to_email, exc)
+
+
+async def send_email(to_email: str, subject: str, html: str, text: str = "") -> bool:
+    """Envío genérico vía Brevo. Devuelve True si salió, False si no está configurado o falló."""
+    if not settings.BREVO_API_KEY:
+        logger.warning("BREVO_API_KEY not configured — skipping email to %s", to_email)
+        return False
+    payload = {
+        "sender": {"name": settings.BREVO_SENDER_NAME, "email": settings.BREVO_SENDER_EMAIL},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html,
+        "textContent": text or subject,
+    }
+    try:
+        response = requests.post(
+            BREVO_URL, json=payload,
+            headers={"api-key": settings.BREVO_API_KEY, "Content-Type": "application/json"},
+            timeout=10,
+        )
+        response.raise_for_status()
+        logger.info("Email sent to %s via Brevo", to_email)
+        return True
+    except requests.RequestException as exc:
+        logger.error("Brevo send failed to %s: %s", to_email, exc)
+        return False

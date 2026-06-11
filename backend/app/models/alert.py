@@ -11,6 +11,7 @@ class AlertType(str, enum.Enum):
     TASK_OVERDUE = "task_overdue"
     NO_RESPONSE = "no_response"
     RESCHEDULE_REQUESTED = "reschedule_requested"
+    ORDER_RECEIVED = "order_received"
 
 
 class Alert(Base):

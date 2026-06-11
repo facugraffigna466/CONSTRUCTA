@@ -18,6 +18,7 @@ const TYPE_STYLE: Record<AlertType, { bar: string; bg: string; color: string; bo
   task_overdue: { bar: "#D03A3A", bg: "#FCE5E5", color: "#D03A3A", border: "#F0B0B0" },
   no_response:  { bar: "#2A6FDB", bg: "#E5EEFB", color: "#2A6FDB", border: "#B8CCF5" },
   reschedule_requested: { bar: "#E76A2D", bg: "#FFF1E9", color: "#E85A26", border: "#FDBFA0" },
+  order_received: { bar: "#1F8A5B", bg: "#E4F3EC", color: "#136E47", border: "#BFE3CE" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
