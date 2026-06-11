@@ -193,9 +193,9 @@ function RemoveConfirm({ member, onConfirm, onClose }: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-interface Props { obraId: number; }
+interface Props { obraId: number; onTeamChanged?: () => void; }
 
-export function ObraResponsablesTab({ obraId }: Props) {
+export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
   const can = useCan();
   const isAdmin = can("configuracion.edit");
 
@@ -249,6 +249,7 @@ export function ObraResponsablesTab({ obraId }: Props) {
       const added = await addObraTeamMember(obraId, payload);
       setTeam(prev => [...prev, added]);
       clearForm();
+      onTeamChanged?.();
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       if (status === 409) setFormError("Esta persona ya está en el equipo de la obra.");
@@ -260,6 +261,7 @@ export function ObraResponsablesTab({ obraId }: Props) {
     await removeObraTeamMember(obraId, m.responsible_id);
     setTeam(prev => prev.filter(x => x.responsible_id !== m.responsible_id));
     setRemovingMember(null);
+    onTeamChanged?.();
   }
 
   if (loading) return <p style={{ padding: 24, fontSize: 13, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cargando...</p>;
@@ -370,7 +372,7 @@ export function ObraResponsablesTab({ obraId }: Props) {
         <EditMemberModal
           member={editingMember}
           obraId={obraId}
-          onSaved={updated => { setTeam(prev => prev.map(m => m.responsible_id === updated.responsible_id ? updated : m)); setEditingMember(null); }}
+          onSaved={updated => { setTeam(prev => prev.map(m => m.responsible_id === updated.responsible_id ? updated : m)); setEditingMember(null); onTeamChanged?.(); }}
           onClose={() => setEditingMember(null)}
         />
       )}

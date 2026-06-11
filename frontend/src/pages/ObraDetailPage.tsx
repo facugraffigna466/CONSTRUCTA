@@ -529,7 +529,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
 
 
       case "responsables":
-        return <ObraResponsablesTab obraId={obra.id} />;
+        return <ObraResponsablesTab obraId={obra.id} onTeamChanged={() => loadData(true)} />;
 
       case "alertas":
         return (
