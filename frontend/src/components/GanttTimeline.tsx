@@ -181,6 +181,13 @@ export function GanttTimeline({
   const [dragOverInfo,    setDragOverInfo]    = useState<{ clientX: number; clientY: number; date: string } | null>(null);
   const [criticalData,    setCriticalData]    = useState<CriticalPathResult | null>(null);
   const [baselineMap,     setBaselineMap]     = useState<Map<number, BaselineEntry>>(new Map());
+  const [collapsedIds,    setCollapsedIds]    = useState<Set<number>>(() => {
+    try {
+      const saved = localStorage.getItem(`gantt_collapsed_${tasks[0]?.obra_id ?? "unknown"}`);
+      return saved ? new Set<number>(JSON.parse(saved)) : new Set<number>();
+    } catch { return new Set<number>(); }
+  });
+  const [depTooltip,      setDepTooltip]      = useState<{ x: number; y: number; type: string; lag: number; violated: boolean } | null>(null);
 
   // ── Close status dropdown on outside click ───────────────────────────────────
   useEffect(() => {
@@ -205,7 +212,9 @@ export function GanttTimeline({
   }, [showFilterDrop]);
 
   // ── Row reorder state ────────────────────────────────────────────────────────
-  const storageKey = `gantt_order_${tasks[0]?.obra_id ?? "unknown"}`;
+  const storageKey  = `gantt_order_${tasks[0]?.obra_id ?? "unknown"}`;
+  const collapseKey = `gantt_collapsed_${tasks[0]?.obra_id ?? "unknown"}`;
+
   const rowDragMovedRef = useRef(false);
 
   const [rowOrder,   setRowOrder]   = useState<number[]>(() => {
@@ -272,11 +281,26 @@ export function GanttTimeline({
   ];
   orderedVisRef.current = orderedVisible;
 
-  const filteredVisible = filterStatuses.size === 0
-    ? orderedVisible
-    : orderedVisible.filter(t => filterStatuses.has(t.status));
-
   const levelMap = buildLevelMap(tasks);
+
+  const childrenByParent = new Map<number, number[]>();
+  tasks.forEach(t => {
+    if (t.parent_task_id) {
+      const arr = childrenByParent.get(t.parent_task_id) ?? [];
+      arr.push(t.id);
+      childrenByParent.set(t.parent_task_id, arr);
+    }
+  });
+
+  const filteredVisible = orderedVisible.filter(t => {
+    if (filterStatuses.size > 0 && !filterStatuses.has(t.status)) return false;
+    let pid: number | null | undefined = t.parent_task_id;
+    while (pid != null) {
+      if (collapsedIds.has(pid)) return false;
+      pid = tasks.find(p => p.id === pid)?.parent_task_id;
+    }
+    return true;
+  });
 
   // Sync rowOrder when visible tasks change (add new, remove deleted)
   useEffect(() => {
@@ -610,6 +634,17 @@ export function GanttTimeline({
     onSaved();
   }
 
+  // ── Collapse helpers ──────────────────────────────────────────────────────────
+
+  function toggleCollapsed(taskId: number) {
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId); else next.add(taskId);
+      try { localStorage.setItem(collapseKey, JSON.stringify(Array.from(next))); } catch { /* ignore */ }
+      return next;
+    });
+  }
+
   // ── Render ───────────────────────────────────────────────────────────────────
 
   // Insert a null ghost placeholder at the end when dragging over
@@ -622,7 +657,7 @@ export function GanttTimeline({
       {drag   && <div className="fixed inset-0 z-40 cursor-grabbing select-none" />}
       {resize && <div className="fixed inset-0 z-40 cursor-ew-resize select-none" />}
 
-      <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden", cursor: rowDrag ? "grabbing" : undefined, position: "relative" }}>
+      <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "clip", cursor: rowDrag ? "grabbing" : undefined, position: "relative" }}>
         {obraId && (
           <GanttSettingsDrawer
             obraId={obraId}
@@ -830,13 +865,13 @@ export function GanttTimeline({
         </div>
 
         {/* ── Body: sticky name col + scrollable grid ── */}
-        <div style={{ display: "flex", overflow: "hidden" }}>
+        <div style={{ display: "flex" }}>
 
           {/* ── Left task column ── */}
           <div style={{ width: TASK_COL_W, flexShrink: 0, borderRight: "1px solid #F0EBE2", background: "#FAF8F4", display: "flex", flexDirection: "column" }}>
 
             {/* Column header */}
-            <div style={{ height: 40, display: "flex", alignItems: "center", padding: "0 16px", borderBottom: "1px solid #F0EBE2", justifyContent: "space-between" }}>
+            <div style={{ height: 40, display: "flex", alignItems: "center", padding: "0 16px", borderBottom: "1px solid #F0EBE2", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 7, background: "#FAF8F4" }}>
               <span style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", color: "#94928D", textTransform: "uppercase" }}>Tarea</span>
               <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: "#8E97A0" }}>{currentMonthLabel}</span>
             </div>
@@ -873,7 +908,7 @@ export function GanttTimeline({
                     onClick={() => { if (rowDragMovedRef.current) return; setSelectedId(task.id); onEditTask(task); }}
                     style={{
                       height: ROW_H, display: "grid",
-                      gridTemplateColumns: "18px 18px 1fr auto",
+                      gridTemplateColumns: "18px 18px 16px 1fr auto",
                       alignItems: "center", gap: 8,
                       padding: "0 12px 0 8px",
                       borderBottom: "1px solid #F4F1EB",
@@ -909,6 +944,29 @@ export function GanttTimeline({
                     >
                       <StatusDotVisual status={task.status} />
                     </button>
+
+                    {/* Chevron — solo para tareas padre */}
+                    {childrenByParent.has(task.id) ? (
+                      <button
+                        type="button"
+                        title={collapsedIds.has(task.id) ? "Expandir subtareas" : "Colapsar subtareas"}
+                        onClick={e => { e.stopPropagation(); toggleCollapsed(task.id); }}
+                        style={{
+                          width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                          background: "none", border: "none", padding: 0, margin: 0,
+                          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                          color: "#5B6770",
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
+                          style={{ transform: collapsedIds.has(task.id) ? "rotate(-90deg)" : "none", transition: "transform 0.15s" }}
+                        >
+                          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    ) : (
+                      <div style={{ width: 16, flexShrink: 0 }} />
+                    )}
 
                     {/* Name + owner */}
                     <div style={{ minWidth: 0, lineHeight: 1.2, paddingLeft: taskLevel * 12 }}>
@@ -975,7 +1033,7 @@ export function GanttTimeline({
             <div style={{ width: gridWidth, minWidth: "100%" }}>
 
               {/* Day header row */}
-              <div style={{ display: "flex", height: 40, borderBottom: "1px solid #F0EBE2", position: "sticky", top: 0, zIndex: 6 }}>
+              <div style={{ display: "flex", height: 40, borderBottom: "1px solid #F0EBE2", position: "sticky", top: 0, zIndex: 6, background: "#FAFAF9" }}>
                 {Array.from({ length: totalDays }).map((_, i) => {
                   const offset  = rangeStart + i;
                   const d       = new Date(TODAY_MS + offset * DAY_MS);
@@ -1364,7 +1422,7 @@ export function GanttTimeline({
                   const paths: {
                     id: string; pathD: string; arrowPoints: string;
                     color: string; violated: boolean;
-                    labelX: number; labelY: number; depType: string;
+                    labelX: number; labelY: number; depType: string; lagDays: number;
                   }[] = [];
 
                   filteredVisible.forEach((taskB) => {
@@ -1379,6 +1437,7 @@ export function GanttTimeline({
                       if (!taskA) return;
                       const rowA = rowByTaskId.get(taskA.id)!;
                       const dtype = link.dependency_type ?? "FS";
+                      const lagDays = link.lag_days ?? 0;
 
                       const startOffA = taskA.start_date ? dateToOffset(taskA.start_date) : null;
                       const dueOffA   = taskA.due_date   ? dateToOffset(taskA.due_date)   : null;
@@ -1427,7 +1486,7 @@ export function GanttTimeline({
                       const labelX = x_A + (x_B - x_A) / 2;
                       const labelY = (y_A + y_B) / 2;
 
-                      paths.push({ id: `${link.depends_on_id}->${taskB.id}`, pathD, arrowPoints, color, violated, labelX, labelY, depType: dtype });
+                      paths.push({ id: `${link.depends_on_id}->${taskB.id}`, pathD, arrowPoints, color, violated, labelX, labelY, depType: dtype, lagDays });
                     });
                   });
 
@@ -1437,21 +1496,31 @@ export function GanttTimeline({
                     <svg style={{
                       position: "absolute", top: 0, left: 0,
                       width: gridWidth, height: filteredVisible.length * ROW_H,
-                      pointerEvents: "none", zIndex: 3, overflow: "visible",
+                      zIndex: 3, overflow: "visible",
                     }}>
-                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType }) => (
+                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays }) => (
                         <g key={id}>
+                          {/* Visible path */}
                           <path
                             d={pathD} stroke={color} strokeWidth={1.5} fill="none"
                             strokeDasharray={violated ? "4 3" : undefined}
+                            style={{ pointerEvents: "none" }}
                           />
-                          <polygon points={arrowPoints} fill={color} />
+                          <polygon points={arrowPoints} fill={color} style={{ pointerEvents: "none" }} />
                           {depType !== "FS" && (
                             <>
-                              <rect x={labelX - 10} y={labelY - 8} width={20} height={14} rx={4} fill={color} opacity={0.9} />
-                              <text x={labelX} y={labelY + 3} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff" fontFamily="sans-serif">{depType}</text>
+                              <rect x={labelX - 10} y={labelY - 8} width={20} height={14} rx={4} fill={color} opacity={0.9} style={{ pointerEvents: "none" }} />
+                              <text x={labelX} y={labelY + 3} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff" fontFamily="sans-serif" style={{ pointerEvents: "none" }}>{depType}</text>
                             </>
                           )}
+                          {/* Invisible wider path for hover detection */}
+                          <path
+                            d={pathD} stroke="transparent" strokeWidth={12} fill="none"
+                            style={{ pointerEvents: "stroke", cursor: "default" }}
+                            onMouseEnter={e => setDepTooltip({ x: e.clientX, y: e.clientY, type: depType, lag: lagDays, violated })}
+                            onMouseMove={e => setDepTooltip(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : null)}
+                            onMouseLeave={() => setDepTooltip(null)}
+                          />
                         </g>
                       ))}
                     </svg>
@@ -1627,6 +1696,29 @@ export function GanttTimeline({
           </div>
         );
       })()}
+
+      {/* ── Dependency tooltip ── */}
+      {depTooltip && (
+        <div style={{
+          position: "fixed", zIndex: 9999, pointerEvents: "none",
+          left: depTooltip.x + 14, top: depTooltip.y - 10,
+          background: "#1A2329", color: "#fff",
+          borderRadius: 8, padding: "6px 10px",
+          fontSize: 12, fontFamily: "'Plus Jakarta Sans', sans-serif",
+          boxShadow: "0 4px 16px -4px rgba(0,0,0,0.35)",
+          display: "flex", flexDirection: "column", gap: 2,
+        }}>
+          <span style={{ fontWeight: 700, color: depTooltip.violated ? "#FF8080" : "#7DC8A0" }}>
+            {depTooltip.type === "FS" ? "Fin → Inicio" : depTooltip.type === "SS" ? "Inicio → Inicio" : depTooltip.type === "FF" ? "Fin → Fin" : "Inicio → Fin"}
+            {depTooltip.violated && " ⚠ violada"}
+          </span>
+          {depTooltip.lag !== 0 && (
+            <span style={{ color: "rgba(255,255,255,0.6)", fontSize: 11 }}>
+              Lag: {depTooltip.lag > 0 ? `+${depTooltip.lag}` : depTooltip.lag} días
+            </span>
+          )}
+        </div>
+      )}
     </>
   );
 }
