@@ -3,6 +3,7 @@ import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-reac
 import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
 import type { CascadeAffectedTask } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
+import { TaskMaterialsSection } from "./TaskMaterialsSection";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
 import type { DependencyType, Responsible, Task } from "../types";
 
@@ -675,6 +676,9 @@ export function TaskFormModal({
                 </p>
               </div>
             </div>
+
+            {/* Materiales — solo en edición (la tarea ya existe) */}
+            {mode === "edit" && task && <TaskMaterialsSection taskId={task.id} />}
 
             {/* API error */}
             {apiError && (

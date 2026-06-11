@@ -21,6 +21,7 @@ import { useEditingSimulation } from "../hooks/useEditingSimulation";
 import { useViewingUsers } from "../hooks/useOnlineUsers";
 import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import { ObraCompletenessChecklist } from "../components/ObraCompletenessChecklist";
+import { PresupuestoTab } from "../components/PresupuestoTab";
 import type { Alert, HistorialEvento, Obra, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
 
 // ── Visual helpers ─────────────────────────────────────────────────────────────
@@ -544,6 +545,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             }}
           />
         );
+
+      case "presupuesto":
+        return <PresupuestoTab obraId={obra.id} obraName={obra.name} />;
 
       case "historial":
         return (

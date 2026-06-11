@@ -15,6 +15,7 @@ from app.api.routes import baseline as baseline_router
 from app.api.routes import obra_team as obra_team_router
 from app.api.routes import suppliers as suppliers_router
 from app.api.routes import task_materials as task_materials_router
+from app.api.routes import purchase_orders as purchase_orders_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.core.socket_manager import sio
@@ -72,6 +73,7 @@ fastapi_app.include_router(obra_team_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(admin_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(suppliers_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(task_materials_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(purchase_orders_router.router, prefix=API_PREFIX)
 
 
 # Serve uploaded images — must be a proper route (not StaticFiles) to work

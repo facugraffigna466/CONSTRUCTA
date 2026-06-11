@@ -1129,3 +1129,29 @@ Se retomó el stash "plans-monetization pendiente" (WIP previo) y se completó:
 ### Validation
 - Migraciones ya aplicadas en BD local (alembic head = 0023); seed verificado por query directa.
 - Import backend ✓ (ruta /admin/usage registrada) · `npm run build` ✓ · ESLint 0 errores.
+
+---
+
+## 2026-06-11 — Fase 4: materiales, presupuesto, compras y proveedores
+
+### Changes made
+**Del stash de Fase 3 ya venía:** tablas suppliers/task_materials (migración 0023), modelos, CRUD `/suppliers` y `/tasks/{id}/materials`, sección Proveedores en ConfiguracionPage, APIs frontend.
+
+**Backend nuevo:**
+- Migración 0024: `purchase_orders` + `purchase_order_items` (snapshot de nombre/cantidad/precio) + valor `order_received` en el enum alert_type.
+- Modelos `PurchaseOrder`/`PurchaseOrderItem`, schemas, y router `purchase_orders.py`:
+  - `GET /obras/{id}/presupuesto` — materiales por tarea + totales (estimado / comprometido / gasto real).
+  - `POST /obras/{id}/purchase-orders` — crea pedido desde materiales pendientes (pasan a "pedido") + historial.
+  - `POST /purchase-orders/{id}/send` — envía al proveedor por WhatsApp (Twilio) o email (Brevo, nueva función genérica `send_email`); si el canal no está configurado igual marca enviado y lo deja asentado en historial.
+  - `POST /purchase-orders/{id}/receive` — pedido y materiales a "recibido" + alerta `order_received` + historial.
+- `GET /exports/obras/{id}/presupuesto-excel` — Excel con desglose por tarea, estados coloreados y totales estimado vs real.
+
+**Frontend nuevo:**
+- Tab **Presupuesto** en la obra (ítem en sidebar con ícono billetes): 3 KPIs (estimado/comprometido/real), tabla agrupada por tarea con subtotales, botón Exportar Excel, modal "Generar pedido" (proveedor + selección de pendientes + notas), listado de pedidos con acciones WhatsApp/Email/Recibido según estado.
+- `TaskMaterialsSection` en TaskFormModal (modo edición): tabla inline de materiales con alta rápida, proveedor, cambio de estado y eliminación.
+- `api/purchaseOrders.ts`; tipo de alerta `order_received` en AlertBell/AlertasTab/AlertsPanel.
+
+**CLAUDE.md actualizado:** estado del roadmap (todo implementado, tags) y corrección del venv (.venv es el válido).
+
+### Validation
+- Migración 0024 aplicada en BD local · import backend ✓ (5 rutas nuevas) · `npm run build` ✓ · ESLint sin errores nuevos bloqueantes.

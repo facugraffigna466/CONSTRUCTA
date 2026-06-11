@@ -44,6 +44,11 @@ const typeConfig: Record<AlertType, { border: string; dot: string; badge: string
     dot:    "bg-blue-500",
     badge:  "text-blue-700 bg-blue-100",
   },
+  order_received: {
+    border: "border-constructa-success/40 bg-green-50",
+    dot:    "bg-constructa-success",
+    badge:  "text-constructa-success bg-green-100",
+  },
 };
 
 function formatDate(iso: string) {
