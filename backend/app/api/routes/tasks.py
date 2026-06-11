@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, status
 
 from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.plan_limits import check_plan_limit
 from app.schemas.task import (
     CascadePreviewRequest,
     CascadePreviewResponse,
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
 async def create_task(data: TaskCreate, db: DbSession, current_user: CurrentUser):
+    await check_plan_limit(db, current_user.tenant_id, "tasks", obra_id=data.obra_id)
     actor = {
         "id": current_user.id,
         "name": current_user.full_name or current_user.email,

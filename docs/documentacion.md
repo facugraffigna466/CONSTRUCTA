@@ -1105,3 +1105,27 @@ Completar la Etapa 2.1 del roadmap (`feature/gantt-improvements`). La rama ya te
 
 ### Validation
 - `npm run build` ✓
+
+---
+
+## 2026-06-11 — Fase 3: planes, tenants y monetización
+
+### Changes made
+Se retomó el stash "plans-monetization pendiente" (WIP previo) y se completó:
+
+**Del stash (integrado y resuelto contra main actual):**
+- Migración 0022: tablas `plans` (seed: Básico 3/6/50 · Pro 20/30/∞ · Enterprise ∞) y `tenants` + `tenant_id` en users/obras + tenant "Empresa por defecto" (plan Pro) asignado a los datos existentes.
+- Migración 0023: tablas `suppliers` y `task_materials` (adelanto de Fase 4) + modelos + rutas CRUD + schemas.
+- `plan_limits.py`: `check_plan_limit()` → HTTP 402 con payload `{code, resource, current, limit, plan, message}`. Aplicado en POST /obras, POST /tasks y POST /users/invite.
+- `GET /admin/usage`: métricas del tenant (obras/usuarios/tareas vs límites).
+- Frontend: `AdminPage` (ruta "admin", solo admin, ítem "Panel Admin" en sidebar), sección "Tu plan" en ConfiguracionPage, APIs admin/suppliers/taskMaterials.
+
+**Completado en esta sesión (faltaba en el stash):**
+- Obras nuevas se crean con el `tenant_id` del usuario (antes quedaban huérfanas y escapaban del conteo).
+- Usuarios invitados heredan el tenant del admin que invita.
+- Registro nuevo → crea tenant propio "Empresa de X" con plan Básico automáticamente.
+- `UpgradeModal` (nuevo): al recibir 402 en wizard de obra o creación de tarea, modal con plan actual, barra de uso al límite y CTA de upgrade por email. Helper `getPlanLimitError()`.
+
+### Validation
+- Migraciones ya aplicadas en BD local (alembic head = 0023); seed verificado por query directa.
+- Import backend ✓ (ruta /admin/usage registrada) · `npm run build` ✓ · ESLint 0 errores.

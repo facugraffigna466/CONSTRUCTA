@@ -56,12 +56,10 @@ export function ResponsibleFormModal({
     const e: Record<string, string> = {};
     if (!fullName.trim() || fullName.trim().length < 2)
       e.fullName = "El nombre es obligatorio (mínimo 2 caracteres).";
-    if (mode === "create") {
-      if (!whatsapp.trim())
-        e.whatsapp = "El número de WhatsApp es obligatorio.";
-      else if (!/^\+\d{7,15}$/.test(whatsapp.trim()))
-        e.whatsapp = "Formato inválido. Usá el formato internacional: +549...";
-    }
+    if (!whatsapp.trim())
+      e.whatsapp = "El número de WhatsApp es obligatorio.";
+    else if (!/^\+\d{7,15}$/.test(whatsapp.trim()))
+      e.whatsapp = "Formato inválido. Usá el formato internacional: +549...";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -82,6 +80,7 @@ export function ResponsibleFormModal({
       } else {
         saved = await updateResponsible(responsible!.id, {
           full_name: fullName.trim(),
+          whatsapp_number: whatsapp.trim(),
           role: role.trim() || null,
         });
       }
@@ -135,29 +134,23 @@ export function ResponsibleFormModal({
 
           <div>
             <Label optional={mode === "edit"}>Número de WhatsApp</Label>
-            {mode === "create" ? (
-              <>
-                <input
-                  className={inputCls(!!errors.whatsapp)}
-                  placeholder="+5491112345678"
-                  value={whatsapp}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) => setWhatsapp(e.target.value)}
-                  maxLength={16}
-                />
-                {errors.whatsapp ? (
-                  <p className="mt-1 text-xs text-constructa-danger">{errors.whatsapp}</p>
-                ) : (
-                  <p className="mt-1 text-xs text-constructa-secondaryText">
-                    Formato internacional: +549... No se puede cambiar después.
-                  </p>
-                )}
-              </>
+            <input
+              className={inputCls(!!errors.whatsapp)}
+              placeholder="+5491112345678"
+              value={whatsapp}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => setWhatsapp(e.target.value)}
+              maxLength={16}
+            />
+            {errors.whatsapp ? (
+              <p className="mt-1 text-xs text-constructa-danger">{errors.whatsapp}</p>
+            ) : mode === "edit" && whatsapp !== (responsible?.whatsapp_number ?? "") ? (
+              <p className="mt-1 text-xs text-yellow-600">
+                ⚠ Si este responsable usa el chatbot, cambiarlo hará que deje de ser reconocido por su número anterior.
+              </p>
             ) : (
-              <input
-                className={[inputCls(), "bg-constructa-surface cursor-not-allowed opacity-60"].join(" ")}
-                value={responsible?.whatsapp_number ?? ""}
-                readOnly
-              />
+              <p className="mt-1 text-xs text-constructa-secondaryText">
+                Formato internacional: +549...
+              </p>
             )}
           </div>
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query, status
 from typing import Annotated
 
 from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.plan_limits import check_plan_limit
 from app.repositories.historial import HistorialRepository
 from app.schemas.historial import HistorialEventoRead
 from app.schemas.obra import ObraCreate, ObraRead, ObraSummary, ObraUpdate
@@ -12,13 +13,14 @@ router = APIRouter(prefix="/obras", tags=["obras"])
 
 @router.post("", response_model=ObraRead, status_code=status.HTTP_201_CREATED)
 async def create_obra(data: ObraCreate, db: DbSession, current_user: CurrentUser):
+    await check_plan_limit(db, current_user.tenant_id, "obras")
     actor = {
         "id": current_user.id,
         "name": current_user.full_name or current_user.email,
         "role": current_user.role,
         "channel": "web",
     }
-    return await ObraService(db).create(data, current_user.id, actor=actor)
+    return await ObraService(db).create(data, current_user.id, actor=actor, tenant_id=current_user.tenant_id)
 
 
 @router.get("", response_model=list[ObraSummary])

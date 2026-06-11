@@ -7,6 +7,7 @@ import { ObraSetupWizard } from "./components/ObraSetupWizard";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { BitacoraPage } from "./pages/BitacoraPage";
 import { PresupuestosPage } from "./pages/PresupuestosPage";
+import { AdminPage } from "./pages/AdminPage";
 import { ConfiguracionPage } from "./pages/ConfiguracionPage";
 import { EquipoPage } from "./pages/EquipoPage";
 import { LoginPage } from "./pages/LoginPage";
@@ -182,6 +183,10 @@ function App() {
     if (activePage === "equipo") {
       if (role !== "admin") return <AccessDenied />;
       return <EquipoPage />;
+    }
+    if (activePage === "admin") {
+      if (role !== "admin") return <AccessDenied />;
+      return <AdminPage />;
     }
     if (activePage === "bitacora") return <BitacoraPage />;
     if (activePage === "presupuestos") return <PresupuestosPage />;

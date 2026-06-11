@@ -13,8 +13,11 @@ class ObraService:
         self.repo = ObraRepository(session)
         self.historial = HistorialRepository(session)
 
-    async def create(self, data: ObraCreate, manager_id: int, actor: dict | None = None) -> Obra:
-        obra = Obra(**data.model_dump(), manager_id=manager_id)
+    async def create(
+        self, data: ObraCreate, manager_id: int, actor: dict | None = None,
+        tenant_id: int | None = None,
+    ) -> Obra:
+        obra = Obra(**data.model_dump(), manager_id=manager_id, tenant_id=tenant_id)
         obra = await self.repo.create(obra)
         await self.historial.log(
             obra_id=obra.id,

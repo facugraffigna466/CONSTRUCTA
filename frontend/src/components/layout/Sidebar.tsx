@@ -11,6 +11,7 @@ import {
   DocumentTextIcon,
   ChevronDownIcon,
   ArrowRightStartOnRectangleIcon,
+  ShieldCheckIcon,
 } from "@heroicons/react/24/outline";
 import type { Obra, ObraStatus, ObraTab, Page } from "../../types";
 import { useUser } from "../../context/UserContext";
@@ -282,6 +283,12 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
             Cuenta
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+            <NavItem
+              label="Panel Admin"
+              active={activePage === "admin"}
+              onClick={() => onNavigate("admin")}
+              icon={<ShieldCheckIcon style={ICON_SIZE} />}
+            />
             <NavItem
               label="Configuración"
               active={activePage === "configuracion"}

@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException
 from app.core.config import settings
 from app.core.deps import AdminUser, CurrentUser, DbSession
 from app.core.exceptions import ConflictError
+from app.core.plan_limits import check_plan_limit
 from app.core.security import hash_password, verify_password
 from app.repositories.user import UserRepository
 from app.schemas.user import ChangePasswordRequest, InviteRequest, InviteResponse, RoleUpdateRequest, UpdateProfileRequest, UserRead
@@ -43,8 +44,9 @@ async def list_members(current_user: AdminUser, db: DbSession):
 
 @router.post("/invite", response_model=InviteResponse, status_code=201)
 async def invite_member(data: InviteRequest, current_user: AdminUser, db: DbSession):
+    await check_plan_limit(db, current_user.tenant_id, "users")
     try:
-        _, token = await AuthService(db).invite(data)
+        _, token = await AuthService(db).invite(data, tenant_id=current_user.tenant_id)
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     invite_url = f"{settings.FRONTEND_URL}/invite/{token}"
