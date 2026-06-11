@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { confirmImport, previewImport, type ImportPreviewRow } from "../api/imports";
+import { downloadTemplateExcel } from "../api/exports";
 
 interface Props {
   obraId: number;
@@ -23,6 +24,8 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
+  const [source, setSource] = useState<string>("excel");
+  const [downloadingTpl, setDownloadingTpl] = useState(false);
 
   async function handleFile(file: File) {
     setLoading(true);
@@ -31,6 +34,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
       const preview = await previewImport(file);
       setRows(preview.rows);
       setColumnMap(preview.column_map);
+      setSource(preview.source ?? (file.name.toLowerCase().endsWith(".xml") ? "msproject" : "excel"));
       setStep("preview");
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -103,7 +107,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                 transition: "all 0.15s",
               }}
             >
-              <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+              <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv,.xml" style={{ display: "none" }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
               <svg width="36" height="36" viewBox="0 0 40 40" fill="none" style={{ margin: "0 auto 12px" }}>
                 <rect width="40" height="40" rx="12" fill="#FFF0E8"/>
                 <path d="M20 12v12M14 16l6-6 6 6" stroke="#E76A2D" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -116,7 +120,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                   <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "#1A2329" }}>
                     Arrastrá el archivo aquí o hacé click para seleccionarlo
                   </p>
-                  <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>.xlsx exportado de MS Project · .csv · máx. 10 MB</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>.xml o .xlsx exportado de MS Project · .csv · máx. 10 MB</p>
                 </>
               )}
             </div>
@@ -125,6 +129,12 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
           {/* ── Step 2: Preview ── */}
           {step === "preview" && (
             <div>
+              {source === "msproject" && (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, padding: "4px 10px", borderRadius: 99, background: "#EBF3FF", border: "1px solid #B8CCF5", fontSize: 11.5, fontWeight: 700, color: "#2A62C9" }}>
+                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M4 9.5V4.5l3 3 3-3v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  MS Project — se importan subtareas, hitos y dependencias con lag
+                </div>
+              )}
               {/* Column map detected */}
               {Object.keys(columnMap).length > 0 && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
@@ -209,6 +219,20 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
 
         {/* Footer */}
         <div style={{ padding: "14px 24px 20px", borderTop: "1px solid #F0F1EF", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          {step === "upload" && (
+            <button
+              onClick={async () => {
+                setDownloadingTpl(true);
+                try { await downloadTemplateExcel(); } catch { setError("No se pudo descargar la plantilla."); }
+                setDownloadingTpl(false);
+              }}
+              disabled={downloadingTpl}
+              style={{ marginRight: "auto", display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", opacity: downloadingTpl ? 0.6 : 1 }}
+            >
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M3.5 6L7 9.5 10.5 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 12.5h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              {downloadingTpl ? "Descargando…" : "Descargar plantilla"}
+            </button>
+          )}
           <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer" }}>
             {step === "done" ? "Cerrar" : "Cancelar"}
           </button>

@@ -1,17 +1,19 @@
 """
-Excel / CSV import service for MS Project integration.
+Excel / CSV / MS Project XML import service.
 
 Parses an uploaded file and returns a preview of rows to be confirmed.
-Supports .xlsx (openpyxl) and .csv (stdlib csv).
+Supports .xlsx (openpyxl), .csv (stdlib csv) and MS Project .xml
+(xml.etree.ElementTree, formato documentado por Microsoft).
 Column detection is automatic, case-insensitive, Spanish and English.
 """
 import csv
 import io
+import xml.etree.ElementTree as ET
 from datetime import date
 
 import openpyxl
 
-from app.schemas.imports import ImportPreview, ImportPreviewRow
+from app.schemas.imports import ImportDepLink, ImportPreview, ImportPreviewRow
 
 # ── Column alias maps ─────────────────────────────────────────────────────────
 
@@ -89,7 +91,194 @@ def _rows_from_csv(content: bytes) -> tuple[list[str], list[list[str]]]:
     return rows[0], rows[1:]
 
 
+# ── MS Project XML ────────────────────────────────────────────────────────────
+
+# Tipos de dependencia en el XML de MS Project: 0=FF, 1=FS (default), 2=SF, 3=SS
+_MSP_DEP_TYPE = {0: "FF", 1: "FS", 2: "SF", 3: "SS"}
+
+
+def _strip_ns(tag: str) -> str:
+    """'{http://schemas.microsoft.com/project}Task' → 'Task'"""
+    return tag.rsplit("}", 1)[-1]
+
+
+def _find_text(el: ET.Element, name: str) -> str | None:
+    for child in el:
+        if _strip_ns(child.tag) == name:
+            return child.text
+    return None
+
+
+def _findall(el: ET.Element, name: str) -> list[ET.Element]:
+    return [c for c in el if _strip_ns(c.tag) == name]
+
+
+def _parse_msp_date(raw: str | None) -> date | None:
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw.strip()[:10])
+    except ValueError:
+        return None
+
+
+def _parse_msp_lag(link: ET.Element) -> int:
+    """LinkLag viene en décimas de minuto (4800 = 1 día de 8h).
+    Algunos exports usan <Lag> en minutos (480 = 1 día)."""
+    raw = _find_text(link, "LinkLag")
+    if raw is not None:
+        try:
+            return round(int(raw) / 4800)
+        except ValueError:
+            return 0
+    raw = _find_text(link, "Lag")
+    if raw is not None:
+        try:
+            return round(int(raw) / 480)
+        except ValueError:
+            return 0
+    return 0
+
+
+def is_msproject_xml(file_bytes: bytes) -> bool:
+    head = file_bytes[:200].lstrip()
+    return head.startswith(b"<?xml") or head.startswith(b"<Project")
+
+
+def parse_msproject_xml(file_bytes: bytes) -> ImportPreview:
+    """Parsea el XML de MS Project: tareas + WBS + dependencias + recursos."""
+    root = ET.fromstring(file_bytes)
+    if _strip_ns(root.tag) != "Project":
+        raise ValueError("El XML no tiene el formato de MS Project (falta el nodo <Project>).")
+
+    # Recursos: UID → nombre
+    resource_names: dict[str, str] = {}
+    for resources in _findall(root, "Resources"):
+        for res in _findall(resources, "Resource"):
+            uid = _find_text(res, "UID")
+            name = (_find_text(res, "Name") or "").strip()
+            if uid is not None and name:
+                resource_names[uid] = name
+
+    # Asignaciones: TaskUID → primer recurso asignado
+    task_resource: dict[str, str] = {}
+    for assignments in _findall(root, "Assignments"):
+        for asg in _findall(assignments, "Assignment"):
+            t_uid = _find_text(asg, "TaskUID")
+            r_uid = _find_text(asg, "ResourceUID")
+            if t_uid and r_uid and r_uid in resource_names and t_uid not in task_resource:
+                task_resource[t_uid] = resource_names[r_uid]
+
+    # Tareas
+    preview_rows: list[ImportPreviewRow] = []
+    uid_to_row: dict[str, int] = {}
+    raw_tasks: list[dict] = []
+
+    for tasks_el in _findall(root, "Tasks"):
+        for task_el in _findall(tasks_el, "Task"):
+            uid = _find_text(task_el, "UID")
+            name = (_find_text(task_el, "Name") or "").strip()
+            outline_raw = _find_text(task_el, "OutlineLevel")
+            try:
+                outline = int(outline_raw) if outline_raw is not None else 1
+            except ValueError:
+                outline = 1
+            # UID 0 / OutlineLevel 0 es la fila-resumen del proyecto — no se importa
+            if uid == "0" or outline == 0:
+                continue
+            if not name:
+                continue
+
+            deps: list[dict] = []
+            for link in _findall(task_el, "PredecessorLink"):
+                pred_uid = _find_text(link, "PredecessorUID")
+                if not pred_uid or pred_uid == "0":
+                    continue
+                try:
+                    type_code = int(_find_text(link, "Type") or "1")
+                except ValueError:
+                    type_code = 1
+                deps.append({
+                    "pred_uid": pred_uid,
+                    "dependency_type": _MSP_DEP_TYPE.get(type_code, "FS"),
+                    "lag_days": _parse_msp_lag(link),
+                })
+
+            raw_tasks.append({
+                "uid": uid,
+                "name": name,
+                "outline": outline,
+                "start": _parse_msp_date(_find_text(task_el, "Start")),
+                "finish": _parse_msp_date(_find_text(task_el, "Finish")),
+                "milestone": (_find_text(task_el, "Milestone") or "0").strip() == "1",
+                "parent_uid": _find_text(task_el, "ParentTaskUID"),
+                "deps": deps,
+            })
+
+    # Índices de fila por UID (orden del archivo = orden de outline)
+    for i, t in enumerate(raw_tasks):
+        if t["uid"] is not None:
+            uid_to_row[t["uid"]] = i
+
+    # Jerarquía WBS: ParentTaskUID si existe; si no, stack por OutlineLevel
+    warnings = 0
+    outline_stack: list[tuple[int, int]] = []  # (outline_level, row_index)
+    for i, t in enumerate(raw_tasks):
+        parent_row: int | None = None
+        if t["parent_uid"] and t["parent_uid"] != "0" and t["parent_uid"] in uid_to_row:
+            parent_row = uid_to_row[t["parent_uid"]]
+        else:
+            while outline_stack and outline_stack[-1][0] >= t["outline"]:
+                outline_stack.pop()
+            if outline_stack:
+                parent_row = outline_stack[-1][1]
+        outline_stack.append((t["outline"], i))
+
+        dep_links: list[ImportDepLink] = []
+        for d in t["deps"]:
+            row = uid_to_row.get(d["pred_uid"])
+            if row is not None:
+                dep_links.append(ImportDepLink(
+                    row=row,
+                    dependency_type=d["dependency_type"],
+                    lag_days=d["lag_days"],
+                ))
+
+        row_warnings: list[str] = []
+        if t["start"] and t["finish"] and t["finish"] < t["start"]:
+            row_warnings.append("Fin anterior al inicio")
+        warning_str = "; ".join(row_warnings) if row_warnings else None
+        if warning_str:
+            warnings += 1
+
+        preview_rows.append(ImportPreviewRow(
+            row_index=i,
+            title=t["name"],
+            start_date=t["start"],
+            due_date=t["finish"],
+            responsible_name=task_resource.get(t["uid"]),
+            dependency_links=dep_links or None,
+            parent_row=parent_row,
+            is_milestone=t["milestone"],
+            warning=warning_str,
+        ))
+
+    return ImportPreview(
+        rows=preview_rows,
+        column_map={
+            "title": "Name", "start_date": "Start", "due_date": "Finish",
+            "responsible": "Resources/Assignments", "predecessors": "PredecessorLink",
+        },
+        total_rows=len(preview_rows),
+        warnings=warnings,
+        errors=0,
+        source="msproject",
+    )
+
+
 def parse_excel(file_bytes: bytes, mime: str) -> ImportPreview:
+    if is_msproject_xml(file_bytes) or mime in ("text/xml", "application/xml"):
+        return parse_msproject_xml(file_bytes)
     if mime == "text/csv" or mime == "application/csv":
         headers, data_rows = _rows_from_csv(file_bytes)
     else:
