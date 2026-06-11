@@ -20,6 +20,7 @@ import { useCan } from "../hooks/usePermission";
 import { useEditingSimulation } from "../hooks/useEditingSimulation";
 import { useViewingUsers } from "../hooks/useOnlineUsers";
 import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
+import { ObraCompletenessChecklist } from "../components/ObraCompletenessChecklist";
 import type { Alert, HistorialEvento, Obra, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
 
 // ── Visual helpers ─────────────────────────────────────────────────────────────
@@ -791,6 +792,16 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             )}
           </div>
         </header>
+
+        {/* ── Guía de completitud ── */}
+        {!loading && !error && (
+          <ObraCompletenessChecklist
+            obra={obra}
+            tasks={tasks}
+            responsibles={responsibles}
+            onNavigate={onTabChange}
+          />
+        )}
 
         {/* ── Tab content ── */}
         {renderTab()}
