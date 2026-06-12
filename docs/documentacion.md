@@ -1292,3 +1292,20 @@ El revert a mouse events no alcanzaba: el overlay SVG de flechas de dependencias
 
 ### Validation
 `tsc -b` ✓ · endpoint probado con curl ✓ · sticky/anclas/último-tab verificados en navegador (vite :5174) ✓
+
+---
+
+## 2026-06-12 — Alta de empresa self-service + fixes del flujo de creación
+
+Salida de la auditoría del flujo de alta (`docs/auditoria-flujo-alta.md`). Rama `feature/alta-empresa-wizard-fixes`.
+
+- **Registro self-service**: LoginPage modo "Crear cuenta" → `POST /auth/register` con `company_name`, rol `admin` siempre, tenant propio en plan Básico, login automático.
+- **Aislamiento multi-tenant**: obras (list filtra, get 404 cross-tenant), responsables (migration 0026 `tenant_id` + backfill), alertas (join por obra), usuarios. Verificado e2e con usuario nuevo.
+- `/users/me` devuelve `tenant_name`; sidebar muestra la empresa real (antes hardcodeada).
+- Wizard vincula responsables al equipo de la obra; `ObraSummary` incluye comitente (checklist correcto).
+- `utils/phone.ts`: normalización de celulares argentinos en wizard + tabs + modal.
+- X tras crear obra navega a la obra. Bitácora como item real del sidebar.
+- `VITE_API_URL` configurable (preparación deploy).
+
+### Validation
+tsc ✓ · migración 0026 ✓ · flujo registro→onboarding→wizard→obra verificado en navegador ✓ · datos de prueba limpiados ✓
