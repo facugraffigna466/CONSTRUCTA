@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Package, Plus, Trash2, Loader2 } from "lucide-react";
 import { createMaterial, deleteMaterial, fetchMaterials, updateMaterial } from "../api/taskMaterials";
 import { fetchSuppliers } from "../api/suppliers";
@@ -17,13 +17,48 @@ const cellInput: React.CSSProperties = {
   border: "1px solid #E6E7E5", borderRadius: 8, outline: "none",
 };
 
-/** Tabla inline de materiales de una tarea (solo en modo edición). */
-export function TaskMaterialsSection({ taskId }: { taskId: number }) {
-  const [materials, setMaterials] = useState<TaskMaterial[]>([]);
+/** Material en borrador (tarea aún no creada) — se persiste al guardar la tarea. */
+export interface DraftMaterial {
+  _key: string;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+}
+
+// Fila normalizada para el render (sirve tanto a persistidos como a borradores)
+interface Row {
+  key: string;
+  name: string;
+  quantity: number | null;
+  unit: string | null;
+  unit_price: number | null;
+  supplier_name: string | null;
+  status: MaterialStatus | null;   // null = borrador (sin estado editable)
+  persistedId: number | null;
+}
+
+type Props =
+  | { taskId: number; draft?: undefined; onDraftChange?: undefined }
+  | { taskId?: undefined; draft: DraftMaterial[]; onDraftChange: (d: DraftMaterial[]) => void };
+
+/**
+ * Tabla inline de materiales de una tarea.
+ * - Con `taskId` (edición): persiste cada cambio contra la API.
+ * - Con `draft`/`onDraftChange` (creación): mantiene los materiales en memoria;
+ *   el padre los crea al guardar la tarea.
+ */
+export function TaskMaterialsSection(props: Props) {
+  const isDraft = props.taskId === undefined;
+
+  const [persisted, setPersisted] = useState<TaskMaterial[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isDraft);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const keyCounter = useRef(0);
 
   // Fila nueva
   const [nName, setNName]       = useState("");
@@ -35,26 +70,55 @@ export function TaskMaterialsSection({ taskId }: { taskId: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([fetchMaterials(taskId), fetchSuppliers()])
-      .then(([mats, sups]) => { if (!cancelled) { setMaterials(mats); setSuppliers(sups); } })
+    const loaders: [Promise<TaskMaterial[]>, Promise<Supplier[]>] = isDraft
+      ? [Promise.resolve([]), fetchSuppliers()]
+      : [fetchMaterials(props.taskId!), fetchSuppliers()];
+    Promise.all(loaders)
+      .then(([mats, sups]) => { if (!cancelled) { setPersisted(mats); setSuppliers(sups); } })
       .catch(() => { if (!cancelled) setError("No se pudieron cargar los materiales."); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [taskId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraft ? "draft" : props.taskId]);
+
+  // Filas normalizadas
+  const rows: Row[] = isDraft
+    ? props.draft.map(d => ({
+        key: d._key, name: d.name, quantity: d.quantity, unit: d.unit,
+        unit_price: d.unit_price, supplier_name: d.supplier_name, status: null, persistedId: null,
+      }))
+    : persisted.map(m => ({
+        key: `p${m.id}`, name: m.name, quantity: m.quantity, unit: m.unit,
+        unit_price: m.unit_price, supplier_name: m.supplier_name ?? null, status: m.status, persistedId: m.id,
+      }));
 
   async function handleAdd() {
     if (!nName.trim()) return;
+    const supId = nSupplier ? Number(nSupplier) : null;
+    const common = {
+      name: nName.trim(),
+      quantity: nQty ? Number(nQty) : null,
+      unit: nUnit.trim() || null,
+      unit_price: nPrice ? Number(nPrice) : null,
+      supplier_id: supId,
+    };
+
+    if (isDraft) {
+      const supName = supId ? (suppliers.find(s => s.id === supId)?.name ?? null) : null;
+      props.onDraftChange([
+        ...props.draft,
+        { _key: `d${keyCounter.current++}`, ...common, supplier_name: supName },
+      ]);
+      setNName(""); setNQty(""); setNUnit(""); setNPrice(""); setNSupplier("");
+      setAdding(false);
+      return;
+    }
+
     setSaving(true);
     setError(null);
     try {
-      const created = await createMaterial(taskId, {
-        name: nName.trim(),
-        quantity: nQty ? Number(nQty) : null,
-        unit: nUnit.trim() || null,
-        unit_price: nPrice ? Number(nPrice) : null,
-        supplier_id: nSupplier ? Number(nSupplier) : null,
-      });
-      setMaterials(prev => [...prev, created]);
+      const created = await createMaterial(props.taskId!, common);
+      setPersisted(prev => [...prev, created]);
       setNName(""); setNQty(""); setNUnit(""); setNPrice(""); setNSupplier("");
       setAdding(false);
     } catch {
@@ -64,21 +128,27 @@ export function TaskMaterialsSection({ taskId }: { taskId: number }) {
     }
   }
 
-  async function handleStatusChange(m: TaskMaterial, status: MaterialStatus) {
+  async function handleStatusChange(id: number, status: MaterialStatus) {
+    if (isDraft) return;
     try {
-      const updated = await updateMaterial(taskId, m.id, { status });
-      setMaterials(prev => prev.map(x => (x.id === m.id ? updated : x)));
+      const updated = await updateMaterial(props.taskId!, id, { status });
+      setPersisted(prev => prev.map(x => (x.id === id ? updated : x)));
     } catch { /* mantener estado anterior */ }
   }
 
-  async function handleDelete(m: TaskMaterial) {
+  async function handleDelete(row: Row) {
+    if (isDraft) {
+      props.onDraftChange(props.draft.filter(d => d._key !== row.key));
+      return;
+    }
+    if (row.persistedId == null) return;
     try {
-      await deleteMaterial(taskId, m.id);
-      setMaterials(prev => prev.filter(x => x.id !== m.id));
+      await deleteMaterial(props.taskId!, row.persistedId);
+      setPersisted(prev => prev.filter(x => x.id !== row.persistedId));
     } catch { /* noop */ }
   }
 
-  const total = materials.reduce((acc, m) => acc + (m.quantity ?? 0) * (m.unit_price ?? 0), 0);
+  const total = rows.reduce((acc, m) => acc + (m.quantity ?? 0) * (m.unit_price ?? 0), 0);
 
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -90,9 +160,9 @@ export function TaskMaterialsSection({ taskId }: { taskId: number }) {
         }}>
           Materiales
         </span>
-        {materials.length > 0 && (
+        {rows.length > 0 && (
           <span style={{ fontSize: 11, color: "#8E97A0" }}>
-            · {materials.length} ítem{materials.length !== 1 ? "s" : ""}
+            · {rows.length} ítem{rows.length !== 1 ? "s" : ""}
             {total > 0 && <> · ${total.toLocaleString("es-AR", { maximumFractionDigits: 2 })}</>}
           </span>
         )}
@@ -102,14 +172,16 @@ export function TaskMaterialsSection({ taskId }: { taskId: number }) {
         <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>Cargando materiales…</p>
       ) : (
         <div style={{ border: "1px solid #EFECE6", borderRadius: 10, overflow: "hidden" }}>
-          {materials.length === 0 && !adding && (
+          {rows.length === 0 && !adding && (
             <p style={{ margin: 0, padding: "10px 12px", fontSize: 12, color: "#8E97A0" }}>
-              Sin materiales cargados para esta tarea.
+              {isDraft
+                ? "Agregá los materiales de esta tarea. Se guardarán al crear la tarea."
+                : "Sin materiales cargados para esta tarea."}
             </p>
           )}
 
-          {materials.map((m, i) => (
-            <div key={m.id} style={{
+          {rows.map((m, i) => (
+            <div key={m.key} style={{
               display: "grid",
               gridTemplateColumns: "1fr 76px 90px 96px 26px",
               alignItems: "center", gap: 6,
@@ -129,22 +201,33 @@ export function TaskMaterialsSection({ taskId }: { taskId: number }) {
                 {m.quantity != null ? `${m.quantity} ${m.unit ?? ""}` : "—"}
               </span>
               <span style={{ fontSize: 11.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>
-                {m.unit_price != null ? `$${(m.quantity ?? 0) * m.unit_price > 0 ? ((m.quantity ?? 0) * m.unit_price).toLocaleString("es-AR", { maximumFractionDigits: 0 }) : m.unit_price}` : "—"}
+                {m.unit_price != null
+                  ? `$${((m.quantity ?? 0) * m.unit_price > 0 ? (m.quantity ?? 0) * m.unit_price : m.unit_price).toLocaleString("es-AR", { maximumFractionDigits: 0 })}`
+                  : "—"}
               </span>
-              <select
-                value={m.status}
-                onChange={e => handleStatusChange(m, e.target.value as MaterialStatus)}
-                style={{
-                  fontSize: 10.5, fontWeight: 700, padding: "3px 6px", borderRadius: 99,
-                  background: STATUS_META[m.status].bg, color: STATUS_META[m.status].color,
-                  border: "none", cursor: "pointer", appearance: "none", textAlign: "center",
-                  fontFamily: "'Plus Jakarta Sans', sans-serif",
-                }}
-              >
-                <option value="pendiente">Pendiente</option>
-                <option value="pedido">Pedido</option>
-                <option value="recibido">Recibido</option>
-              </select>
+              {m.status != null && m.persistedId != null ? (
+                <select
+                  value={m.status}
+                  onChange={e => handleStatusChange(m.persistedId!, e.target.value as MaterialStatus)}
+                  style={{
+                    fontSize: 10.5, fontWeight: 700, padding: "3px 6px", borderRadius: 99,
+                    background: STATUS_META[m.status].bg, color: STATUS_META[m.status].color,
+                    border: "none", cursor: "pointer", appearance: "none", textAlign: "center",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  <option value="pendiente">Pendiente</option>
+                  <option value="pedido">Pedido</option>
+                  <option value="recibido">Recibido</option>
+                </select>
+              ) : (
+                <span style={{
+                  fontSize: 10, fontWeight: 700, padding: "3px 6px", borderRadius: 99,
+                  background: "#F4F5F4", color: "#8E97A0", textAlign: "center",
+                }}>
+                  Nuevo
+                </span>
+              )}
               <button
                 type="button"
                 onClick={() => handleDelete(m)}

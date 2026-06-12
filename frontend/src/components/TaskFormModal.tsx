@@ -3,7 +3,8 @@ import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-reac
 import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
 import type { CascadeAffectedTask } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
-import { TaskMaterialsSection } from "./TaskMaterialsSection";
+import { TaskMaterialsSection, type DraftMaterial } from "./TaskMaterialsSection";
+import { createMaterial } from "../api/taskMaterials";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
 import type { DependencyType, Responsible, Task } from "../types";
 
@@ -160,6 +161,7 @@ export function TaskFormModal({
   const [apiError, setApiError] = useState<string | null>(null);
   const [cascadePrompt, setCascadePrompt] = useState<CascadeAffectedTask[] | null>(null);
   const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
+  const [draftMaterials, setDraftMaterials] = useState<DraftMaterial[]>([]);
 
   function validate() {
     const e: Record<string, string> = {};
@@ -218,6 +220,18 @@ export function TaskFormModal({
       let saved: Task;
       if (mode === "create") {
         saved = await createTask({ ...payload, obra_id: obraId, order_index: taskCount });
+        // Persistir los materiales cargados en borrador contra la tarea recién creada
+        if (draftMaterials.length > 0) {
+          await Promise.all(draftMaterials.map(m =>
+            createMaterial(saved.id, {
+              name: m.name,
+              quantity: m.quantity,
+              unit: m.unit,
+              unit_price: m.unit_price,
+              supplier_id: m.supplier_id,
+            }).catch(() => { /* no bloquear la creación de la tarea por un material */ })
+          ));
+        }
       } else {
         saved = await updateTask(task!.id, { ...payload, cascade_dates: cascade });
       }
@@ -677,8 +691,10 @@ export function TaskFormModal({
               </div>
             </div>
 
-            {/* Materiales — solo en edición (la tarea ya existe) */}
-            {mode === "edit" && task && <TaskMaterialsSection taskId={task.id} />}
+            {/* Materiales — persistente al editar, borrador al crear */}
+            {mode === "edit" && task
+              ? <TaskMaterialsSection taskId={task.id} />
+              : <TaskMaterialsSection draft={draftMaterials} onDraftChange={setDraftMaterials} />}
 
             {/* API error */}
             {apiError && (
