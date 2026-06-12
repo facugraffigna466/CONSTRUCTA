@@ -31,9 +31,9 @@ class Settings(BaseSettings):
 
     # IA — bitácora de obra (análisis con Claude + transcripción Whisper)
     ANTHROPIC_API_KEY: str = ""
-    CLAUDE_MODEL: str = "claude-opus-4-8"
-    OPENAI_API_KEY: str = ""   # para transcripción de audios (Whisper)
-    WHISPER_MODEL: str = "whisper-1"
+    CLAUDE_MODEL: str = "claude-haiku-4-5-20251001"  # barato y suficiente para extraer acciones
+    OPENAI_API_KEY: str = ""   # para transcripción de audios
+    WHISPER_MODEL: str = "gpt-4o-mini-transcribe"    # más barato y preciso que whisper-1 en español
 
     class Config:
         env_file = ".env"
