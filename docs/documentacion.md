@@ -1240,3 +1240,15 @@ Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla ti
 
 ### Validation
 `npm run build` ✓
+
+---
+
+## 2026-06-12 — Sprint 4 UX: confianza y modal adelgazado
+
+### Changes made
+- **Login honesto**: fuera las stats de marketing inventadas ("85%", "3x") → bullets de features reales del producto; debajo del submit, ayuda de acceso honesta ("pedile al administrador que restablezca tu acceso") en vez de un reset inexistente.
+- **TaskFormModal adelgazado**: el modal arranca con 4-5 campos (título, responsable, fechas, duración) y un botón punteado "Opciones avanzadas" que despliega descripción, tarea padre (WBS), dependencias, hito y % avance. Al editar una tarea que ya usa esos campos, el acordeón arranca abierto.
+- **Onboarding accionable**: el CTA final pasó de "¡Empezar!" (cerraba y nada) a "Crear mi primera obra" que abre el wizard directamente.
+
+### Validation
+`npm run build` ✓

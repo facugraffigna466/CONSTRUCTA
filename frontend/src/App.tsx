@@ -213,7 +213,7 @@ function App() {
         {renderPage()}
       </AppLayout>
 
-      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} />}
+      {showOnboarding && <OnboardingModal onClose={() => setShowOnboarding(false)} onCreateObra={() => setShowWizard(true)} />}
 
       {showWizard && (
         <ObraSetupWizard

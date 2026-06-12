@@ -32,7 +32,7 @@ const STEPS = [
   },
 ];
 
-export function OnboardingModal({ onClose }: { onClose: () => void }) {
+export function OnboardingModal({ onClose, onCreateObra }: { onClose: () => void; onCreateObra?: () => void }) {
   const [step, setStep] = useState(0);
   const isLast = step === STEPS.length - 1;
   const current = STEPS[step];
@@ -40,6 +40,12 @@ export function OnboardingModal({ onClose }: { onClose: () => void }) {
   function finish() {
     markDone();
     onClose();
+  }
+
+  function finishAndCreate() {
+    markDone();
+    onClose();
+    onCreateObra?.();
   }
 
   return (
@@ -124,7 +130,7 @@ export function OnboardingModal({ onClose }: { onClose: () => void }) {
               Saltar
             </button>
             <button
-              onClick={() => (isLast ? finish() : setStep(s => s + 1))}
+              onClick={() => (isLast ? finishAndCreate() : setStep(s => s + 1))}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 7,
                 padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700,
@@ -132,7 +138,7 @@ export function OnboardingModal({ onClose }: { onClose: () => void }) {
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 14px -6px rgba(255,107,53,0.5)",
               }}
             >
-              {isLast ? "¡Empezar!" : "Siguiente"}
+              {isLast ? "Crear mi primera obra" : "Siguiente"}
               {!isLast && <ArrowRight style={{ width: 13, height: 13 }} />}
             </button>
           </div>
