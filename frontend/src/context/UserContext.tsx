@@ -30,7 +30,7 @@ function buildUser(api: { id: number; full_name: string; email: string; role: Us
 }
 
 const PLACEHOLDER: CurrentUser = {
-  id: 0, name: "", email: "", initials: "?", color: "#8E97A0", role: "collaborator", avatar_url: null,
+  id: 0, name: "", email: "", initials: "?", color: "#6B7580", role: "collaborator", avatar_url: null,
 };
 
 interface UserContextValue {

@@ -45,6 +45,16 @@ export function ReschedulingModal({
   const [affected, setAffected] = useState<CascadeAffectedTask[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(true);
 
+  // Esc cierra (cancela la reprogramación)
+  useEffect(() => {
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const oldStart = task.start_date;
   const oldDue   = task.due_date;
 

@@ -665,8 +665,9 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           background: "#fff",
           border: "1px solid #D5D9D5",
           borderRadius: 14,
-          overflowX: "auto",
-          overflowY: "clip",
+          // Scrollport propio: el header sticky ahora sí se pega al scrollear
+          maxHeight: "calc(100vh - 210px)",
+          overflow: "auto",
           fontFamily: "'Plus Jakarta Sans', sans-serif",
           outline: "none",
         }}

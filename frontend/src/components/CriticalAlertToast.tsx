@@ -89,7 +89,7 @@ export function CriticalAlertToast({ alert, onDismiss }: Props) {
             flexShrink: 0, width: 22, height: 22, borderRadius: 6,
             background: "transparent", border: "none",
             cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            color: "#ADAAA4", marginTop: -2,
+            color: "#7D7973", marginTop: -2,
             transition: "background 0.1s, color 0.1s",
           }}
           onMouseEnter={e => { e.currentTarget.style.background = "#F4F5F4"; e.currentTarget.style.color = "#5B6770"; }}

@@ -52,7 +52,7 @@ function AlertRow({ alert, onAlertClick, setOpen, obraName }: { alert: Alert; on
         }}>
           {alert.message}
         </p>
-        <span style={{ fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>
+        <span style={{ fontSize: 10.5, color: "#7D7973", fontFamily: "'JetBrains Mono', monospace" }}>
           {timeAgo(alert.created_at)}
         </span>
       </div>
@@ -209,7 +209,7 @@ export function AlertBell({ alerts, unreadCount, onAlertClick, obraNames, groupB
           {/* Alert list */}
           {recent.length === 0 ? (
             <div style={{ padding: "24px 14px", textAlign: "center" }}>
-              <p style={{ margin: 0, fontSize: 13, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <p style={{ margin: 0, fontSize: 13, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 Sin alertas pendientes
               </p>
             </div>

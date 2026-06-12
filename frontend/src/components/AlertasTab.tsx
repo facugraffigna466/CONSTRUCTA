@@ -197,7 +197,7 @@ export function AlertasTab({ alerts, tasks, onMarkRead, onMarkAllRead, onViewTas
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#3E4A52" }}>
               {alerts.length === 0 ? "No hay alertas para esta obra" : filter === "no_leidas" ? "No hay alertas pendientes" : "No hay alertas con este filtro"}
             </p>
-            <p style={{ margin: "3px 0 0", fontSize: 12, color: "#8E97A0" }}>
+            <p style={{ margin: "3px 0 0", fontSize: 12, color: "#6B7580" }}>
               {filter === "no_leidas" ? "Estás al día." : "Cambiá el filtro para ver más."}
             </p>
           </div>
@@ -247,7 +247,7 @@ export function AlertasTab({ alerts, tasks, onMarkRead, onMarkAllRead, onViewTas
 
                   {/* Date */}
                   <span style={{
-                    flexShrink: 0, fontSize: 11.5, color: "#ADAAA4",
+                    flexShrink: 0, fontSize: 11.5, color: "#7D7973",
                     fontFamily: "'JetBrains Mono', monospace", whiteSpace: "nowrap" as const,
                   }}>
                     {fmtDate(alert.created_at)}
@@ -274,7 +274,7 @@ export function AlertasTab({ alerts, tasks, onMarkRead, onMarkAllRead, onViewTas
                         </button>
                       )}
                       {alert.task_id != null && !taskExists && (
-                        <span style={{ fontSize: 10.5, color: "#ADAAA4", fontStyle: "italic" }}>
+                        <span style={{ fontSize: 10.5, color: "#7D7973", fontStyle: "italic" }}>
                           Tarea eliminada
                         </span>
                       )}
@@ -285,7 +285,7 @@ export function AlertasTab({ alerts, tasks, onMarkRead, onMarkAllRead, onViewTas
                           width: 30, height: 30, borderRadius: 8, border: "none",
                           background: "transparent", cursor: "pointer",
                           display: "flex", alignItems: "center", justifyContent: "center",
-                          color: "#ADAAA4", transition: "background 0.15s, color 0.15s",
+                          color: "#7D7973", transition: "background 0.15s, color 0.15s",
                         }}
                         onMouseEnter={e => { e.currentTarget.style.background = "#E4F3EC"; e.currentTarget.style.color = "#1F8A5B"; }}
                         onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#ADAAA4"; }}

@@ -79,7 +79,7 @@ function FieldLabel({ children, optional }: { children: React.ReactNode; optiona
         {children}
       </span>
       {optional && (
-        <span style={{ fontSize: 10.5, color: "#ADAAA4", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
+        <span style={{ fontSize: 10.5, color: "#7D7973", fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>
           (opcional)
         </span>
       )}
@@ -602,13 +602,13 @@ export function TaskFormModal({
                                 fontFamily: "'Plus Jakarta Sans', sans-serif",
                               }}
                             />
-                            <span style={{ fontSize: 10, color: "#8E97A0", whiteSpace: "nowrap" }}>d</span>
+                            <span style={{ fontSize: 10, color: "#6B7580", whiteSpace: "nowrap" }}>d</span>
                           </div>
                           {/* Remove */}
                           <button
                             type="button"
                             onClick={() => setDepLinks(prev => prev.filter((_, i) => i !== idx))}
-                            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#8E97A0", fontSize: 16, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}
+                            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, color: "#6B7580", fontSize: 16, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center" }}
                           >×</button>
                         </div>
                       );
@@ -620,7 +620,7 @@ export function TaskFormModal({
                 {depLinks.length > 0 && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {DEP_TYPES.map(dt => (
-                      <span key={dt.value} style={{ fontSize: 10.5, color: "#8E97A0" }}>
+                      <span key={dt.value} style={{ fontSize: 10.5, color: "#6B7580" }}>
                         <b style={{ color: "#5B6770" }}>{dt.value}</b> {dt.description}
                       </span>
                     ))}
@@ -724,7 +724,7 @@ export function TaskFormModal({
               </svg>
               {showAdvanced ? "Ocultar opciones avanzadas" : "Opciones avanzadas"}
               {!showAdvanced && (
-                <span style={{ fontWeight: 400, color: "#ADAAA4", fontSize: 11.5 }}>
+                <span style={{ fontWeight: 400, color: "#7D7973", fontSize: 11.5 }}>
                   descripción · subtarea · dependencias · hito · % avance
                 </span>
               )}
@@ -733,7 +733,7 @@ export function TaskFormModal({
             {/* Info notes */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: "#F4F5F4", borderRadius: 10, padding: "10px 14px" }}>
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 1, color: "#8E97A0" }}>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, marginTop: 1, color: "#6B7580" }}>
                   <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" fill="none"/>
                   <path d="M8 7v4M8 5.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                 </svg>
@@ -866,7 +866,7 @@ export function TaskFormModal({
                 onClick={() => setCascadePrompt(null)}
                 style={{
                   padding: "8px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
-                  color: "#8E97A0", background: "#fff", border: "none", cursor: "pointer",
+                  color: "#6B7580", background: "#fff", border: "none", cursor: "pointer",
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                 }}
               >

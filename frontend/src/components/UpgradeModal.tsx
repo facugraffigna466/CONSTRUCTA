@@ -76,7 +76,7 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
           </p>
           {info.current != null && info.limit != null && (
             <div style={{ marginTop: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#8E97A0", marginBottom: 4 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, color: "#6B7580", marginBottom: 4 }}>
                 <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{info.resource}</span>
                 <span style={{ fontWeight: 700, color: "#D03A3A" }}>{info.current}/{info.limit}</span>
               </div>

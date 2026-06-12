@@ -134,7 +134,7 @@ export function AppLayout({
 
           {/* Breadcrumb */}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0", flexShrink: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: "#6B7580", flexShrink: 0 }}>
               <path d="M2 13.5V7L8 2.5l6 4.5v6.5H2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
               <path d="M5.5 13.5V10h5v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
             </svg>
@@ -144,7 +144,7 @@ export function AppLayout({
             {pageSubtitle && (
               <>
                 <span style={{ fontSize: 11.5, color: "#C9D0D5" }}>/</span>
-                <span style={{ fontSize: 11.5, color: "#8E97A0", maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <span style={{ fontSize: 11.5, color: "#6B7580", maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {pageSubtitle}
                 </span>
               </>
@@ -201,7 +201,7 @@ export function AppLayout({
                     </div>
                   )}
                 </div>
-                <span style={{ fontSize: 11, color: "#8E97A0", fontWeight: 500, whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: 11, color: "#6B7580", fontWeight: 500, whiteSpace: "nowrap" }}>
                   {onlineUsers.length === 1 ? "1 en línea" : `${onlineUsers.length} en línea`}
                 </span>
               </div>

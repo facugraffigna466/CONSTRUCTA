@@ -161,7 +161,7 @@ export function ObraCompletenessChecklist({ obra, tasks, responsibles, onNavigat
                   {item.label}
                 </span>
                 {!item.done && (
-                  <span style={{ display: "block", fontSize: 11, color: "#8E97A0", marginTop: 1 }}>
+                  <span style={{ display: "block", fontSize: 11, color: "#6B7580", marginTop: 1 }}>
                     {item.hint}
                   </span>
                 )}

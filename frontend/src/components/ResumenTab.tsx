@@ -357,7 +357,7 @@ export function ResumenTab({
 
             {/* Rows */}
             {tasksWithoutDates.length === 0 ? (
-              <div style={{ padding: "32px 20px", textAlign: "center", color: "#8E97A0", fontSize: 13 }}>
+              <div style={{ padding: "32px 20px", textAlign: "center", color: "#6B7580", fontSize: 13 }}>
                 Todas las tareas tienen fechas definidas.
               </div>
             ) : (
@@ -430,7 +430,7 @@ export function ResumenTab({
                             <span style={{ width: 6, height: 6, borderRadius: 99, background: s.dot, flexShrink: 0 }} />
                             {s.label}
                           </span>
-                          <span style={{ fontSize: 12, color: "#8E97A0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <span style={{ fontSize: 12, color: "#6B7580", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {resp ? resp.full_name : "Sin responsable"}
                           </span>
                         </div>
