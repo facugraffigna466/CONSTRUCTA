@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import { fetchAlerts, markAlertRead } from "../api/alerts";
+import { fetchAlerts, markAlertRead, markAllAlertsRead } from "../api/alerts";
 import { fetchHistorial } from "../api/historial";
 import { fetchObraTeam } from "../api/obraTeam";
 import { fetchTasksByObra, updateTaskStatus } from "../api/tasks";
@@ -210,10 +210,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
   }
 
   async function handleMarkAllRead() {
-    const unread = alerts.filter((a) => !a.is_read);
-    if (unread.length === 0) return;
+    if (alerts.every((a) => a.is_read)) return;
     try {
-      const updated = await Promise.all(unread.map((a) => markAlertRead(a.id)));
+      const updated = await markAllAlertsRead(obra.id);
       setAlerts((prev) => prev.map((a) => updated.find((u) => u.id === a.id) ?? a));
     } catch { loadData(true); }
   }

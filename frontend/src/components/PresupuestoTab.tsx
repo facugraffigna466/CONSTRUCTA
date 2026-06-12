@@ -199,7 +199,7 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
               style={{
                 display: "inline-flex", alignItems: "center", gap: 6,
                 padding: "8px 16px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
-                color: "#fff", background: saving || selected.size === 0 ? "#F0A882" : "#FF6B35",
+                color: saving || selected.size === 0 ? "#8E97A0" : "#fff", background: saving || selected.size === 0 ? "#E6E7E5" : "#FF6B35",
                 border: "none", cursor: saving ? "wait" : "pointer",
               }}
             >
@@ -334,8 +334,8 @@ function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
               </button>
               <button onClick={handleSave} disabled={saving || !name.trim()} style={{
                 display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10,
-                fontSize: 12.5, fontWeight: 700, color: "#fff",
-                background: saving || !name.trim() ? "#F0A882" : "#FF6B35", border: "none",
+                fontSize: 12.5, fontWeight: 700, color: saving || !name.trim() ? "#8E97A0" : "#fff",
+                background: saving || !name.trim() ? "#E6E7E5" : "#FF6B35", border: "none",
                 cursor: saving ? "wait" : "pointer",
               }}>
                 {saving && <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} />}
@@ -519,8 +519,8 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
               disabled={tasks.length === 0}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 18px",
-                borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff",
-                background: tasks.length === 0 ? "#F0A882" : "#FF6B35", border: "none",
+                borderRadius: 10, fontSize: 13, fontWeight: 700, color: tasks.length === 0 ? "#8E97A0" : "#fff",
+                background: tasks.length === 0 ? "#E6E7E5" : "#FF6B35", border: "none",
                 cursor: tasks.length === 0 ? "not-allowed" : "pointer",
                 boxShadow: tasks.length === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
               }}

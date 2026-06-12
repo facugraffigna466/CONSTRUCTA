@@ -303,7 +303,9 @@ export function AppLayout({
           </div>
         </header>
 
-        <main className="flex-1 p-7 overflow-y-auto">
+        {/* sin overflow-y-auto: el scroll real es del documento (root min-h-screen);
+            un overflow inerte acá rompe el position:sticky de las páginas hijas */}
+        <main className="flex-1 p-7">
           {children}
         </main>
       </div>
