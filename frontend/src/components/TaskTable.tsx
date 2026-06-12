@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Pencil, Trash2, AlertTriangle, ChevronDown, X } from "lucide-react";
+import { useIsMobile } from "../hooks/useMediaQuery";
 import type { Responsible, Task, TaskStatus } from "../types";
 import type { Editor } from "../hooks/useEditingSimulation";
 
@@ -242,6 +243,7 @@ export function TaskTable({
   const hasActions = !!(onEdit || onDelete);
   const levelMap = buildLevelMap(tasks);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
+  const isMobile = useIsMobile();
 
   // ── Filter state ────────────────────────────────────────────────────────────
   const [statusFilter,      setStatusFilter]      = useState<Set<TaskStatus>>(new Set());
@@ -394,9 +396,9 @@ export function TaskTable({
   return (
     <div ref={filterRef} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", position: "relative" }}>
 
-      {/* ── Column header row ── */}
+      {/* ── Column header row (solo desktop) ── */}
       <div style={{
-        display: "grid",
+        display: isMobile ? "none" : "grid",
         gridTemplateColumns: hasActions
           ? "1fr 135px 95px 190px 155px 72px"
           : "1fr 135px 95px 190px 155px",
@@ -547,6 +549,54 @@ export function TaskTable({
           const isDanger    = task.status === "bloqueada" || overdue;
           const level       = levelMap.get(task.id) ?? 0;
           const isHovered   = hoveredId === task.id;
+
+          if (isMobile) {
+            return (
+              <li key={task.id} style={{
+                padding: "12px 14px",
+                borderBottom: idx < displayRows.length - 1 ? "1px solid #F2F0EC" : "none",
+                background: isHighlight ? "rgba(255,107,53,0.06)" : idx % 2 === 1 ? "#FBFAF7" : "transparent",
+                position: "relative",
+              }}>
+                {isDanger && (
+                  <div style={{ position: "absolute", left: 0, top: 8, bottom: 8, width: 3, borderRadius: "0 2px 2px 0", background: style.stripe }} />
+                )}
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0, paddingLeft: level * 12 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1A2329", lineHeight: 1.35 }}>{task.title}</div>
+                    {task.description && (
+                      <div style={{ fontSize: 11.5, color: "#8E97A0", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>
+                    )}
+                  </div>
+                  {hasActions && (
+                    <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+                      {onEdit && (
+                        <button onClick={() => onEdit(task)} aria-label="Editar tarea" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #EFECE6", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#5B6770" }}>
+                          <Pencil style={{ width: 13, height: 13 }} />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button onClick={() => onDelete(task)} aria-label="Eliminar tarea" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #EFECE6", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+                          <Trash2 style={{ width: 13, height: 13 }} />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 9, flexWrap: "wrap" }}>
+                  <StatusDropdown task={task} onStatusChange={onStatusChange} />
+                  <span style={{ fontSize: 11.5, color: overdue ? "#D03A3A" : "#5B6770", fontWeight: overdue ? 700 : 500, fontFamily: "'JetBrains Mono', monospace" }}>
+                    {fmtDate(task.due_date)}
+                  </span>
+                  {overdue && <span style={{ padding: "1px 5px", borderRadius: 4, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", background: "#FCE5E5", color: "#D03A3A" }}>Vencida</span>}
+                  {dueSoon && <span style={{ padding: "1px 5px", borderRadius: 4, fontSize: 9.5, fontWeight: 700, textTransform: "uppercase", background: "#FDF1DE", color: "#C97D0E" }}>{task.due_date === TODAY ? "Vence hoy" : "Por vencer"}</span>}
+                  <span style={{ marginLeft: "auto" }}>
+                    <ResponsableAvatar task={task} responsibles={responsibles} />
+                  </span>
+                </div>
+              </li>
+            );
+          }
 
           return (
             <li

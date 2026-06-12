@@ -396,7 +396,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
         <>
           {/* ── KPI Strip ── */}
           {obras.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 22 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 22 }}>
               <KpiCard
                 label="Total obras"
                 value={obras.length}
@@ -513,7 +513,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                   {q ? `Sin resultados para "${search}"` : "No hay obras con este filtro."}
                 </div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 18 }}>
                   {filteredObras.map(obra => (
                     <ObraCard
                       key={obra.id}
