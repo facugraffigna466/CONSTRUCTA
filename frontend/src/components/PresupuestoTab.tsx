@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Mail, MessageCircle, PackageCheck, ShoppingCart, X } from "lucide-react";
+import { Download, Loader2, Mail, MessageCircle, PackageCheck, Plus, ShoppingCart, X } from "lucide-react";
 import {
   createPurchaseOrder,
   exportPresupuestoExcel,
@@ -12,7 +12,8 @@ import {
   type PurchaseOrder,
 } from "../api/purchaseOrders";
 import { fetchSuppliers } from "../api/suppliers";
-import type { Supplier } from "../types";
+import { createMaterial } from "../api/taskMaterials";
+import type { Supplier, Task } from "../types";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 
@@ -212,15 +213,152 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
   );
 }
 
+// ─── Modal: agregar ítem (material) eligiendo la tarea ────────────────────────
+
+function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
+  tasks: Task[];
+  suppliers: Supplier[];
+  onClose: () => void;
+  onAdded: () => void;
+}) {
+  const [taskId, setTaskId]     = useState<string>(tasks[0] ? String(tasks[0].id) : "");
+  const [name, setName]         = useState("");
+  const [qty, setQty]           = useState("");
+  const [unit, setUnit]         = useState("");
+  const [price, setPrice]       = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [saving, setSaving]     = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [addAnother, setAddAnother] = useState(true);
+
+  async function handleSave() {
+    if (!taskId) { setError("Elegí a qué tarea pertenece el material."); return; }
+    if (!name.trim()) { setError("Ingresá el nombre del material."); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      await createMaterial(Number(taskId), {
+        name: name.trim(),
+        quantity: qty ? Number(qty) : null,
+        unit: unit.trim() || null,
+        unit_price: price ? Number(price) : null,
+        supplier_id: supplierId ? Number(supplierId) : null,
+      });
+      onAdded();
+      if (addAnother) {
+        setName(""); setQty(""); setUnit(""); setPrice("");
+      } else {
+        onClose();
+      }
+    } catch {
+      setError("No se pudo agregar el material.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const inp: React.CSSProperties = {
+    width: "100%", boxSizing: "border-box", padding: "8px 10px", fontSize: 13,
+    border: "1px solid #E6E7E5", borderRadius: 10, fontFamily: FONT, color: "#1A2329", outline: "none",
+  };
+  const lbl: React.CSSProperties = {
+    display: "block", fontSize: 10.5, fontWeight: 700, textTransform: "uppercase",
+    letterSpacing: "0.08em", color: "#5B6770", marginBottom: 5,
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(15,22,28,0.5)", padding: 16 }}>
+      <div style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 460, boxShadow: "0 24px 48px -12px rgba(15,22,28,0.35)", fontFamily: FONT }}>
+        <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid #F0F1EF", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: "#1A2329" }}>Agregar ítem al presupuesto</h3>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8E97A0" }}>El material queda asociado a una tarea de la obra</p>
+          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", color: "#8E97A0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <X style={{ width: 13, height: 13 }} />
+          </button>
+        </div>
+
+        <div style={{ padding: "16px 22px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {tasks.length === 0 ? (
+            <p style={{ margin: 0, fontSize: 13, color: "#C97D0E", fontWeight: 600 }}>
+              Esta obra todavía no tiene tareas. Creá una tarea primero en el tab Tareas.
+            </p>
+          ) : (
+            <>
+              <div>
+                <label style={lbl}>Tarea</label>
+                <select value={taskId} onChange={e => setTaskId(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                  {tasks.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Material</label>
+                <input style={inp} placeholder="Ej: Cemento Portland" value={name} onChange={e => setName(e.target.value)} autoFocus />
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                <div>
+                  <label style={lbl}>Cantidad</label>
+                  <input style={inp} type="number" min="0" placeholder="50" value={qty} onChange={e => setQty(e.target.value)} />
+                </div>
+                <div>
+                  <label style={lbl}>Unidad</label>
+                  <input style={inp} placeholder="bolsas" value={unit} onChange={e => setUnit(e.target.value)} />
+                </div>
+                <div>
+                  <label style={lbl}>$ unit.</label>
+                  <input style={inp} type="number" min="0" placeholder="8000" value={price} onChange={e => setPrice(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label style={lbl}>Proveedor (opcional)</label>
+                <select value={supplierId} onChange={e => setSupplierId(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                  <option value="">Sin proveedor</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}{s.category ? ` · ${s.category}` : ""}</option>)}
+                </select>
+              </div>
+              {error && <p style={{ margin: 0, fontSize: 12, color: "#D03A3A", fontWeight: 600 }}>{error}</p>}
+            </>
+          )}
+        </div>
+
+        {tasks.length > 0 && (
+          <div style={{ padding: "14px 22px 18px", borderTop: "1px solid #F0F1EF", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#5B6770", cursor: "pointer" }}>
+              <input type="checkbox" checked={addAnother} onChange={e => setAddAnother(e.target.checked)} style={{ accentColor: "#FF6B35" }} />
+              Seguir agregando
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={onClose} disabled={saving} style={{ padding: "8px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer" }}>
+                Cerrar
+              </button>
+              <button onClick={handleSave} disabled={saving || !name.trim()} style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 10,
+                fontSize: 12.5, fontWeight: 700, color: "#fff",
+                background: saving || !name.trim() ? "#F0A882" : "#FF6B35", border: "none",
+                cursor: saving ? "wait" : "pointer",
+              }}>
+                {saving && <Loader2 style={{ width: 12, height: 12, animation: "spin 1s linear infinite" }} />}
+                Agregar ítem
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Tab principal ────────────────────────────────────────────────────────────
 
-export function PresupuestoTab({ obraId, obraName }: { obraId: number; obraName: string }) {
+export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: number; obraName: string; tasks?: Task[] }) {
   const [data, setData] = useState<PresupuestoResponse | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
+  const [showAddMaterial, setShowAddMaterial] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [actingOrder, setActingOrder] = useState<number | null>(null);
 
@@ -312,6 +450,17 @@ export function PresupuestoTab({ obraId, obraName }: { obraId: number; obraName:
       {/* ── Acciones ── */}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button
+          onClick={() => setShowAddMaterial(true)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px",
+            borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: "#1A2329",
+            background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", marginRight: "auto",
+          }}
+        >
+          <Plus style={{ width: 13, height: 13 }} />
+          Agregar ítem
+        </button>
+        <button
           onClick={async () => { setExporting(true); try { await exportPresupuestoExcel(obraId, obraName); } finally { setExporting(false); } }}
           disabled={exporting || data.rows.length === 0}
           style={{
@@ -353,11 +502,34 @@ export function PresupuestoTab({ obraId, obraName }: { obraId: number; obraName:
         </div>
 
         {groups.length === 0 && (
-          <div style={{ padding: "36px 24px", textAlign: "center" }}>
+          <div style={{ padding: "40px 24px", textAlign: "center" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FFF0E8", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+              <ShoppingCart style={{ width: 20, height: 20, color: "#E76A2D" }} />
+            </div>
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#3E4A52" }}>Todavía no hay materiales cargados</p>
-            <p style={{ margin: "4px 0 0", fontSize: 12, color: "#8E97A0" }}>
-              Agregalos desde el tab Tareas: editá una tarea y completá la sección Materiales.
+            <p style={{ margin: "4px 0 14px", fontSize: 12, color: "#8E97A0" }}>
+              Empezá agregando un ítem y elegí a qué tarea de la obra pertenece.
             </p>
+            <button
+              onClick={() => setShowAddMaterial(true)}
+              disabled={tasks.length === 0}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 18px",
+                borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff",
+                background: tasks.length === 0 ? "#F0A882" : "#FF6B35", border: "none",
+                cursor: tasks.length === 0 ? "not-allowed" : "pointer",
+                boxShadow: tasks.length === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
+              }}
+              title={tasks.length === 0 ? "Creá una tarea primero en el tab Tareas" : undefined}
+            >
+              <Plus style={{ width: 14, height: 14 }} />
+              Agregar primer ítem
+            </button>
+            {tasks.length === 0 && (
+              <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#C97D0E" }}>
+                Necesitás al menos una tarea en la obra. Creala en el tab Tareas.
+              </p>
+            )}
           </div>
         )}
 
@@ -460,6 +632,15 @@ export function PresupuestoTab({ obraId, obraName }: { obraId: number; obraName:
           suppliers={suppliers}
           onClose={() => setShowOrderModal(false)}
           onCreated={() => { setShowOrderModal(false); load(); }}
+        />
+      )}
+
+      {showAddMaterial && (
+        <AddMaterialModal
+          tasks={tasks}
+          suppliers={suppliers}
+          onClose={() => setShowAddMaterial(false)}
+          onAdded={load}
         />
       )}
     </div>
