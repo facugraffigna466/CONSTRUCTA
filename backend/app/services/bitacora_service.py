@@ -127,7 +127,7 @@ class BitacoraService:
             "https://api.openai.com/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
             files={"file": (filename, audio_bytes)},
-            data={"model": "whisper-1", "language": "es"},
+            data={"model": settings.WHISPER_MODEL, "language": "es"},
             timeout=120,
         )
         resp.raise_for_status()
