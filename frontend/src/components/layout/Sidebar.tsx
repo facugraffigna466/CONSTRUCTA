@@ -34,6 +34,7 @@ interface SidebarProps {
   onTabChange?: (tab: ObraTab) => void;
   obraCounts?: { tasks: number; alerts: number };
   currentUser?: { name: string; initials: string; color: string; roleLabel: string };
+  workspaceName?: string | null;
   collapsed?: boolean;
   onToggle?: () => void;
 }
@@ -111,7 +112,9 @@ function NavItem({
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, workspaceName, collapsed = false, onToggle }: SidebarProps) {
+  const wsName = workspaceName || "Mi empresa";
+  const wsInitials = wsName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "ME";
   const { role } = useUser();
   const isAdmin = role === "admin";
   return (
@@ -181,9 +184,9 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           color: "#fff", fontWeight: 700, fontSize: 11,
           display: "flex", alignItems: "center", justifyContent: "center",
           fontFamily: "'Plus Jakarta Sans', sans-serif",
-        }}>EV</div>
+        }}>{wsInitials}</div>
         <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2 }}>
-          <div style={{ color: "#fff", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Estudio Velar</div>
+          <div style={{ color: "#fff", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wsName}</div>
           <div style={{ fontSize: 10.5, color: "#8C969C", letterSpacing: "0.04em" }}>Workspace</div>
         </div>
         <ChevronDownIcon style={{ width: 12, height: 12, color: "#6B767E", flexShrink: 0 }} />
@@ -262,6 +265,12 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
               onClick={() => onTabChange("historial")}
               icon={<ClockIcon style={ICON_SIZE} />}
             />
+            <NavItem
+              label="Bitácora de obra"
+              active={activePage === "bitacora"}
+              onClick={() => onNavigate("bitacora")}
+              icon={<ChatBubbleLeftEllipsisIcon style={ICON_SIZE} />}
+            />
           </>
         )}
       </nav>
@@ -313,9 +322,8 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
             Próximamente
           </div>
           <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {(["bitacora", "presupuestos"] as const).map((page) => {
+            {(["presupuestos"] as const).map((page) => {
               const meta = {
-                bitacora:     { label: "Bitácora de Obra", icon: <ChatBubbleLeftEllipsisIcon style={ICON_SIZE} /> },
                 presupuestos: { label: "Presupuestos",     icon: <DocumentTextIcon style={ICON_SIZE} /> },
               }[page];
               const isActive = activePage === page;

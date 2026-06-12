@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type ChangeEvent } from "react";
 import { X, AlertTriangle, Loader2 } from "lucide-react";
 import { createResponsible, updateResponsible } from "../api/responsibles";
+import { normalizePhone, PHONE_ERROR_HINT } from "../utils/phone";
 import { Button } from "./ui/Button";
 import type { Responsible } from "../types";
 
@@ -58,8 +59,8 @@ export function ResponsibleFormModal({
       e.fullName = "El nombre es obligatorio (mínimo 2 caracteres).";
     if (!whatsapp.trim())
       e.whatsapp = "El número de WhatsApp es obligatorio.";
-    else if (!/^\+\d{7,15}$/.test(whatsapp.trim()))
-      e.whatsapp = "Formato inválido. Usá el formato internacional: +549...";
+    else if (!/^\+\d{7,15}$/.test(normalizePhone(whatsapp)))
+      e.whatsapp = PHONE_ERROR_HINT;
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -74,13 +75,13 @@ export function ResponsibleFormModal({
       if (mode === "create") {
         saved = await createResponsible({
           full_name: fullName.trim(),
-          whatsapp_number: whatsapp.trim(),
+          whatsapp_number: normalizePhone(whatsapp),
           role: role.trim() || null,
         });
       } else {
         saved = await updateResponsible(responsible!.id, {
           full_name: fullName.trim(),
-          whatsapp_number: whatsapp.trim(),
+          whatsapp_number: normalizePhone(whatsapp),
           role: role.trim() || null,
         });
       }

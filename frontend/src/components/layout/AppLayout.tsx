@@ -95,6 +95,7 @@ export function AppLayout({
         onTabChange={(t) => { if (isCompact) setSidebarCollapsed(true); onTabChange?.(t); }}
         obraCounts={obraCounts}
         currentUser={{ name: displayUser.name, initials: displayUser.initials, color: displayUser.color, roleLabel: ROLE_LABELS[role] }}
+        workspaceName={user.tenant_name}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(v => !v)}
       />

@@ -24,13 +24,13 @@ async def create_obra(data: ObraCreate, db: DbSession, current_user: CurrentUser
 
 
 @router.get("", response_model=list[ObraSummary])
-async def list_obras(db: DbSession, _: CurrentUserId):
-    return await ObraService(db).list_all()
+async def list_obras(db: DbSession, current_user: CurrentUser):
+    return await ObraService(db).list_all(tenant_id=current_user.tenant_id)
 
 
 @router.get("/{obra_id}", response_model=ObraRead)
-async def get_obra(obra_id: int, db: DbSession, _: CurrentUserId):
-    return await ObraService(db).get_or_raise(obra_id)
+async def get_obra(obra_id: int, db: DbSession, current_user: CurrentUser):
+    return await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
 
 
 @router.patch("/{obra_id}", response_model=ObraRead)

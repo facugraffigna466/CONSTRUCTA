@@ -15,13 +15,13 @@ class ResponsibleService:
         self.task_repo = TaskRepository(session)
         self.historial = HistorialRepository(session)
 
-    async def create(self, data: ResponsibleCreate) -> Responsible:
+    async def create(self, data: ResponsibleCreate, tenant_id: int | None = None) -> Responsible:
         existing = await self.repo.get_by_whatsapp(data.whatsapp_number)
         if existing:
             raise ConflictError(
                 f"A responsible with number {data.whatsapp_number} already exists"
             )
-        responsible = Responsible(**data.model_dump())
+        responsible = Responsible(**data.model_dump(), tenant_id=tenant_id)
         return await self.repo.create(responsible)
 
     async def get_or_raise(self, responsible_id: int) -> Responsible:
@@ -39,10 +39,10 @@ class ResponsibleService:
         tasks = await self.task_repo.list_by_responsible(responsible.id)
         return responsible, tasks
 
-    async def list_all(self, active_only: bool = False) -> list[Responsible]:
+    async def list_all(self, active_only: bool = False, tenant_id: int | None = None) -> list[Responsible]:
         if active_only:
-            return await self.repo.list_active()
-        return await self.repo.list_all()
+            return await self.repo.list_active(tenant_id=tenant_id)
+        return await self.repo.list_all(tenant_id=tenant_id)
 
     async def update(self, responsible_id: int, data: ResponsibleUpdate) -> Responsible:
         await self.get_or_raise(responsible_id)

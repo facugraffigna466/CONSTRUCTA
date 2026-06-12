@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { login } from "../api/auth";
+import { login, register } from "../api/auth";
 import { setToken } from "../lib/tokenStorage";
-import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, ArrowRightIcon } from "@heroicons/react/24/outline";
+import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, ArrowRightIcon, UserIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -9,8 +9,11 @@ interface LoginPageProps {
 
 
 export function LoginPage({ onLogin }: LoginPageProps) {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [companyName, setCompanyName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,16 +24,49 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     return () => clearTimeout(t);
   }, []);
 
+  function switchMode(m: "login" | "register") {
+    setMode(m);
+    setError(null);
+  }
+
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
+      if (mode === "register") {
+        if (fullName.trim().length < 2) {
+          setError("Ingresá tu nombre completo.");
+          return;
+        }
+        try {
+          await register({
+            email,
+            password,
+            full_name: fullName.trim(),
+            company_name: companyName.trim() || undefined,
+          });
+        } catch (err: unknown) {
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          setError(
+            status === 409
+              ? "Ya existe una cuenta con ese email. Probá ingresando."
+              : status === 422
+                ? "Revisá los datos: la contraseña debe tener al menos 8 caracteres."
+                : "No se pudo crear la cuenta. Intentá nuevamente.",
+          );
+          return;
+        }
+      }
       const token = await login(email, password);
       setToken(token);
       onLogin();
     } catch {
-      setError("Credenciales inválidas. Verificá tu email y contraseña.");
+      setError(
+        mode === "register"
+          ? "La cuenta se creó pero no pudimos iniciar sesión. Probá ingresando."
+          : "Credenciales inválidas. Verificá tu email y contraseña.",
+      );
     } finally {
       setLoading(false);
     }
@@ -135,15 +171,56 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           {/* Heading */}
           <div className="mb-8">
             <h2 className="font-display text-2xl xl:text-3xl font-bold text-constructa-text tracking-tight mb-1.5">
-              Accedé al sistema
+              {mode === "login" ? "Accedé al sistema" : "Creá tu cuenta"}
             </h2>
             <p className="text-sm text-constructa-secondaryText">
-              Ingresá tus credenciales para continuar.
+              {mode === "login"
+                ? "Ingresá tus credenciales para continuar."
+                : "Tu empresa, tus obras, tu equipo — en 30 segundos."}
             </p>
           </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+
+            {/* Nombre + Empresa — solo registro */}
+            {mode === "register" && (
+              <>
+                <div>
+                  <label className="block font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-constructa-secondaryText mb-2">
+                    Tu nombre
+                  </label>
+                  <div className="relative flex items-center bg-white border rounded-lg focus-within:ring-2 transition-all duration-200 border-constructa-border focus-within:border-constructa-primary focus-within:ring-constructa-primary/15">
+                    <UserIcon className="absolute left-3.5 w-4 h-4 text-constructa-border flex-shrink-0" />
+                    <input
+                      type="text"
+                      autoComplete="name"
+                      required
+                      value={fullName}
+                      onChange={(e) => { setFullName(e.target.value); setError(null); }}
+                      placeholder="Raúl Méndez"
+                      className="w-full pl-10 pr-4 py-3 bg-transparent text-sm text-constructa-text placeholder-constructa-border focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-constructa-secondaryText mb-2">
+                    Empresa / Estudio <span className="normal-case tracking-normal">(opcional)</span>
+                  </label>
+                  <div className="relative flex items-center bg-white border rounded-lg focus-within:ring-2 transition-all duration-200 border-constructa-border focus-within:border-constructa-primary focus-within:ring-constructa-primary/15">
+                    <BuildingOffice2Icon className="absolute left-3.5 w-4 h-4 text-constructa-border flex-shrink-0" />
+                    <input
+                      type="text"
+                      autoComplete="organization"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="Constructora del Sur"
+                      className="w-full pl-10 pr-4 py-3 bg-transparent text-sm text-constructa-text placeholder-constructa-border focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Email */}
             <div>
@@ -181,11 +258,12 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 <LockClosedIcon className="absolute left-3.5 w-4 h-4 text-constructa-border flex-shrink-0" />
                 <input
                   type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
+                  autoComplete={mode === "register" ? "new-password" : "current-password"}
                   required
+                  minLength={mode === "register" ? 8 : undefined}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••"
+                  placeholder={mode === "register" ? "Mínimo 8 caracteres" : "••••••••••"}
                   className="w-full pl-10 pr-12 py-3 bg-transparent text-sm text-constructa-text placeholder-constructa-border focus:outline-none"
                 />
                 <button
@@ -228,18 +306,38 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
-                    Ingresando...
+                    {mode === "register" ? "Creando cuenta..." : "Ingresando..."}
                   </span>
                 ) : (
                   <>
-                    Ingresar
+                    {mode === "register" ? "Crear cuenta y empezar" : "Ingresar"}
                     <ArrowRightIcon className="w-4 h-4" />
                   </>
                 )}
               </button>
-              <p className="text-center text-xs text-constructa-secondaryText mt-3 mb-0">
-                ¿No podés entrar? Pedile al administrador de tu empresa que restablezca tu acceso.
-              </p>
+              {mode === "login" ? (
+                <p className="text-center text-xs text-constructa-secondaryText mt-3 mb-0">
+                  ¿Primera vez en CONSTRUCTA?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchMode("register")}
+                    className="text-constructa-primary font-semibold hover:underline"
+                  >
+                    Creá la cuenta de tu empresa
+                  </button>
+                </p>
+              ) : (
+                <p className="text-center text-xs text-constructa-secondaryText mt-3 mb-0">
+                  ¿Ya tenés cuenta?{" "}
+                  <button
+                    type="button"
+                    onClick={() => switchMode("login")}
+                    className="text-constructa-primary font-semibold hover:underline"
+                  >
+                    Ingresá
+                  </button>
+                </p>
+              )}
             </div>
           </form>
 

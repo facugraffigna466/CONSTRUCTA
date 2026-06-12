@@ -76,6 +76,11 @@ class ObraSummary(BaseModel):
     expected_end_date: date | None
     actual_end_date: date | None
     manager_id: int
+    # comitente: el detalle de obra y el checklist de completitud se montan sobre
+    # el objeto del listado — si faltan acá, el checklist los marca incompletos
+    client_name: str | None = None
+    client_email: str | None = None
+    client_phone: str | None = None
     completed_tasks: int = 0
     total_tasks: int = 0
 

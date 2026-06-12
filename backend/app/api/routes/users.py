@@ -14,8 +14,14 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 @router.get("/me", response_model=UserRead)
-async def me(current_user: CurrentUser):
-    return current_user
+async def me(current_user: CurrentUser, db: DbSession):
+    out = UserRead.model_validate(current_user)
+    if current_user.tenant_id:
+        from app.models.tenant import Tenant
+        tenant = await db.get(Tenant, current_user.tenant_id)
+        if tenant:
+            out = out.model_copy(update={"tenant_name": tenant.name})
+    return out
 
 
 @router.patch("/me", response_model=UserRead)
@@ -39,7 +45,7 @@ async def change_password(data: ChangePasswordRequest, current_user: CurrentUser
 
 @router.get("", response_model=list[UserRead])
 async def list_members(current_user: AdminUser, db: DbSession):
-    return await UserRepository(db).list_all()
+    return await UserRepository(db).list_all(tenant_id=current_user.tenant_id)
 
 
 @router.post("/invite", response_model=InviteResponse, status_code=201)

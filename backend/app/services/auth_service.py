@@ -20,13 +20,13 @@ class AuthService:
     async def register(self, data: UserCreate) -> User:
         if await self.repo.get_by_email(data.email):
             raise ConflictError("Email already registered")
-        # First user ever becomes admin
-        role = "admin" if await self.repo.count() == 0 else "collaborator"
+        # Quien se registra crea su propia empresa → es admin de ese espacio.
+        # (Los colaboradores entran por invitación, no por registro.)
         user = User(
             email=data.email,
             hashed_password=hash_password(data.password),
             full_name=data.full_name,
-            role=role,
+            role="admin",
             is_active=True,
         )
         user = await self.repo.create(user)
@@ -40,7 +40,7 @@ class AuthService:
             select(Plan).where(Plan.name == "basico")
         )).scalar_one_or_none()
         tenant = Tenant(
-            name=f"Empresa de {data.full_name or data.email}",
+            name=data.company_name or f"Empresa de {data.full_name or data.email}",
             plan_id=basico.id if basico else None,
             owner_user_id=user.id,
         )

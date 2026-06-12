@@ -28,9 +28,13 @@ class ObraService:
         )
         return obra
 
-    async def get_or_raise(self, obra_id: int) -> Obra:
+    async def get_or_raise(self, obra_id: int, tenant_id: int | None = None) -> Obra:
         obra = await self.repo.get(obra_id)
         if not obra:
+            raise NotFoundError("Obra", obra_id)
+        # Aislamiento multi-tenant: una obra de otra empresa se reporta como
+        # inexistente (404, no 403 — no filtrar qué ids existen)
+        if tenant_id is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
             raise NotFoundError("Obra", obra_id)
         return obra
 
@@ -43,8 +47,8 @@ class ObraService:
     async def list_mine(self, manager_id: int) -> list[Obra]:
         return await self.repo.list_by_manager(manager_id)
 
-    async def list_all(self) -> list[dict]:
-        obras = await self.repo.list_all()
+    async def list_all(self, tenant_id: int | None = None) -> list[dict]:
+        obras = await self.repo.list_all(tenant_id=tenant_id)
         result = []
         for o in obras:
             non_cancelled = [t for t in o.tasks if t.status != TaskStatus.CANCELADA]
@@ -54,6 +58,8 @@ class ObraService:
                 "location": o.location, "image_url": o.image_url,
                 "start_date": o.start_date, "expected_end_date": o.expected_end_date,
                 "actual_end_date": o.actual_end_date, "manager_id": o.manager_id,
+                "client_name": o.client_name, "client_email": o.client_email,
+                "client_phone": o.client_phone,
                 "completed_tasks": len(completed),
                 "total_tasks": len(non_cancelled),
             })

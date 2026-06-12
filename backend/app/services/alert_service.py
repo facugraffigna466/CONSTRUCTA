@@ -18,8 +18,8 @@ class AlertService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def list_all(self, unread_only: bool = False) -> list[Alert]:
-        return await self.repo.list_all(unread_only=unread_only)
+    async def list_all(self, unread_only: bool = False, tenant_id: int | None = None) -> list[Alert]:
+        return await self.repo.list_all(unread_only=unread_only, tenant_id=tenant_id)
 
     async def mark_read(self, alert_id: int) -> Alert:
         alert = await self.repo.get(alert_id)
@@ -30,8 +30,8 @@ class AlertService:
         updated = await self.repo.update_fields(alert_id, is_read=True)
         return updated  # type: ignore[return-value]
 
-    async def mark_all_read(self, obra_id: int | None = None) -> list[Alert]:
-        return await self.repo.mark_all_read(obra_id=obra_id)
+    async def mark_all_read(self, obra_id: int | None = None, tenant_id: int | None = None) -> list[Alert]:
+        return await self.repo.mark_all_read(obra_id=obra_id, tenant_id=tenant_id)
 
     async def evaluate_task_risks_for_obra(self, obra_id: int) -> int:
         """

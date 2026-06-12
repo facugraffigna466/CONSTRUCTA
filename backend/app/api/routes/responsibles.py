@@ -17,18 +17,18 @@ router = APIRouter(prefix="/responsibles", tags=["responsibles"])
 
 @router.post("", response_model=ResponsibleRead, status_code=status.HTTP_201_CREATED)
 async def create_responsible(
-    data: ResponsibleCreate, db: DbSession, _: AdminUser
+    data: ResponsibleCreate, db: DbSession, current_user: AdminUser
 ):
-    return await ResponsibleService(db).create(data)
+    return await ResponsibleService(db).create(data, tenant_id=current_user.tenant_id)
 
 
 @router.get("", response_model=list[ResponsibleRead])
 async def list_responsibles(
     db: DbSession,
-    _: CurrentUserId,
+    current_user: CurrentUser,
     active_only: Annotated[bool, Query()] = False,
 ):
-    return await ResponsibleService(db).list_all(active_only=active_only)
+    return await ResponsibleService(db).list_all(active_only=active_only, tenant_id=current_user.tenant_id)
 
 
 @router.get("/lookup", response_model=ResponsibleWithTasksRead)
