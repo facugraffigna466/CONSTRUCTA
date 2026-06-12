@@ -1155,3 +1155,32 @@ Se retomó el stash "plans-monetization pendiente" (WIP previo) y se completó:
 
 ### Validation
 - Migración 0024 aplicada en BD local · import backend ✓ (5 rutas nuevas) · `npm run build` ✓ · ESLint sin errores nuevos bloqueantes.
+
+---
+
+## 2026-06-12 — Módulo Bitácora de obra (audios de WhatsApp + IA) y auditoría UX
+
+### Bitácora de obra — qué hace
+El jefe de obra graba un audio (desde WhatsApp en la obra, o desde la app con el micrófono) → la IA lo transcribe, lo resume, marca los puntos clave y **propone acciones sobre el plan**: mover fechas de tareas, crear tareas nuevas, cambiar estados. El usuario revisa cada sugerencia y la aplica con un click (la reprogramación usa el cascade de dependientes).
+
+### Backend
+- Migración 0026→0025: tabla `bitacora_entries` (obra, responsable, fuente whatsapp/web, audio, transcripción, resumen, key_points JSON, suggestions JSON, estado del pipeline).
+- `bitacora_service.py`: transcripción vía **Whisper** (OpenAI API, opcional — `OPENAI_API_KEY`), análisis vía **Claude** (`claude-opus-4-8` con structured outputs → JSON garantizado contra schema; `ANTHROPIC_API_KEY` + `CLAUDE_MODEL` en .env). El prompt incluye el contexto real de la obra (tareas con ids/fechas/estados) y la fecha de hoy para resolver "la semana que viene". Degradación con gracia: sin keys, las entradas quedan pendientes con instrucciones claras y se puede cargar el texto a mano.
+- `apply_suggestion`: reschedule_task → `TaskService.update` con `cascade_dates=True`; create_task → `TaskService.create` (matchea responsable por nombre); update_status → endpoint de estado; note → evento de historial. Todo queda en historial.
+- Rutas: POST audio/texto por obra, GET lista, transcript manual, reprocess, asignar obra, apply/dismiss por sugerencia, delete.
+- WhatsApp: en `message_service`, los audios entrantes van a la bitácora (no al chatbot): descarga el media de Twilio, infiere la obra (la de más tareas activas del responsable, o su única obra del equipo), procesa y responde con el resumen por WhatsApp.
+- SDK `anthropic` instalado en `.venv`. Config nueva: `OPENAI_API_KEY`; `CLAUDE_MODEL` ahora default `claude-opus-4-8`.
+
+### Frontend
+- `BitacoraPage` real (reemplaza el "próximamente"): grabación con micrófono (MediaRecorder), subida de archivo de audio, entrada de texto; selector de obra; tarjetas por entrada con player de audio, resumen, puntos clave, transcripción colapsable y **tarjetas de sugerencia** con la cita que las justifica y botones Aplicar/Descartar; asignación de obra para audios de WhatsApp ambiguos; reintento de análisis.
+- `api/bitacora.ts` con timeouts extendidos (transcripción+análisis tardan).
+
+### Validación
+- Migración 0025 aplicada · import backend OK (9 rutas) · `npm run build` ✓.
+- E2E contra servidor de prueba: texto sin API key → degrada con mensaje claro; sugerencias simuladas → aplicar movió fechas de tarea real y creó tarea nueva; datos de prueba revertidos.
+
+### Para activar la IA (pendiente del usuario)
+En `backend/.env`: `ANTHROPIC_API_KEY=sk-ant-...` (análisis) y `OPENAI_API_KEY=sk-...` (transcripción de audio). Sin la segunda, los audios quedan guardados y el texto se puede cargar a mano.
+
+### Auditoría UX/UI (agente paralelo)
+Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla tipo Excel que pide el cliente pero está escondida (propuesta "Excel-first" con 13 cambios S/M/L), cero soporte mobile (P0), pérdida de datos al cerrar el wizard, inconsistencia de "duración" entre modal y planilla, datos fake en Portfolio/login, ~25 hallazgos P0-P2, 12 quick wins y roadmap de 5 sprints.
