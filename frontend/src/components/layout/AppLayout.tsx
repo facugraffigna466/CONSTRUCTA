@@ -1,4 +1,5 @@
 import { UserCircleIcon, UserPlusIcon, ArrowRightStartOnRectangleIcon } from "@heroicons/react/24/outline";
+import { useIsCompact } from "../../hooks/useMediaQuery";
 import type React from "react";
 import type { ReactNode } from "react";
 import { useRef, useState, useEffect } from "react";
@@ -50,7 +51,10 @@ export function AppLayout({
   const [dropdownOpen, setDropdownOpen]       = useState(false);
   const [showInvite, setShowInvite]           = useState(false);
   const [showProfile, setShowProfile]         = useState(false);
+  const isCompact = useIsCompact();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // En pantallas chicas el sidebar arranca cerrado y se abre como drawer
+  useEffect(() => { setSidebarCollapsed(isCompact); }, [isCompact]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef   = useRef<HTMLDivElement>(null);
 
@@ -74,27 +78,34 @@ export function AppLayout({
 
   return (
     <div className="min-h-screen bg-constructa-bg">
+      {/* Backdrop del drawer en pantallas chicas */}
+      {isCompact && !sidebarCollapsed && (
+        <div
+          onClick={() => setSidebarCollapsed(true)}
+          style={{ position: "fixed", inset: 0, zIndex: 49, background: "rgba(15,22,28,0.45)" }}
+        />
+      )}
       <Sidebar
         activePage={activePage}
-        onNavigate={onNavigate}
+        onNavigate={(p) => { if (isCompact) setSidebarCollapsed(true); onNavigate(p); }}
         onLogout={onLogout}
         pinnedObras={pinnedObras}
         selectedObra={selectedObra}
         activeTab={activeTab}
-        onTabChange={onTabChange}
+        onTabChange={(t) => { if (isCompact) setSidebarCollapsed(true); onTabChange?.(t); }}
         obraCounts={obraCounts}
         currentUser={{ name: displayUser.name, initials: displayUser.initials, color: displayUser.color, roleLabel: ROLE_LABELS[role] }}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(v => !v)}
       />
 
-      <div style={{ marginLeft: sidebarCollapsed ? 0 : 260, transition: "margin-left 0.25s ease", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <div style={{ marginLeft: sidebarCollapsed || isCompact ? 0 : 260, transition: "margin-left 0.25s ease", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
 
         {/* ── Top bar ── */}
         <header style={{
           position: "sticky", top: 0, zIndex: 40,
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          gap: 24, padding: "12px 28px",
+          gap: isCompact ? 10 : 24, padding: isCompact ? "10px 14px" : "12px 28px",
           background: "rgba(244,245,244,0.85)",
           backdropFilter: "saturate(140%) blur(10px)",
           WebkitBackdropFilter: "saturate(140%) blur(10px)",

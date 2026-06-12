@@ -295,7 +295,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     });
     const colResizeRef = useRef<{ idx: number; startX: number; startW: number } | null>(null);
 
-    function startColResize(e: React.MouseEvent, idx: number) {
+    function startColResize(e: React.PointerEvent, idx: number) {
       e.preventDefault();
       e.stopPropagation();
       const headerCell = (e.currentTarget as HTMLElement).parentElement;
@@ -303,7 +303,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         ? headerCell.getBoundingClientRect().width
         : parseInt(colWidths[idx], 10) || 100;
       colResizeRef.current = { idx, startX: e.clientX, startW };
-      function onMove(ev: MouseEvent) {
+      function onMove(ev: PointerEvent) {
         const cur = colResizeRef.current;
         if (!cur) return;
         const w = Math.max(56, Math.round(cur.startW + (ev.clientX - cur.startX)));
@@ -311,15 +311,15 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       }
       function onUp() {
         colResizeRef.current = null;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
         setColWidths(prev => {
           try { localStorage.setItem(`sheet_colw_${obraId}`, JSON.stringify(prev)); } catch { /* ignore */ }
           return prev;
         });
       }
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
     }
 
     // ── Clipboard paste state ────────────────────────────────────────────────
@@ -665,11 +665,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           background: "#fff",
           border: "1px solid #D5D9D5",
           borderRadius: 14,
-          overflow: "clip",
+          overflowX: "auto",
+          overflowY: "clip",
           fontFamily: "'Plus Jakarta Sans', sans-serif",
           outline: "none",
         }}
       >
+        <div style={{ minWidth: 760 }}>
         {/* ── Header row — sticky al scroll vertical ── */}
         <div style={{ ...rowBase, background: "#F0F2F0", position: "sticky", top: 0, zIndex: 5 }}>
           {COLS.map((col, i) => (
@@ -678,11 +680,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               {/* Handle de resize — arrastrá el borde derecho */}
               {i >= 2 && (
                 <div
-                  onMouseDown={e => startColResize(e, i)}
+                  onPointerDown={e => startColResize(e, i)}
                   title="Arrastrá para ajustar el ancho"
                   style={{
                     position: "absolute", right: -4, top: 0, bottom: 0, width: 8,
-                    cursor: "col-resize", zIndex: 2,
+                    cursor: "col-resize", zIndex: 2, touchAction: "none",
                   }}
                 />
               )}
@@ -1182,6 +1184,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         )}
 
         {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
+        </div>
       </div>
     );
   }

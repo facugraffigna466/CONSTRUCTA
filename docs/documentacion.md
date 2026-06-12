@@ -1225,3 +1225,18 @@ Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla ti
 ### Validation
 - Bulk por API: 2 tareas + dependencia fila→fila verificada con links completos en el GET.
 - `npm run build` ✓ · import backend ✓ · datos de prueba eliminados.
+
+---
+
+## 2026-06-12 — Sprint 3 UX: mobile mínimo viable
+
+### Changes made
+- **`useMediaQuery` hook (nuevo)**: `useIsMobile()` (<768px) y `useIsCompact()` (<1024px) — base para responsive con inline styles.
+- **Sidebar como drawer**: en pantallas <1024px arranca cerrada, se abre con la hamburguesa como overlay con backdrop, y se cierra sola al navegar. El contenido ya no queda empujado por los 260px fijos.
+- **Portfolio fluido**: KPIs `repeat(auto-fit, minmax(180px,1fr))` y cards de obras `repeat(auto-fill, minmax(280px,1fr))` — colapsan a 1 columna en el teléfono sin media queries.
+- **TaskTable → cards en <768px**: cada tarea es una tarjeta con título, estado, fecha, badges de urgencia, responsable y botones de acción siempre visibles (sin hover, que no existe en touch).
+- **Planilla con scroll horizontal honesto**: contenedor con `overflowX: auto` y ancho mínimo de 760px — en el teléfono se desplaza lateralmente en vez de romperse.
+- **Touch en drag**: el Gantt (mover/estirar barras) y el resize de columnas de la planilla pasaron de mouse events a **Pointer Events** con `touchAction: none` — funcionan con el dedo en tablet/teléfono.
+
+### Validation
+`npm run build` ✓
