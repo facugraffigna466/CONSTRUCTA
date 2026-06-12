@@ -92,34 +92,21 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             con <span className="text-constructa-primary">precisión.</span>
           </h2>
 
-          {/* Stat pills de vidrio */}
-          <div className="flex items-stretch gap-3">
-            <div
-              className="flex-1 rounded-xl border border-white/[0.15] bg-white/[0.10] px-5 py-4"
-              style={{
-                opacity: ready ? 1 : 0,
-                transform: ready ? "translateY(0)" : "translateY(12px)",
-                transition: "opacity 0.5s ease 0.52s, transform 0.5s ease 0.52s",
-              }}
-            >
-              <div className="font-display text-2xl font-extrabold text-constructa-primary leading-none mb-1.5">85%</div>
-              <div className="font-sans text-xs text-white/70 leading-snug">
-                de obras mejoran su puntualidad
-              </div>
-            </div>
-            <div
-              className="flex-1 rounded-xl border border-white/[0.15] bg-white/[0.10] px-5 py-4"
-              style={{
-                opacity: ready ? 1 : 0,
-                transform: ready ? "translateY(0)" : "translateY(12px)",
-                transition: "opacity 0.5s ease 0.64s, transform 0.5s ease 0.64s",
-              }}
-            >
-              <div className="font-display text-2xl font-extrabold text-constructa-primary leading-none mb-1.5">3x</div>
-              <div className="font-sans text-xs text-white/70 leading-snug">
-                más eficiencia en trazabilidad de tareas
-              </div>
-            </div>
+          {/* Qué hace el producto — sin números inventados */}
+          <div
+            className="rounded-xl border border-white/[0.15] bg-white/[0.10] px-5 py-4"
+            style={{
+              opacity: ready ? 1 : 0,
+              transform: ready ? "translateY(0)" : "translateY(12px)",
+              transition: "opacity 0.5s ease 0.52s, transform 0.5s ease 0.52s",
+            }}
+          >
+            <ul className="font-sans text-[13px] text-white/80 leading-relaxed space-y-2 m-0 p-0 list-none">
+              <li>📱 Tu equipo reporta avances por WhatsApp, sin instalar nada</li>
+              <li>📊 Gantt con dependencias, ruta crítica y reprogramación en cascada</li>
+              <li>🔔 Alertas automáticas de demoras y tareas bloqueadas</li>
+              <li>📋 Cargá el plan pegándolo directo desde Excel o MS Project</li>
+            </ul>
           </div>
         </div>
 
@@ -250,6 +237,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                   </>
                 )}
               </button>
+              <p className="text-center text-xs text-constructa-secondaryText mt-3 mb-0">
+                ¿No podés entrar? Pedile al administrador de tu empresa que restablezca tu acceso.
+              </p>
             </div>
           </form>
 

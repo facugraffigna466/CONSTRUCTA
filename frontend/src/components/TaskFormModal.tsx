@@ -181,6 +181,14 @@ export function TaskFormModal({
   const [cascadePrompt, setCascadePrompt] = useState<CascadeAffectedTask[] | null>(null);
   const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
   const [draftMaterials, setDraftMaterials] = useState<DraftMaterial[]>([]);
+  // El modal arranca simple (4 campos); "Avanzado" se abre solo si la tarea ya usa esos campos
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(() =>
+    mode === "edit" && !!task && (
+      !!task.description || task.parent_task_id != null ||
+      (task.dependency_links?.length ?? 0) > 0 || task.is_milestone ||
+      (task.estimated_progress ?? 0) > 0
+    )
+  );
 
   function validate() {
     const e: Record<string, string> = {};
@@ -370,8 +378,8 @@ export function TaskFormModal({
               )}
             </div>
 
-            {/* Description */}
-            <div>
+            {/* Description (avanzado) */}
+            {showAdvanced && <div>
               <FieldLabel optional>Descripción</FieldLabel>
               <textarea
                 style={{ ...inputStyle(), resize: "none" } as React.CSSProperties}
@@ -382,10 +390,10 @@ export function TaskFormModal({
                 onFocus={ev => onFocusInput(ev)}
                 onBlur={ev => onBlurInput(ev)}
               />
-            </div>
+            </div>}
 
-            {/* Parent task */}
-            {tasks.filter(t => t.id !== task?.id).length > 0 && (
+            {/* Parent task (avanzado) */}
+            {showAdvanced && tasks.filter(t => t.id !== task?.id).length > 0 && (
               <div>
                 <FieldLabel optional>Tarea padre (WBS)</FieldLabel>
                 <select
@@ -541,8 +549,8 @@ export function TaskFormModal({
               </div>
             </div>
 
-            {/* Depende de */}
-            {tasks.filter(t => t.id !== task?.id).length > 0 && (
+            {/* Depende de (avanzado) */}
+            {showAdvanced && tasks.filter(t => t.id !== task?.id).length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <FieldLabel optional>Depende de</FieldLabel>
 
@@ -650,8 +658,8 @@ export function TaskFormModal({
               </div>
             )}
 
-            {/* Tipo + % avance */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {/* Tipo + % avance (avanzado) */}
+            {showAdvanced && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               {/* Tipo */}
               <div>
                 <FieldLabel>Tipo</FieldLabel>
@@ -695,7 +703,32 @@ export function TaskFormModal({
                   </span>
                 </div>
               </div>
-            </div>
+            </div>}
+
+            {/* Toggle Avanzado */}
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              aria-expanded={showAdvanced}
+              style={{
+                display: "flex", alignItems: "center", gap: 7,
+                padding: "9px 12px", borderRadius: 10,
+                fontSize: 12.5, fontWeight: 600, textAlign: "left",
+                background: "#F8F7F4", border: "1px dashed #DDD6C9",
+                color: "#5B6770", cursor: "pointer",
+                fontFamily: "'Plus Jakarta Sans', sans-serif",
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{ transform: showAdvanced ? "none" : "rotate(-90deg)", transition: "transform 0.15s", flexShrink: 0 }}>
+                <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {showAdvanced ? "Ocultar opciones avanzadas" : "Opciones avanzadas"}
+              {!showAdvanced && (
+                <span style={{ fontWeight: 400, color: "#ADAAA4", fontSize: 11.5 }}>
+                  descripción · subtarea · dependencias · hito · % avance
+                </span>
+              )}
+            </button>
 
             {/* Info notes */}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
