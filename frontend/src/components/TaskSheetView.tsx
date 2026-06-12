@@ -213,7 +213,7 @@ function ResponsableCombobox({ currentId, options, onSelect, onKeyDown }: Combob
             </svg>
           )}
           <span style={{ flex: 1 }}>
-            {r.full_name}{r.role && <span style={{ color: "#8E97A0" }}> · {r.role}</span>}
+            {r.full_name}{r.role && <span style={{ color: "#6B7580" }}> · {r.role}</span>}
           </span>
         </div>
       ))}
@@ -295,7 +295,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     });
     const colResizeRef = useRef<{ idx: number; startX: number; startW: number } | null>(null);
 
-    function startColResize(e: React.PointerEvent, idx: number) {
+    function startColResize(e: React.MouseEvent, idx: number) {
       e.preventDefault();
       e.stopPropagation();
       const headerCell = (e.currentTarget as HTMLElement).parentElement;
@@ -303,7 +303,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         ? headerCell.getBoundingClientRect().width
         : parseInt(colWidths[idx], 10) || 100;
       colResizeRef.current = { idx, startX: e.clientX, startW };
-      function onMove(ev: PointerEvent) {
+      function onMove(ev: MouseEvent) {
         const cur = colResizeRef.current;
         if (!cur) return;
         const w = Math.max(56, Math.round(cur.startW + (ev.clientX - cur.startX)));
@@ -311,15 +311,15 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       }
       function onUp() {
         colResizeRef.current = null;
-        window.removeEventListener("pointermove", onMove);
-        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
         setColWidths(prev => {
           try { localStorage.setItem(`sheet_colw_${obraId}`, JSON.stringify(prev)); } catch { /* ignore */ }
           return prev;
         });
       }
-      window.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
     }
 
     // ── Clipboard paste state ────────────────────────────────────────────────
@@ -680,11 +680,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               {/* Handle de resize — arrastrá el borde derecho */}
               {i >= 2 && (
                 <div
-                  onPointerDown={e => startColResize(e, i)}
+                  onMouseDown={e => startColResize(e, i)}
                   title="Arrastrá para ajustar el ancho"
                   style={{
                     position: "absolute", right: -4, top: 0, bottom: 0, width: 8,
-                    cursor: "col-resize", zIndex: 2, touchAction: "none",
+                    cursor: "col-resize", zIndex: 2,
                   }}
                 />
               )}
@@ -955,7 +955,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     <span style={{ fontSize: 11, color: "#9BA3AB" }}>%</span>
                   </div>
                 ) : task.is_milestone ? (
-                  <span style={{ fontSize: 12, color: "#8E97A0" }}>◆ Hito</span>
+                  <span style={{ fontSize: 12, color: "#6B7580" }}>◆ Hito</span>
                 ) : (
                   <>
                     <div style={{ flex: 1, height: 4, borderRadius: 99, background: "#E8EAEB", overflow: "hidden" }}>
@@ -1092,7 +1092,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="3" y="1" width="10" height="14" rx="1.5" stroke="#FF6B35" strokeWidth="1.4" fill="none"/><path d="M6 1v2h4V1" stroke="#FF6B35" strokeWidth="1.4" strokeLinejoin="round"/><path d="M5.5 7h5M5.5 10h3" stroke="#FF6B35" strokeWidth="1.3" strokeLinecap="round"/></svg>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#1A2329" }}>{pastePreview.length} {pastePreview.length === 1 ? "tarea detectada" : "tareas detectadas"} desde el portapapeles</span>
-                <span style={{ fontSize: 11.5, color: "#8E97A0" }}>— Revisá antes de confirmar</span>
+                <span style={{ fontSize: 11.5, color: "#6B7580" }}>— Revisá antes de confirmar</span>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => { setPastePreview(null); setBulkError(null); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #E6E7E5", fontSize: 12, fontWeight: 600, color: "#5B6770", background: "#fff", cursor: "pointer" }}>Cancelar</button>
@@ -1171,13 +1171,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         {!isNewRow && (
           <button
             onClick={startNewRow}
-            style={{ width: "100%", padding: "9px 12px", background: "transparent", border: "none", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#8E97A0", cursor: "pointer", textAlign: "left", transition: "background 0.1s, color 0.1s" }}
+            style={{ width: "100%", padding: "9px 12px", background: "transparent", border: "none", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#6B7580", cursor: "pointer", textAlign: "left", transition: "background 0.1s, color 0.1s" }}
             onMouseEnter={e => { e.currentTarget.style.background = "#F8F9F8"; e.currentTarget.style.color = "#FF6B35"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}
           >
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             Agregar fila
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "#8E97A0", fontWeight: 500 }}>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "#6B7580", fontWeight: 500 }}>
               Tip: copiá filas en Excel y pegalas acá (Ctrl+V)
             </span>
           </button>

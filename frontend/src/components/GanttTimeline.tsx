@@ -460,13 +460,11 @@ export function GanttTimeline({
 
   useEffect(() => {
     if (!drag && !resize) return;
-    window.addEventListener("pointermove", handleMouseMove);
-    window.addEventListener("pointerup", handleMouseUp);
-    window.addEventListener("pointercancel", handleMouseUp);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
     return () => {
-      window.removeEventListener("pointermove", handleMouseMove);
-      window.removeEventListener("pointerup", handleMouseUp);
-      window.removeEventListener("pointercancel", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
     };
   }, [drag, resize, handleMouseMove, handleMouseUp]);
 
@@ -1263,9 +1261,8 @@ export function GanttTimeline({
                               transform: isThisDrag ? "translateY(-1px)" : "none",
                               transition: isThisDrag || isThisResize ? "none" : "box-shadow 0.15s, transform 0.15s",
                               userSelect: "none",
-                              touchAction: "none",
                             }}
-                            onPointerDown={e => {
+                            onMouseDown={e => {
                               if ((e.target as HTMLElement).closest(".edge-handle")) return;
                               e.preventDefault();
                               startBarDrag(task.id, e.clientX);
@@ -1354,8 +1351,8 @@ export function GanttTimeline({
                           {/* Left resize handle */}
                           <div
                             className="edge-handle"
-                            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); startEdgeResize(task.id, "start", e.clientX); }}
-                            style={{ position: "absolute", top: 0, bottom: 0, left: -4, width: 12, cursor: "ew-resize", display: "flex", alignItems: "center", touchAction: "none" }}
+                            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); startEdgeResize(task.id, "start", e.clientX); }}
+                            style={{ position: "absolute", top: 0, bottom: 0, left: -4, width: 12, cursor: "ew-resize", display: "flex", alignItems: "center" }}
                           >
                             <div style={{ width: 3, height: 14, borderRadius: 99, background: "rgba(20,20,20,0.16)" }} />
                           </div>
@@ -1363,7 +1360,7 @@ export function GanttTimeline({
                           {/* Right resize handle */}
                           <div
                             className="edge-handle"
-                            onPointerDown={e => { e.preventDefault(); e.stopPropagation(); startEdgeResize(task.id, "end", e.clientX); }}
+                            onMouseDown={e => { e.preventDefault(); e.stopPropagation(); startEdgeResize(task.id, "end", e.clientX); }}
                             style={{ position: "absolute", top: 0, bottom: 0, right: -4, width: 12, cursor: "ew-resize", display: "flex", alignItems: "center", justifyContent: "flex-end" }}
                           >
                             <div style={{ width: 3, height: 14, borderRadius: 99, background: "rgba(20,20,20,0.16)" }} />
