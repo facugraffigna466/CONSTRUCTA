@@ -1270,3 +1270,25 @@ Nav de secciones en ConfiguracionPage (archivo de 1.500 líneas — mejor hacerl
 
 ### Validation
 `npm run build` ✓
+
+---
+
+## 2026-06-12 — Bitácora con IA activada + últimos P2 de la auditoría UX
+
+### Bitácora (modelos económicos + primer uso real)
+- Transcripción: `gpt-4o-mini-transcribe` (configurable vía `WHISPER_MODEL`, antes hardcodeado `whisper-1`). Análisis: `claude-haiku-4-5` (antes Sonnet). Costo ~USD 0.01 por audio de 2 min.
+- Fix: el schema de structured outputs usaba `{type: [string,null], enum: [...]}` que la API de Anthropic rechaza con 400 — reemplazado por `anyOf`. Verificado end-to-end con la API key real: resumen + key points + sugerencias OK.
+- Falta solo crédito en la cuenta OpenAI del usuario para activar transcripción (la key ya está en `.env`).
+
+### Fix drag del Gantt (causa real)
+El revert a mouse events no alcanzaba: el overlay SVG de flechas de dependencias (Etapa 2.1) cubría la grilla sin `pointerEvents: "none"` y tapaba las barras. Fix de 3 líneas + verificación en navegador (drag→modal, click→editor, tooltips OK).
+
+### P2 de la auditoría (rama feature/ux-p2-polish)
+- **ConfiguracionPage**: índice de secciones sticky (chips con anclas a las 9 secciones, una fila scrolleable, pegado bajo el header en top:56, `scrollMarginTop:112` en cada sección).
+- **AppLayout**: removido `overflow-y-auto` inerte del `<main>` que rompía cualquier `position: sticky` de las páginas hijas (el scroll real es del documento).
+- **Alertas**: `PATCH /alerts/mark-all-read?obra_id=` — "Marcar todas leídas" pasa de N requests a 1 (verificado: 53 alertas en una request, scope por obra respetado).
+- **PresupuestoTab**: botones disabled con gris estándar (`#E6E7E5` + `#8E97A0`) en vez de naranja lavado.
+- **Último tab por obra**: al re-entrar a una obra se restaura el último tab visitado (`localStorage obra_last_tab_{id}`); `focusAlert` sigue forzando "tareas".
+
+### Validation
+`tsc -b` ✓ · endpoint probado con curl ✓ · sticky/anclas/último-tab verificados en navegador (vite :5174) ✓

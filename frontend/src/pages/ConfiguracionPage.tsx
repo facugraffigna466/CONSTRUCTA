@@ -90,9 +90,9 @@ function Switch({ checked, onChange, disabled = false }: {
   );
 }
 
-function Card({ children, style }: { children: React.ReactNode; style?: CSSProperties }) {
+function Card({ children, style, id }: { children: React.ReactNode; style?: CSSProperties; id?: string }) {
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "20px 22px", ...style }}>
+    <div id={id} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: "20px 22px", ...style }}>
       {children}
     </div>
   );
@@ -800,9 +800,47 @@ export function ConfiguracionPage() {
         </div>
       </div>
 
+      {/* ── Índice de secciones (sticky) ── */}
+      <nav
+        aria-label="Secciones de configuración"
+        style={{
+          position: "sticky", top: 56, zIndex: 20,
+          display: "flex", gap: 6, flexWrap: "nowrap", alignItems: "center",
+          overflowX: "auto", scrollbarWidth: "none",
+          padding: "10px 0 12px", marginBottom: 18,
+          background: C.bg, borderBottom: `1px solid ${C.line}`,
+        }}
+      >
+        {([
+          { id: "cfg-estado", label: "Estado" },
+          { id: "cfg-datos", label: "Datos generales" },
+          { id: "cfg-whatsapp", label: "WhatsApp" },
+          { id: "cfg-auto", label: "Automatizaciones" },
+          { id: "cfg-tiempo", label: "Tiempo real" },
+          { id: "cfg-testing", label: "Testing" },
+          ...(canEdit && planUsage ? [{ id: "cfg-plan", label: "Tu plan" }] : []),
+          ...(canEdit ? [{ id: "cfg-proveedores", label: "Proveedores" }] : []),
+          { id: "cfg-calendario", label: "Calendario" },
+        ]).map(s => (
+          <button
+            key={s.id}
+            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = C.lineStrong; }}
+            onMouseLeave={e => { e.currentTarget.style.color = C.text2; e.currentTarget.style.borderColor = C.line; }}
+            style={{
+              border: `1px solid ${C.line}`, background: C.surface, color: C.text2,
+              borderRadius: 99, padding: "5px 12px", fontSize: 12.5, fontWeight: 600,
+              cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif",
+              flexShrink: 0, whiteSpace: "nowrap",
+            }}
+          >
+            {s.label}
+          </button>
+        ))}
+      </nav>
 
           {/* ═══ ESTADO DEL SISTEMA ═══ */}
-          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
+          <div id="cfg-estado" style={{ scrollMarginTop: 112, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${C.line}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
@@ -868,7 +906,7 @@ export function ConfiguracionPage() {
           </div>
 
 {/* ═══ DATOS GENERALES ═══ */}
-          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
+          <div id="cfg-datos" style={{ scrollMarginTop: 112, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${C.line}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
@@ -922,7 +960,7 @@ export function ConfiguracionPage() {
           </div>
 
           {/* ═══ CHATBOT WHATSAPP ═══ */}
-          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
+          <div id="cfg-whatsapp" style={{ scrollMarginTop: 112, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${C.line}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
@@ -1008,7 +1046,7 @@ export function ConfiguracionPage() {
           </div>
 
           {/* ═══ AUTOMATIZACIONES + ALERTAS (2-col) ═══ */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
+          <div id="cfg-auto" style={{ scrollMarginTop: 112, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginBottom: 28 }}>
 
             {/* Automatizaciones */}
             <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
@@ -1104,7 +1142,7 @@ export function ConfiguracionPage() {
           </div>
 
           {/* ═══ TIEMPO REAL ═══ */}
-          <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
+          <div id="cfg-tiempo" style={{ scrollMarginTop: 112, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${C.line}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <div style={{
@@ -1171,7 +1209,7 @@ export function ConfiguracionPage() {
           </div>
 
           {/* ═══ HERRAMIENTAS DE TESTING ═══ */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+          <div id="cfg-testing" style={{ scrollMarginTop: 112, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
 
             {/* Test WhatsApp */}
             <Card>
@@ -1225,7 +1263,7 @@ export function ConfiguracionPage() {
 
           {/* ═══ TU PLAN ═══ */}
           {canEdit && planUsage && (
-            <Card style={{ marginTop: 8 }}>
+            <Card id="cfg-plan" style={{ marginTop: 8, scrollMarginTop: 112 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 9, background: "#FFF1E9", color: C.secondary, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1275,7 +1313,7 @@ export function ConfiguracionPage() {
 
           {/* ═══ PROVEEDORES ═══ */}
           {canEdit && (
-            <Card style={{ marginTop: 8 }}>
+            <Card id="cfg-proveedores" style={{ marginTop: 8, scrollMarginTop: 112 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: "#FFF1E9", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1415,7 +1453,7 @@ export function ConfiguracionPage() {
           )}
 
           {/* ═══ CALENDARIO LABORAL ═══ */}
-          <Card style={{ marginTop: 8 }}>
+          <Card id="cfg-calendario" style={{ marginTop: 8, scrollMarginTop: 112 }}>
             <CalendarSection canEdit={canEdit} />
           </Card>
 

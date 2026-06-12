@@ -30,6 +30,9 @@ class AlertService:
         updated = await self.repo.update_fields(alert_id, is_read=True)
         return updated  # type: ignore[return-value]
 
+    async def mark_all_read(self, obra_id: int | None = None) -> list[Alert]:
+        return await self.repo.mark_all_read(obra_id=obra_id)
+
     async def evaluate_task_risks_for_obra(self, obra_id: int) -> int:
         """
         Proactive risk scan called on every obra dashboard load.

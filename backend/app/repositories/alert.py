@@ -138,6 +138,17 @@ class AlertRepository(BaseRepository[Alert]):
             .values(is_read=True)
         )
 
+    async def mark_all_read(self, obra_id: int | None = None) -> list[Alert]:
+        """Mark every unread alert as read (optionally scoped to an obra). Returns the updated rows."""
+        stmt = select(Alert).where(Alert.is_read == False)  # noqa: E712
+        if obra_id is not None:
+            stmt = stmt.where(Alert.obra_id == obra_id)
+        alerts = list((await self.session.execute(stmt)).scalars().all())
+        for alert in alerts:
+            alert.is_read = True
+        await self.session.flush()
+        return alerts
+
     async def list_all(self, unread_only: bool = False) -> list[Alert]:
         stmt = select(Alert)
         if unread_only:

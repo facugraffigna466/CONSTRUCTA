@@ -18,6 +18,16 @@ async def list_alerts(
     return await AlertService(db).list_all(unread_only=unread_only)
 
 
+@router.patch("/mark-all-read", response_model=list[AlertRead])
+async def mark_all_alerts_read(
+    db: DbSession,
+    _: CurrentUserId,
+    obra_id: Annotated[int | None, Query()] = None,
+):
+    """Marca todas las alertas no leídas como leídas en una sola operación."""
+    return await AlertService(db).mark_all_read(obra_id=obra_id)
+
+
 @router.patch("/{alert_id}/read", response_model=AlertRead)
 async def mark_alert_read(alert_id: int, db: DbSession, _: CurrentUserId):
     return await AlertService(db).mark_read(alert_id)

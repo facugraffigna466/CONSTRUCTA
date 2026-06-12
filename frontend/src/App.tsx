@@ -60,6 +60,12 @@ function App() {
   const handleTabChange = useCallback((tab: ObraTab) => {
     setActiveTab(tab);
     setActivePage("panel");
+    setSelectedObra((obra) => {
+      if (obra) {
+        try { localStorage.setItem(`obra_last_tab_${obra.id}`, tab); } catch { /* ignore */ }
+      }
+      return obra;
+    });
   }, []);
 
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -99,10 +105,18 @@ function App() {
     if (page === "panel") setSelectedObra(null);
   }
 
+  const OBRA_TABS: ObraTab[] = ["resumen", "tareas", "responsables", "alertas", "historial", "presupuesto"];
+
   function handleSelectObra(obra: Obra) {
     setSelectedObra(obra);
     setActivePage("panel");
-    setActiveTab("resumen");
+    // Recordar el último tab visitado en esta obra (quien viene a cargar tareas no paga el click extra)
+    let lastTab: ObraTab = "resumen";
+    try {
+      const saved = localStorage.getItem(`obra_last_tab_${obra.id}`);
+      if (saved && (OBRA_TABS as string[]).includes(saved)) lastTab = saved as ObraTab;
+    } catch { /* ignore */ }
+    setActiveTab(lastTab);
     setObraCounts({ tasks: 0, alerts: 0, responsibles: 0 });
     setFocusAlert(null); // reset manual navigation
   }

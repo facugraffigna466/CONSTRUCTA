@@ -12,3 +12,10 @@ export async function markAlertRead(alertId: number): Promise<Alert> {
   const { data } = await apiClient.patch<Alert>(`/alerts/${alertId}/read`);
   return data;
 }
+
+export async function markAllAlertsRead(obraId?: number): Promise<Alert[]> {
+  const { data } = await apiClient.patch<Alert[]>("/alerts/mark-all-read", null, {
+    params: obraId != null ? { obra_id: obraId } : {},
+  });
+  return data;
+}
