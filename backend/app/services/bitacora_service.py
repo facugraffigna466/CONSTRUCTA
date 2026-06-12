@@ -52,8 +52,11 @@ _ANALYSIS_SCHEMA = {
                     "new_start_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
                     "new_due_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
                     "new_status": {
-                        "type": ["string", "null"],
-                        "enum": ["pendiente", "en_progreso", "bloqueada", "completada", "cancelada", None],
+                        # la API de structured outputs no acepta enum sobre tipo union — usar anyOf
+                        "anyOf": [
+                            {"type": "string", "enum": ["pendiente", "en_progreso", "bloqueada", "completada", "cancelada"]},
+                            {"type": "null"},
+                        ],
                     },
                     "title": {"type": ["string", "null"]},
                     "description": {"type": ["string", "null"]},
