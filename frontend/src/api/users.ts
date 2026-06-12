@@ -7,6 +7,7 @@ export interface ApiUser {
   role: "admin" | "collaborator";
   is_active: boolean;
   avatar_url: string | null;
+  tenant_name?: string | null; // solo poblado en /users/me
   created_at: string;
 }
 

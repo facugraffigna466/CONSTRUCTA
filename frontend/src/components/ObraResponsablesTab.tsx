@@ -10,6 +10,7 @@ import {
 import type { ObraTeamMember, Responsible } from "../types";
 import { useCan } from "../hooks/usePermission";
 import { AlertTriangle, Pencil, Trash2, UserPlus } from "lucide-react";
+import { normalizePhone, PHONE_ERROR_HINT } from "../utils/phone";
 
 const AVATAR_COLORS = ["#E76A2D","#3A6BD9","#1F9A5A","#9A4DC9","#D03A3A","#E89B14"];
 function avatarColor(name: string) {
@@ -238,13 +239,14 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
   async function handleAdd() {
     if (!nameInput.trim() || nameInput.trim().length < 2) return setFormError("El nombre es obligatorio.");
     if (!selectedExisting && !phoneInput.trim()) return setFormError("El número de WhatsApp es obligatorio.");
-    if (!selectedExisting && !E164.test(phoneInput.trim())) return setFormError("Formato inválido — usá E.164: +5491112345678");
+    const phone = normalizePhone(phoneInput);
+    if (!selectedExisting && !E164.test(phone)) return setFormError(PHONE_ERROR_HINT);
 
     setSaving(true); setFormError(null);
     try {
       const payload = selectedExisting
         ? { responsible_id: selectedExisting.id, role: roleInput.trim() || null }
-        : { full_name: nameInput.trim(), whatsapp_number: phoneInput.trim(), role: roleInput.trim() || null };
+        : { full_name: nameInput.trim(), whatsapp_number: phone, role: roleInput.trim() || null };
 
       const added = await addObraTeamMember(obraId, payload);
       setTeam(prev => [...prev, added]);

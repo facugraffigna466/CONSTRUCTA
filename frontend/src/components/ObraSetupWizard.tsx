@@ -9,7 +9,9 @@ import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { createResponsible, lookupResponsibleByWhatsapp } from "../api/responsibles";
+import { addObraTeamMember } from "../api/obraTeam";
 import { createTask } from "../api/tasks";
+import { normalizePhone, PHONE_ERROR_HINT } from "../utils/phone";
 import type { Obra } from "../types";
 
 // ─── Local draft types ────────────────────────────────────────────────────────
@@ -890,9 +892,10 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
     const { full_name, whatsapp_number, role } = respForm;
     if (!full_name.trim() || full_name.trim().length < 2) return setRespError("El nombre es obligatorio (mínimo 2 caracteres).");
     if (!whatsapp_number.trim()) return setRespError("El número de WhatsApp es obligatorio.");
-    if (!E164.test(whatsapp_number.trim())) return setRespError("Formato inválido — usá E.164: +5491112345678");
-    if (responsibles.some(r => r.whatsapp_number === whatsapp_number.trim())) return setRespError("Ya existe un responsable con ese número.");
-    setResponsibles(prev => [...prev, { _key: uid(), full_name: full_name.trim(), whatsapp_number: whatsapp_number.trim(), role: role.trim() }]);
+    const phone = normalizePhone(whatsapp_number);
+    if (!E164.test(phone)) return setRespError(PHONE_ERROR_HINT);
+    if (responsibles.some(r => r.whatsapp_number === phone)) return setRespError("Ya existe un responsable con ese número.");
+    setResponsibles(prev => [...prev, { _key: uid(), full_name: full_name.trim(), whatsapp_number: phone, role: role.trim() }]);
     setRespForm({ full_name: "", whatsapp_number: "", role: "" });
     setRespError(null);
   }
@@ -956,6 +959,11 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
           }
         }
         keyToId.set(r._key, id);
+        // vincular al equipo de la obra — si no, el tab Responsables queda vacío
+        // aunque la persona tenga tareas asignadas
+        try {
+          await addObraTeamMember(obra.id, { responsible_id: id, role: r.role || null });
+        } catch { /* ya estaba en el equipo (409) — seguir */ }
       }
       for (let i = 0; i < tasks.length; i++) {
         const t = tasks[i];
@@ -976,7 +984,9 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
 
   // No perder datos: si hay algo cargado y la obra no se creó, confirmar antes de cerrar
   function safeClose() {
-    if (done) { onClose(); return; }
+    // tras crear, cerrar con X equivale a "Ir a la obra": si solo cerráramos,
+    // el portfolio de atrás quedaría sin la obra nueva (lista stale)
+    if (done) { createdObra ? onCreated(createdObra) : onClose(); return; }
     const hasData = obraData.name.trim() !== "" || responsibles.length > 0 || tasks.length > 0;
     if (!hasData) { onClose(); return; }
     const detalle = [

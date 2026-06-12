@@ -15,16 +15,20 @@ class ResponsibleRepository(BaseRepository[Responsible]):
         )
         return result.scalar_one_or_none()
 
-    async def list_active(self) -> list[Responsible]:
-        result = await self.session.execute(
+    async def list_active(self, tenant_id: int | None = None) -> list[Responsible]:
+        stmt = (
             select(Responsible)
             .where(Responsible.is_active.is_(True))
             .order_by(Responsible.full_name)
         )
+        if tenant_id is not None:
+            stmt = stmt.where(Responsible.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_all(self) -> list[Responsible]:
-        result = await self.session.execute(
-            select(Responsible).order_by(Responsible.full_name)
-        )
+    async def list_all(self, tenant_id: int | None = None) -> list[Responsible]:
+        stmt = select(Responsible).order_by(Responsible.full_name)
+        if tenant_id is not None:
+            stmt = stmt.where(Responsible.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())

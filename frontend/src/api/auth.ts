@@ -7,3 +7,12 @@ export async function login(email: string, password: string): Promise<string> {
   });
   return data.access_token;
 }
+
+export async function register(payload: {
+  email: string;
+  password: string;
+  full_name: string;
+  company_name?: string;
+}): Promise<void> {
+  await apiClient.post("/auth/register", payload);
+}

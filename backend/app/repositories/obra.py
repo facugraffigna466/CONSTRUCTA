@@ -17,12 +17,15 @@ class ObraRepository(BaseRepository[Obra]):
         )
         return list(result.scalars().all())
 
-    async def list_all(self) -> list[Obra]:
-        result = await self.session.execute(
+    async def list_all(self, tenant_id: int | None = None) -> list[Obra]:
+        stmt = (
             select(Obra)
             .options(selectinload(Obra.tasks))
             .order_by(Obra.created_at.desc())
         )
+        if tenant_id is not None:
+            stmt = stmt.where(Obra.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def get_with_tasks(self, obra_id: int) -> Obra | None:

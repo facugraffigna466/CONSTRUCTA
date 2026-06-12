@@ -7,6 +7,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(..., min_length=8)
     full_name: str = Field(..., min_length=2, max_length=255)
+    company_name: str | None = Field(None, max_length=255)
 
 
 class UserRead(BaseModel):
@@ -16,6 +17,7 @@ class UserRead(BaseModel):
     role: str
     is_active: bool
     avatar_url: str | None = None
+    tenant_name: str | None = None  # solo poblado en /users/me
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -54,7 +54,7 @@ async def list_team(obra_id: int, db: DbSession, _: CurrentUserId):
 
 
 @router.post("/{obra_id}/team", response_model=ObraTeamMemberRead, status_code=status.HTTP_201_CREATED)
-async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSession, _: AdminUser):
+async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSession, current_user: AdminUser):
     if payload.responsible_id:
         resp = await db.get(Responsible, payload.responsible_id)
         if not resp:
@@ -62,7 +62,8 @@ async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSes
     elif payload.full_name and payload.whatsapp_number:
         from app.schemas.responsible import ResponsibleCreate
         resp = await ResponsibleService(db).create(
-            ResponsibleCreate(full_name=payload.full_name, whatsapp_number=payload.whatsapp_number, role=None)
+            ResponsibleCreate(full_name=payload.full_name, whatsapp_number=payload.whatsapp_number, role=None),
+            tenant_id=current_user.tenant_id,
         )
     else:
         raise HTTPException(status_code=422, detail="Provide responsible_id or full_name + whatsapp_number")
