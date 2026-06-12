@@ -1506,6 +1506,9 @@ export function GanttTimeline({
                     <svg style={{
                       position: "absolute", top: 0, left: 0,
                       width: gridWidth, height: filteredVisible.length * ROW_H,
+                      // none en el root: el overlay NO debe tapar las barras (el drag
+                      // se rompía acá). Los paths de hover re-habilitan con "stroke".
+                      pointerEvents: "none",
                       zIndex: 3, overflow: "visible",
                     }}>
                       {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A, x_B, y_B }) => (
