@@ -59,7 +59,7 @@ CONSTRUCTA/
 │   │   ├── services/
 │   │   └── integrations/   # Twilio, WhatsApp
 │   ├── alembic/versions/   # 20 migraciones (0001–0020)
-│   └── venv/               # virtualenv (NO .venv)
+│   └── .venv/              # virtualenv real (venv/ existe pero está incompleto — NO usarlo)
 ├── frontend/
 │   └── src/
 │       ├── api/            # Un archivo por recurso
@@ -122,7 +122,7 @@ CONSTRUCTA/
 | **Baseline / Línea base** | ✅ Completo (migration 0019, POST/GET /obras/{id}/baseline) |
 | Roles admin/collaborator + guards | ✅ Completo |
 | Invitaciones por email | ✅ Completo |
-| Comitentes (client_name/email/phone) | ✅ migration 0020 en rama feature/obra-comitentes |
+| Comitentes (client_name/email/phone) | ✅ Completo (migration 0020, mergeado a main) |
 
 ### Frontend — qué YA está implementado y funcionando
 
@@ -145,7 +145,7 @@ CONSTRUCTA/
 | AlertasTab | ✅ |
 | HistorialPanel | ✅ |
 | Presencia online en header | ✅ |
-| Comitentes en wizard + header obra | 🔄 En rama feature/obra-comitentes (pendiente merge) |
+| Comitentes en wizard + header obra | ✅ Mergeado a main |
 
 ---
 
@@ -153,8 +153,7 @@ CONSTRUCTA/
 
 | Rama | Estado | Descripción |
 |------|--------|-------------|
-| `main` | Base | Código estable |
-| `feature/obra-comitentes` | 🔄 Pendiente merge | Campos client_name/email/phone en obra, wizard step 1, header del detalle |
+| `main` | Base | Código estable — todo el roadmap y la auditoría UX están mergeados acá |
 
 ---
 
@@ -179,7 +178,7 @@ El plan tiene DOS componentes que trabajan juntos. El archivo completo está en:
 - Endpoint `PATCH /users/{id}/role`
 - Frontend: `AdminRoute`, sidebar oculta items a collaborators, selector de rol en EquipoPage
 
-#### Etapa 1.2 — Comitentes en Obra `feature/obra-comitentes` 🔄 PENDIENTE MERGE
+#### Etapa 1.2 — Comitentes en Obra `feature/obra-comitentes` ✅ MERGEADO
 - Campos `client_name`, `client_email`, `client_phone` en `obras` (migration 0020)
 - Wizard paso 1: sección comitente siempre visible
 - ObraDetailPage: `client_name` en header con ícono de persona
@@ -380,10 +379,7 @@ Los siguientes del plan de paridad MS Project YA ESTÁN IMPLEMENTADOS:
 - ✅ Tipos de dependencia SS/FF/SF + lag (migration 0018, M2M table)
 - ✅ WBS parent_task_id (migration 0017, dropdown en TaskFormModal)
 
-Lo que falta del plan MS Project:
-- UI de subtareas colapsables en Gantt y tabla (la data ya existe)
-- Sticky date header en Gantt (la columna izquierda sí es sticky, el header de fechas no)
-- Cascade automático al mover tareas con dependientes
+Del plan MS Project NO falta nada (actualizado 2026-06-12): subtareas colapsables, sticky date header en Gantt, cascade automático con preview, % avance/hito en TaskTable y duración calculada en TaskFormModal están todos implementados y mergeados. También está completa la auditoría UX (`docs/auditoria-ux.md`, P0+P1+P2) y el módulo Bitácora de obra con IA (audio → transcripción `gpt-4o-mini-transcribe` → análisis `claude-haiku-4-5` → sugerencias aplicables).
 
 ---
 
