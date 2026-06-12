@@ -199,6 +199,72 @@ class TaskService:
                     f"La fecha de {field_name} {d.strftime('%d/%m/%Y')} es un día no laboral para esta obra{detail}."
                 )
 
+    # ── bulk create (paste masivo desde Excel) ────────────────────────────────
+
+    async def bulk_create(
+        self, obra_id: int, rows: list, manager_id: int, actor: dict | None = None
+    ) -> dict:
+        """Crea un lote de tareas en una sola transacción con UN evento de historial.
+
+        Las dependencias se resuelven por índice de fila (FS) en una segunda
+        pasada, cuando todas las predecesoras ya tienen id. Una fila inválida
+        no tumba el lote: se reporta y se sigue.
+        """
+        await self._get_obra_and_assert_access(obra_id, manager_id)
+        base_order = len(await self.repo.list_by_obra(obra_id))
+
+        task_ids: list[int | None] = []
+        errors: list[str] = []
+
+        for i, row in enumerate(rows):
+            try:
+                if row.responsible_id is not None:
+                    await self._assert_responsible_active(row.responsible_id)
+                await self._assert_dates_working(obra_id, row.start_date, row.due_date)
+                task = Task(
+                    obra_id=obra_id,
+                    title=row.title.strip(),
+                    start_date=row.start_date,
+                    due_date=row.due_date,
+                    responsible_id=row.responsible_id,
+                    order_index=base_order + i,
+                )
+                self.repo.session.add(task)
+                await self.repo.session.flush()
+                task_ids.append(task.id)
+            except Exception as exc:
+                detail = getattr(exc, "detail", None) or str(exc)
+                errors.append(f"Fila {i + 1} ({row.title[:40]}): {detail}")
+                task_ids.append(None)
+
+        # Segunda pasada: dependencias FS por índice de fila
+        for i, row in enumerate(rows):
+            tid = task_ids[i]
+            dep_row = row.depends_on_row
+            if tid is None or dep_row is None:
+                continue
+            if dep_row < 0 or dep_row >= len(task_ids):
+                continue
+            dep_id = task_ids[dep_row]
+            if dep_id is None or dep_id == tid:
+                continue
+            await self.repo.set_dependencies(tid, [{"depends_on_id": dep_id}])
+
+        created = len([t for t in task_ids if t is not None])
+        if created:
+            await self.historial.log(
+                obra_id=obra_id,
+                event_type="tasks_bulk_imported",
+                description=f"Se importaron {created} tarea{'s' if created != 1 else ''} desde Excel",
+                payload={
+                    "count": created,
+                    "failed": len(errors),
+                    **({"actor": actor} if actor else {}),
+                },
+                triggered_by="user",
+            )
+        return {"created": created, "failed": len(errors), "errors": errors, "task_ids": task_ids}
+
     # ── cascade reschedule ────────────────────────────────────────────────────
 
     async def _compute_cascade(

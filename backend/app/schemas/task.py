@@ -100,6 +100,25 @@ class TaskRead(BaseModel):
         return instance
 
 
+class BulkTaskRow(BaseModel):
+    title: str = Field(..., min_length=1, max_length=255)
+    start_date: date | None = None
+    due_date: date | None = None
+    responsible_id: int | None = None
+    depends_on_row: int | None = None   # índice 0-based dentro del mismo lote (dependencia FS)
+
+
+class BulkTaskCreate(BaseModel):
+    rows: list[BulkTaskRow] = Field(..., min_length=1, max_length=500)
+
+
+class BulkTaskResult(BaseModel):
+    created: int
+    failed: int
+    errors: list[str] = []
+    task_ids: list[int | None] = []     # por fila; None si falló
+
+
 class CascadePreviewRequest(BaseModel):
     """Proposed new dates for a task, to preview the downstream impact."""
     start_date: date | None = None

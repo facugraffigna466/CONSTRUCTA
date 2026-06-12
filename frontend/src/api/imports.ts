@@ -23,6 +23,7 @@ export interface ImportPreviewRow {
 export interface ImportPreview {
   rows: ImportPreviewRow[];
   column_map: Record<string, string>;
+  headers?: string[];
   total_rows: number;
   warnings: number;
   errors: number;
@@ -35,9 +36,10 @@ export interface ImportConfirmResult {
   errors: string[];
 }
 
-export async function previewImport(file: File): Promise<ImportPreview> {
+export async function previewImport(file: File, columnMap?: Record<string, string>): Promise<ImportPreview> {
   const form = new FormData();
   form.append("file", file);
+  if (columnMap) form.append("column_map", JSON.stringify(columnMap));
   const { data } = await apiClient.post<ImportPreview>("/imports/project-excel", form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
