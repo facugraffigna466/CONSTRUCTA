@@ -893,8 +893,21 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
 
   const tasksWithoutResp = tasks.filter(t => !t.responsible_key).length;
 
+  // No perder datos: si hay algo cargado y la obra no se creó, confirmar antes de cerrar
+  function safeClose() {
+    if (done) { onClose(); return; }
+    const hasData = obraData.name.trim() !== "" || responsibles.length > 0 || tasks.length > 0;
+    if (!hasData) { onClose(); return; }
+    const detalle = [
+      obraData.name.trim() && `la obra «${obraData.name.trim()}»`,
+      responsibles.length > 0 && `${responsibles.length} responsable${responsibles.length !== 1 ? "s" : ""}`,
+      tasks.length > 0 && `${tasks.length} tarea${tasks.length !== 1 ? "s" : ""}`,
+    ].filter(Boolean).join(", ");
+    if (confirm(`¿Cerrar el asistente? Se va a descartar ${detalle}.`)) onClose();
+  }
+
   function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (e.target === e.currentTarget) onClose();
+    if (e.target === e.currentTarget) safeClose();
   }
 
   return (
@@ -945,7 +958,8 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={safeClose}
+            aria-label="Cerrar asistente"
             style={{
               width: 32, height: 32, borderRadius: 9, border: "none",
               background: "rgba(255,255,255,0.10)", color: "rgba(255,255,255,0.55)",

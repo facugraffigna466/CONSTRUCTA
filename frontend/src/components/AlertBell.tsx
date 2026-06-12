@@ -1,17 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import { AlertTriangle, CalendarClock, Clock, MessageCircle, OctagonAlert, Package } from "lucide-react";
 import type { Alert } from "../types";
 
-const TYPE_META: Record<Alert["type"], { icon: string; color: string; label: string }> = {
-  task_blocked:          { icon: "🔴", color: "#D03A3A", label: "Tarea bloqueada" },
-  task_overdue:          { icon: "⏰", color: "#D03A3A", label: "Tarea vencida" },
-  delay_risk:            { icon: "⚠️", color: "#C97D0E", label: "Riesgo de demora" },
-  no_response:           { icon: "💬", color: "#C97D0E", label: "Sin respuesta" },
-  reschedule_requested:  { icon: "📅", color: "#3A6BD9", label: "Reprogramación solicitada" },
-  order_received:        { icon: "📦", color: "#1F8A5B", label: "Pedido recibido" },
+const TYPE_META: Record<Alert["type"], { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string; label: string }> = {
+  task_blocked:          { Icon: OctagonAlert,  color: "#D03A3A", label: "Tarea bloqueada" },
+  task_overdue:          { Icon: Clock,         color: "#D03A3A", label: "Tarea vencida" },
+  delay_risk:            { Icon: AlertTriangle, color: "#C97D0E", label: "Riesgo de demora" },
+  no_response:           { Icon: MessageCircle, color: "#C97D0E", label: "Sin respuesta" },
+  reschedule_requested:  { Icon: CalendarClock, color: "#3A6BD9", label: "Reprogramación solicitada" },
+  order_received:        { Icon: Package,       color: "#1F8A5B", label: "Pedido recibido" },
 };
 
 function AlertRow({ alert, onAlertClick, setOpen, obraName }: { alert: Alert; onAlertClick: (a: Alert) => void; setOpen: (v: boolean) => void; obraName?: string }) {
-  const meta = TYPE_META[alert.type] ?? { icon: "⚠️", color: "#C97D0E", label: alert.type };
+  const meta = TYPE_META[alert.type] ?? { Icon: AlertTriangle, color: "#C97D0E", label: alert.type };
   return (
     <div
       onClick={() => { if (alert.obra_id) { setOpen(false); onAlertClick(alert); } }}
@@ -31,7 +32,7 @@ function AlertRow({ alert, onAlertClick, setOpen, obraName }: { alert: Alert; on
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, flexWrap: "wrap" }}>
           <span style={{ fontSize: 10.5, fontWeight: 700, color: meta.color, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            {meta.icon} {meta.label}
+            <meta.Icon style={{ width: 11, height: 11, color: meta.color, flexShrink: 0 }} /> {meta.label}
           </span>
           {obraName && (
             <span style={{

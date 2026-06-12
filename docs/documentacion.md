@@ -1184,3 +1184,29 @@ En `backend/.env`: `ANTHROPIC_API_KEY=sk-ant-...` (análisis) y `OPENAI_API_KEY=
 
 ### Auditoría UX/UI (agente paralelo)
 Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla tipo Excel que pide el cliente pero está escondida (propuesta "Excel-first" con 13 cambios S/M/L), cero soporte mobile (P0), pérdida de datos al cerrar el wizard, inconsistencia de "duración" entre modal y planilla, datos fake en Portfolio/login, ~25 hallazgos P0-P2, 12 quick wins y roadmap de 5 sprints.
+
+---
+
+## 2026-06-12 — Sprint 1 UX "Excel-first" + 12 quick wins (de la auditoría)
+
+### La planilla pasa a ser EL producto
+- **Vista por defecto: Planilla** en el tab Tareas (preferencia persistida en localStorage por usuario).
+- **Toggle con texto** "Planilla / Tabla" (segmented control con aria-pressed) en vez de iconitos de 14px.
+- **Empty state que vende el paste**: "Cargá el plan de obra como en Excel" con dos CTAs — "Agregar primera fila" y "Pegar desde Excel" (lee el portapapeles vía `navigator.clipboard.readText()`, sin depender del foco).
+- **Paste robusto**: ahora dispara aunque el foco esté en una celda, si el texto es tabular (tabs o ≥2 líneas); pegar una palabra en una celda sigue normal.
+- **El paste aprovecha todo lo parseado**: matchea el responsable contra el equipo de la obra (exacto → parcial), lo muestra en el preview ("Juan Pérez" o "X (no está en el equipo)"), y crea las dependencias FS por número de fila en una segunda pasada. Contador de progreso "Importando… X/N", manejo de fallas parciales y de límite de plan (402 → UpgradeModal).
+- **Borrar tarea desde la planilla**: basurita al hover de cada fila (usa la prop onTaskDeleted que estaba muerta).
+- **402 → UpgradeModal** también al guardar fila individual.
+- Hint permanente en el footer: "Tip: copiá filas en Excel y pegalas acá (Ctrl+V)".
+
+### Quick wins
+- **Duración unificada (inclusiva)** en TaskFormModal: lun→vie ahora es 5 días en todos lados (antes el modal decía 4 y la planilla 5).
+- **Esc cierra TaskFormModal** (primero sub-diálogos, después el modal).
+- **Wizard no pierde datos**: cerrar con backdrop o X con datos cargados pide confirmación detallando qué se descarta.
+- **Portfolio sin datos fake**: "avance medio 50%" → calculado real desde completed_tasks/total_tasks; fuera "actualizado hace un momento" y la flechita de tendencia inventada.
+- **CTA en empty state de TaskTable**: botones "Nueva tarea" e "Importar desde Excel/Project".
+- **AlertBell con íconos lucide** (fuera emojis 🔴⏰⚠️).
+- **Presupuesto**: `alert()` nativo → banner de error inline descartable; botón "Generar pedido" deshabilitado ahora gris estándar.
+
+### Validación
+`npm run build` ✓ · ESLint sin errores nuevos (solo patrones preexistentes del repo).
