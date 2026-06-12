@@ -29,10 +29,11 @@ class Settings(BaseSettings):
     BREVO_SENDER_EMAIL: str = "noreply@constructa.com"
     BREVO_SENDER_NAME: str = "Constructa"
 
-    # Phase 3 — AI (not active yet)
+    # IA — bitácora de obra (análisis con Claude + transcripción Whisper)
     ANTHROPIC_API_KEY: str = ""
-    CLAUDE_MODEL: str = "claude-sonnet-4-6"
-    WHISPER_MODEL: str = "base"
+    CLAUDE_MODEL: str = "claude-opus-4-8"
+    OPENAI_API_KEY: str = ""   # para transcripción de audios (Whisper)
+    WHISPER_MODEL: str = "whisper-1"
 
     class Config:
         env_file = ".env"

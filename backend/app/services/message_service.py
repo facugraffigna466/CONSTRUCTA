@@ -112,7 +112,11 @@ class MessageService:
                 return inbound  # no reply sent outside hours
 
             # ── 5. Handle conversation ─────────────────────────────────────────
-            if payload.detected_type != MessageType.TEXT:
+            if payload.detected_type == MessageType.AUDIO and payload.MediaUrl0:
+                # Audio de obra → bitácora con IA (no pasa por el chatbot)
+                reply = await self._handle_bitacora_audio(payload, responsible)
+                task_id = None
+            elif payload.detected_type != MessageType.TEXT:
                 reply = (
                     f"Hola {responsible.full_name}. Recibimos tu mensaje. "
                     "Por favor respondé con el número de la opción deseada."
@@ -149,6 +153,93 @@ class MessageService:
         )
 
         return inbound
+
+    async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, responsible) -> str:
+        """Audio de WhatsApp → entrada de bitácora procesada con IA.
+        Devuelve el texto de respuesta para el responsable."""
+        import uuid as _uuid
+        from pathlib import Path as _Path
+
+        import requests as _requests
+        from sqlalchemy import func, select
+
+        from app.core.config import settings as _settings
+        from app.models.obra_team_member import ObraTeamMember
+        from app.models.task import Task, TaskStatus
+        from app.services.bitacora_service import BitacoraService
+
+        # 1. Descargar el audio de Twilio (basic auth SID:token)
+        audio_bytes: bytes | None = None
+        try:
+            resp = _requests.get(
+                payload.MediaUrl0,
+                auth=(_settings.TWILIO_ACCOUNT_SID, _settings.TWILIO_AUTH_TOKEN),
+                timeout=60,
+            )
+            resp.raise_for_status()
+            audio_bytes = resp.content
+        except Exception:
+            logger.exception("No se pudo descargar el audio de Twilio")
+            return (
+                f"Hola {responsible.full_name}. Recibimos tu audio pero no pudimos descargarlo. "
+                "Probá mandarlo de nuevo."
+            )
+
+        ctype = (payload.MediaContentType0 or "audio/ogg").split(";")[0]
+        ext = {"audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a",
+               "audio/amr": "amr", "audio/wav": "wav"}.get(ctype, "ogg")
+        uploads_dir = _Path(__file__).parent.parent.parent / "uploads"
+        uploads_dir.mkdir(exist_ok=True)
+        filename = f"bitacora_{_uuid.uuid4().hex}.{ext}"
+        (uploads_dir / filename).write_bytes(audio_bytes)
+
+        # 2. Inferir la obra: la de más tareas activas del responsable;
+        #    si no tiene, su única obra del equipo; si es ambiguo, queda sin asignar.
+        obra_id: int | None = None
+        top = (await self.db.execute(
+            select(Task.obra_id, func.count(Task.id).label("n"))
+            .where(
+                Task.responsible_id == responsible.id,
+                Task.status.notin_([TaskStatus.COMPLETADA, TaskStatus.CANCELADA]),
+            )
+            .group_by(Task.obra_id)
+            .order_by(func.count(Task.id).desc())
+        )).first()
+        if top:
+            obra_id = top[0]
+        else:
+            obras = (await self.db.execute(
+                select(ObraTeamMember.obra_id).where(ObraTeamMember.responsible_id == responsible.id)
+            )).scalars().all()
+            if len(obras) == 1:
+                obra_id = obras[0]
+
+        # 3. Crear y procesar la entrada
+        service = BitacoraService(self.db)
+        entry = await service.create_entry(
+            obra_id=obra_id,
+            source="whatsapp",
+            audio_path=f"/uploads/{filename}",
+            responsible_id=responsible.id,
+        )
+        entry = await service.process_entry(entry, audio_bytes=audio_bytes, filename=f"audio.{ext}")
+
+        # 4. Respuesta según resultado
+        if entry.status == "procesado":
+            n = len([s for s in (entry.suggestions or []) if s.get("type") != "note"])
+            base = f"📋 Audio registrado en la bitácora{' de la obra' if obra_id else ''}. Resumen: {entry.summary}"
+            if n:
+                base += f"\n\nDetectamos {n} acción{'es' if n != 1 else ''} sugerida{'s' if n != 1 else ''} (mover fechas, tareas o estados). El jefe de obra puede revisarlas y aplicarlas desde la app."
+            return base[:1500]
+        if entry.status == "pendiente_transcripcion":
+            return (
+                "🎙️ Recibimos tu audio y quedó guardado en la bitácora. "
+                "La transcripción automática no está habilitada todavía, pero el audio queda disponible en la app."
+            )
+        return (
+            "🎙️ Recibimos tu audio y quedó guardado en la bitácora. "
+            "Hubo un problema al procesarlo con IA; se puede reintentar desde la app."
+        )
 
     async def _save_message(self, data: MessageCreateInternal) -> Message:
         msg = Message(**data.model_dump())
