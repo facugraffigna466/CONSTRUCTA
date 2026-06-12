@@ -161,7 +161,7 @@ export function TaskMaterialsSection(props: Props) {
           Materiales
         </span>
         {rows.length > 0 && (
-          <span style={{ fontSize: 11, color: "#8E97A0" }}>
+          <span style={{ fontSize: 11, color: "#6B7580" }}>
             · {rows.length} ítem{rows.length !== 1 ? "s" : ""}
             {total > 0 && <> · ${total.toLocaleString("es-AR", { maximumFractionDigits: 2 })}</>}
           </span>
@@ -169,11 +169,11 @@ export function TaskMaterialsSection(props: Props) {
       </div>
 
       {loading ? (
-        <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>Cargando materiales…</p>
+        <p style={{ margin: 0, fontSize: 12, color: "#6B7580" }}>Cargando materiales…</p>
       ) : (
         <div style={{ border: "1px solid #EFECE6", borderRadius: 10, overflow: "hidden" }}>
           {rows.length === 0 && !adding && (
-            <p style={{ margin: 0, padding: "10px 12px", fontSize: 12, color: "#8E97A0" }}>
+            <p style={{ margin: 0, padding: "10px 12px", fontSize: 12, color: "#6B7580" }}>
               {isDraft
                 ? "Agregá los materiales de esta tarea. Se guardarán al crear la tarea."
                 : "Sin materiales cargados para esta tarea."}
@@ -193,7 +193,7 @@ export function TaskMaterialsSection(props: Props) {
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={m.name}>
                   {m.name}
                 </div>
-                <div style={{ fontSize: 10.5, color: "#8E97A0" }}>
+                <div style={{ fontSize: 10.5, color: "#6B7580" }}>
                   {m.supplier_name ?? "Sin proveedor"}
                 </div>
               </div>
@@ -223,7 +223,7 @@ export function TaskMaterialsSection(props: Props) {
               ) : (
                 <span style={{
                   fontSize: 10, fontWeight: 700, padding: "3px 6px", borderRadius: 99,
-                  background: "#F4F5F4", color: "#8E97A0", textAlign: "center",
+                  background: "#F4F5F4", color: "#6B7580", textAlign: "center",
                 }}>
                   Nuevo
                 </span>
@@ -235,7 +235,7 @@ export function TaskMaterialsSection(props: Props) {
                 style={{
                   width: 24, height: 24, borderRadius: 7, border: "none",
                   background: "transparent", cursor: "pointer",
-                  display: "flex", alignItems: "center", justifyContent: "center", color: "#ADAAA4",
+                  display: "flex", alignItems: "center", justifyContent: "center", color: "#7D7973",
                 }}
                 onMouseEnter={e => { e.currentTarget.style.background = "#FCE5E5"; e.currentTarget.style.color = "#D03A3A"; }}
                 onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#ADAAA4"; }}
@@ -262,7 +262,7 @@ export function TaskMaterialsSection(props: Props) {
                 </select>
                 <button type="button" onClick={() => setAdding(false)} disabled={saving} style={{
                   padding: "6px 10px", borderRadius: 8, fontSize: 11.5, fontWeight: 600,
-                  color: "#8E97A0", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer",
+                  color: "#6B7580", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer",
                 }}>
                   Cancelar
                 </button>
@@ -284,7 +284,7 @@ export function TaskMaterialsSection(props: Props) {
               style={{
                 width: "100%", padding: "7px 12px", background: "transparent", border: "none",
                 display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 600,
-                color: "#8E97A0", cursor: "pointer", textAlign: "left",
+                color: "#6B7580", cursor: "pointer", textAlign: "left",
               }}
               onMouseEnter={e => { e.currentTarget.style.color = "#FF6B35"; }}
               onMouseLeave={e => { e.currentTarget.style.color = "#8E97A0"; }}

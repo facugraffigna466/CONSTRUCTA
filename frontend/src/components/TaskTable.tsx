@@ -356,7 +356,7 @@ export function TaskTable({
         </div>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: 13.5, fontWeight: 600, color: "#3E4A52", margin: 0 }}>No hay tareas registradas</p>
-          <p style={{ fontSize: 12, color: "#8E97A0", margin: "3px 0 0" }}>Cargá el plan de obra para empezar a seguirlo.</p>
+          <p style={{ fontSize: 12, color: "#6B7580", margin: "3px 0 0" }}>Cargá el plan de obra para empezar a seguirlo.</p>
           {(onCreateNew || onImport) && (
             <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
               {onCreateNew && (
@@ -409,7 +409,7 @@ export function TaskTable({
       }}>
         {/* Tarea */}
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#ADAAA4", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Tarea</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Tarea</span>
           {hasFilters && (
             <button
               type="button"
@@ -424,7 +424,7 @@ export function TaskTable({
 
         {/* Estado */}
         <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#ADAAA4", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Estado</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Estado</span>
           <FilterBtn col="estado" active={statusFilter.size > 0} />
           {openFilter === "estado" && (
             <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, boxShadow: "0 8px 24px -4px rgba(15,22,28,0.14)", padding: 6, minWidth: 165 }}>
@@ -447,12 +447,12 @@ export function TaskTable({
 
         {/* % Avance */}
         <div style={{ display: "flex", alignItems: "center" }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#ADAAA4", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>% Avance</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>% Avance</span>
         </div>
 
         {/* Responsable */}
         <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#ADAAA4", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Responsable</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Responsable</span>
           <FilterBtn col="responsable" active={responsibleFilter.size > 0} />
           {openFilter === "responsable" && (
             <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, boxShadow: "0 8px 24px -4px rgba(15,22,28,0.14)", padding: 6, minWidth: 185 }}>
@@ -480,7 +480,7 @@ export function TaskTable({
 
         {/* Vencimiento */}
         <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <span style={{ fontSize: 10, fontWeight: 600, color: "#ADAAA4", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Vencimiento</span>
+          <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Vencimiento</span>
           <FilterBtn col="vencimiento" active={overdueOnly || !!fromDate || !!toDate} />
           {openFilter === "vencimiento" && (
             <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, boxShadow: "0 8px 24px -4px rgba(15,22,28,0.14)", padding: 8, minWidth: 210, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -499,7 +499,7 @@ export function TaskTable({
 
               {/* Date range */}
               <div style={{ padding: "0 4px", display: "flex", flexDirection: "column", gap: 6 }}>
-                <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#ADAAA4", letterSpacing: "0.08em", textTransform: "uppercase" }}>Rango de fechas</p>
+                <p style={{ margin: 0, fontSize: 10, fontWeight: 700, color: "#7D7973", letterSpacing: "0.08em", textTransform: "uppercase" }}>Rango de fechas</p>
                 <div>
                   <p style={{ margin: "0 0 3px", fontSize: 11, color: "#5B6770", fontWeight: 500 }}>Desde</p>
                   <input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setOverdueOnly(false); }}
@@ -517,7 +517,7 @@ export function TaskTable({
                   />
                 </div>
                 {(fromDate || toDate) && (
-                  <button type="button" onClick={() => { setFromDate(""); setToDate(""); }} style={{ alignSelf: "flex-end", fontSize: 11, color: "#8E97A0", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+                  <button type="button" onClick={() => { setFromDate(""); setToDate(""); }} style={{ alignSelf: "flex-end", fontSize: 11, color: "#6B7580", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                     Limpiar rango
                   </button>
                 )}
@@ -536,7 +536,7 @@ export function TaskTable({
           justifyContent: "center", padding: "36px 24px", gap: 8,
         }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#3E4A52" }}>Sin resultados</p>
-          <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>Ninguna tarea coincide con los filtros aplicados.</p>
+          <p style={{ margin: 0, fontSize: 12, color: "#6B7580" }}>Ninguna tarea coincide con los filtros aplicados.</p>
         </div>
       )}
       <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
@@ -565,7 +565,7 @@ export function TaskTable({
                   <div style={{ flex: 1, minWidth: 0, paddingLeft: level * 12 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1A2329", lineHeight: 1.35 }}>{task.title}</div>
                     {task.description && (
-                      <div style={{ fontSize: 11.5, color: "#8E97A0", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>
+                      <div style={{ fontSize: 11.5, color: "#6B7580", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>
                     )}
                   </div>
                   {hasActions && (
@@ -576,7 +576,7 @@ export function TaskTable({
                         </button>
                       )}
                       {onDelete && (
-                        <button onClick={() => onDelete(task)} aria-label="Eliminar tarea" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #EFECE6", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+                        <button onClick={() => onDelete(task)} aria-label="Eliminar tarea" style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #EFECE6", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}>
                           <Trash2 style={{ width: 13, height: 13 }} />
                         </button>
                       )}
@@ -657,7 +657,7 @@ export function TaskTable({
                 </div>
                 {task.description && (
                   <div style={{
-                    fontSize: 11.5, color: "#8E97A0", marginTop: 2, fontWeight: 400,
+                    fontSize: 11.5, color: "#6B7580", marginTop: 2, fontWeight: 400,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     lineHeight: 1.3,
                   }} title={task.description}>
@@ -674,7 +674,7 @@ export function TaskTable({
                     }}>
                       {editor.initials}
                     </div>
-                    <span style={{ fontSize: 10.5, color: "#8E97A0", fontStyle: "italic" }}>editando…</span>
+                    <span style={{ fontSize: 10.5, color: "#6B7580", fontStyle: "italic" }}>editando…</span>
                     <span style={{
                       width: 4, height: 4, borderRadius: 99,
                       background: editor.color, display: "inline-block",
@@ -762,7 +762,7 @@ export function TaskTable({
                         width: 30, height: 30, borderRadius: 8, border: "none",
                         background: "transparent", cursor: "pointer",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "#8E97A0", transition: "background 0.15s, color 0.15s",
+                        color: "#6B7580", transition: "background 0.15s, color 0.15s",
                       }}
                       onMouseEnter={e => {
                         e.currentTarget.style.background = "#EAF1FB";
@@ -784,7 +784,7 @@ export function TaskTable({
                         width: 30, height: 30, borderRadius: 8, border: "none",
                         background: "transparent", cursor: "pointer",
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        color: "#8E97A0", transition: "background 0.15s, color 0.15s",
+                        color: "#6B7580", transition: "background 0.15s, color 0.15s",
                       }}
                       onMouseEnter={e => {
                         e.currentTarget.style.background = "#FCE5E5";

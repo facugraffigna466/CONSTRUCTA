@@ -222,7 +222,7 @@ function ObraCard({ obra, onSelect, isPinned, onTogglePin, members }: { obra: Ob
         {/* Menu dots */}
         <button
           onClick={e => e.stopPropagation()}
-          style={{ width: 26, height: 26, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#8E97A0", background: "none", border: "none", cursor: "pointer" }}
+          style={{ width: 26, height: 26, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#6B7580", background: "none", border: "none", cursor: "pointer" }}
           onMouseEnter={e => (e.currentTarget.style.background = "#F4F5F4")}
           onMouseLeave={e => (e.currentTarget.style.background = "none")}
         >
@@ -449,7 +449,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
               </div>
               <div style={{ textAlign: "center" }}>
                 <p style={{ margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, color: "#1A2329" }}>Sin obras registradas</p>
-                <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#8E97A0" }}>Creá tu primera obra para comenzar el seguimiento.</p>
+                <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B7580" }}>Creá tu primera obra para comenzar el seguimiento.</p>
               </div>
               {canCreateObra && (
                 <button
@@ -508,7 +508,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
 
               {/* ── Card grid ── */}
               {filteredObras.length === 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "48px 0", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, color: "#8E97A0", fontSize: 13 }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "48px 0", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, color: "#6B7580", fontSize: 13 }}>
                   <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/><path d="M10 10l3.5 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
                   {q ? `Sin resultados para "${search}"` : "No hay obras con este filtro."}
                 </div>
@@ -558,7 +558,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                           <PlusIcon style={{ width: 18, height: 18 }} />
                         </div>
                         <h4 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, margin: "0 0 4px", color: "#1A2329" }}>Crear nueva obra</h4>
-                        <p style={{ margin: 0, fontSize: 12, color: "#8E97A0", maxWidth: 200 }}>Empezá un proyecto desde cero.</p>
+                        <p style={{ margin: 0, fontSize: 12, color: "#6B7580", maxWidth: 200 }}>Empezá un proyecto desde cero.</p>
                       </div>
                     </article>
                   )}

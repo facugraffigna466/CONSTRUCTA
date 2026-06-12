@@ -80,7 +80,7 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
           }}>
             Activá tu cuenta
           </h1>
-          <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#8E97A0" }}>
+          <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#6B7580" }}>
             Completá tus datos para unirte al equipo
           </p>
         </div>

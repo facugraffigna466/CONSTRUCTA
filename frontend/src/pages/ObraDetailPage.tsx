@@ -645,7 +645,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             <div style={{ minWidth: 0 }}>
               <div style={{
                 fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10.5, color: "#8E97A0",
+                fontSize: 10.5, color: "#6B7580",
                 letterSpacing: "0.1em", marginBottom: 3,
               }}>
                 #{obra.id.toString().padStart(3, "0")} · OBRA
@@ -683,7 +683,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                   <>
                     <span style={{ color: "#D5D7D3" }}>·</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0", flexShrink: 0 }}>
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#6B7580", flexShrink: 0 }}>
                         <path d="M8 2.5a3.8 3.8 0 013.8 3.8c0 2.8-3.8 7.2-3.8 7.2S4.2 9.1 4.2 6.3A3.8 3.8 0 018 2.5z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round"/>
                         <circle cx="8" cy="6.3" r="1.3" stroke="currentColor" strokeWidth="1.4" fill="none"/>
                       </svg>
@@ -696,7 +696,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                   <>
                     <span style={{ color: "#D5D7D3" }}>·</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0", flexShrink: 0 }}>
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#6B7580", flexShrink: 0 }}>
                         <circle cx="8" cy="5.5" r="2.5" stroke="currentColor" strokeWidth="1.4" fill="none"/>
                         <path d="M2.5 13.5c0-3.038 2.462-5.5 5.5-5.5s5.5 2.462 5.5 5.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/>
                       </svg>
@@ -709,7 +709,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                   <>
                     <span style={{ color: "#D5D7D3" }}>·</span>
                     <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0", flexShrink: 0 }}>
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#6B7580", flexShrink: 0 }}>
                         <rect x="2.5" y="3.5" width="11" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.4" fill="none"/>
                         <path d="M5.5 2v3M10.5 2v3M2.5 7h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                       </svg>

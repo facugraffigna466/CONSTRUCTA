@@ -94,7 +94,7 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
             {meta.label}{s.applied && " · aplicada"}{s.dismissed && " · descartada"}
           </div>
           {detail && <div style={{ fontSize: 12.5, color: "#1A2329", marginTop: 3, lineHeight: 1.45 }}>{detail}</div>}
-          <div style={{ fontSize: 11.5, color: "#8E97A0", marginTop: 3, lineHeight: 1.45, fontStyle: "italic" }}>
+          <div style={{ fontSize: 11.5, color: "#6B7580", marginTop: 3, lineHeight: 1.45, fontStyle: "italic" }}>
             “{s.reason}”
           </div>
           {error && <div style={{ fontSize: 11.5, color: "#D03A3A", marginTop: 5, fontWeight: 600 }}>{error}</div>}
@@ -104,7 +104,7 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
             <button
               onClick={() => act(() => dismissSuggestion(entryId, index))}
               disabled={busy}
-              style={{ padding: "5px 9px", borderRadius: 8, fontSize: 11, fontWeight: 600, color: "#8E97A0", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", fontFamily: FONT }}
+              style={{ padding: "5px 9px", borderRadius: 8, fontSize: 11, fontWeight: 600, color: "#6B7580", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", fontFamily: FONT }}
             >
               Descartar
             </button>
@@ -160,9 +160,9 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1A2329" }}>
             {entry.source === "whatsapp" ? `Audio de WhatsApp${entry.responsible_name ? ` · ${entry.responsible_name}` : ""}` : "Entrada desde la app"}
-            {entry.obra_name && <span style={{ fontWeight: 400, color: "#8E97A0" }}> · {entry.obra_name}</span>}
+            {entry.obra_name && <span style={{ fontWeight: 400, color: "#6B7580" }}> · {entry.obra_name}</span>}
           </div>
-          <div style={{ fontSize: 10.5, color: "#ADAAA4", marginTop: 1 }}>{fmtDateTime(entry.created_at)}</div>
+          <div style={{ fontSize: 10.5, color: "#7D7973", marginTop: 1 }}>{fmtDateTime(entry.created_at)}</div>
         </div>
         <span style={{ padding: "3px 9px", borderRadius: 99, fontSize: 10.5, fontWeight: 700, background: st.bg, color: st.color, whiteSpace: "nowrap" }}>
           {st.label}
@@ -240,7 +240,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
               <Sparkles style={{ width: 12, height: 12, color: "#E76A2D" }} />
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#94928D" }}>Resumen</span>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#6B7580" }}>Resumen</span>
             </div>
             <p style={{ margin: 0, fontSize: 13, color: "#1A2329", lineHeight: 1.55 }}>{entry.summary}</p>
           </div>
@@ -251,7 +251,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
               <ClipboardList style={{ width: 12, height: 12, color: "#2A62C9" }} />
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#94928D" }}>Puntos clave</span>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#6B7580" }}>Puntos clave</span>
             </div>
             <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 3 }}>
               {entry.key_points!.map((p, i) => (
@@ -266,7 +266,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <CheckCircle2 style={{ width: 12, height: 12, color: "#1F8A5B" }} />
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#94928D" }}>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.09em", color: "#6B7580" }}>
                 Acciones sugeridas por la IA
               </span>
             </div>
@@ -283,7 +283,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
           {entry.transcript && (
             <button
               onClick={() => setShowTranscript(v => !v)}
-              style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 0", fontSize: 11.5, fontWeight: 600, color: "#8E97A0", background: "none", border: "none", cursor: "pointer", fontFamily: FONT }}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 0", fontSize: 11.5, fontWeight: 600, color: "#6B7580", background: "none", border: "none", cursor: "pointer", fontFamily: FONT }}
             >
               <ChevronDown style={{ width: 12, height: 12, transform: showTranscript ? "none" : "rotate(-90deg)", transition: "transform 0.15s" }} />
               Ver transcripción
@@ -419,7 +419,7 @@ export function BitacoraPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800, color: "#1A2329", letterSpacing: "-0.02em" }}>Bitácora de obra</h1>
-          <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#8E97A0" }}>
+          <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#6B7580" }}>
             Grabá o mandá un audio de WhatsApp desde la obra — la IA lo resume y te propone acciones sobre el plan.
           </p>
         </div>
@@ -450,7 +450,7 @@ export function BitacoraPage() {
             </button>
           ))}
           {obraId === "todas" && obras.length > 0 && (
-            <span style={{ marginLeft: "auto", alignSelf: "center", fontSize: 11, color: "#ADAAA4" }}>
+            <span style={{ marginLeft: "auto", alignSelf: "center", fontSize: 11, color: "#7D7973" }}>
               Se registra en: <strong style={{ color: "#5B6770" }}>{obras[0]?.name}</strong> (elegí otra arriba)
             </span>
           )}
@@ -547,14 +547,14 @@ export function BitacoraPage() {
 
       {/* Lista de entradas */}
       {loading ? (
-        <p style={{ fontSize: 13, color: "#8E97A0", textAlign: "center", padding: 24 }}>Cargando bitácora…</p>
+        <p style={{ fontSize: 13, color: "#6B7580", textAlign: "center", padding: 24 }}>Cargando bitácora…</p>
       ) : entries.length === 0 ? (
         <div style={{ textAlign: "center", padding: "36px 24px", background: "#fff", border: "1px dashed #DDD6C9", borderRadius: 14 }}>
           <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FFF0E8", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
             <Mic style={{ width: 20, height: 20, color: "#E76A2D" }} />
           </div>
           <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "#3E4A52" }}>Todavía no hay entradas</p>
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#8E97A0", lineHeight: 1.6 }}>
+          <p style={{ margin: "4px 0 0", fontSize: 12, color: "#6B7580", lineHeight: 1.6 }}>
             Grabá un audio acá arriba, o mandá un audio de WhatsApp al número de CONSTRUCTA<br />
             desde un teléfono registrado como responsable — entra solo a la bitácora.
           </p>

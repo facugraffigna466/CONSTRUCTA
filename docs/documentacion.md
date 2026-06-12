@@ -1252,3 +1252,21 @@ Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla ti
 
 ### Validation
 `npm run build` ✓
+
+---
+
+## 2026-06-12 — Fix drag del Gantt + Sprint 5 UX (accesibilidad)
+
+### Fix (reportado por el usuario)
+La migración a pointer events del Sprint 3 rompió el arrastre de barras y el ajuste de fechas en el Gantt. **Revertido**: GanttTimeline restaurado a la versión funcional (mouse events) y el resize de columnas de la planilla al patrón original. Lección: el soporte touch del Gantt se hará aparte, de forma aditiva y probado en navegador.
+
+### Sprint 5
+- **Contraste de texto secundario en toda la app** (24 archivos): `#8E97A0`→`#6B7580`, `#94928D`→`#6B7580`, `#ADAAA4`→`#7D7973` (solo en `color:`, sin tocar bordes/fondos) — labels, hints y metadatos pasan de ~2.5–3.5:1 a ~4.6:1 (WCAG AA).
+- **Esc cierra** ImportModal y ReschedulingModal (TaskFormModal ya lo tenía del Sprint 4).
+- **Sticky header real en la planilla**: el contenedor ahora es su propio scrollport (`maxHeight: calc(100vh - 210px)` + `overflow: auto`) — el header de columnas queda fijo al scrollear, y el scroll horizontal de mobile se mantiene.
+
+### Pendiente menor (P2, no bloqueante)
+Nav de secciones en ConfiguracionPage (archivo de 1.500 líneas — mejor hacerlo en una pasada dedicada).
+
+### Validation
+`npm run build` ✓

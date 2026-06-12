@@ -131,7 +131,7 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
         case "bloqueada":
           sentence = (
             <>{name} bloqueó <strong>{taskTitle}</strong>
-              {reason && <span style={{ color: "#8E97A0" }}> · {reason}</span>}
+              {reason && <span style={{ color: "#6B7580" }}> · {reason}</span>}
             </>
           );
           badge = "blocked";
@@ -167,9 +167,9 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
             const dt = de.to_label   != null ? String(de.to_label)   : fmtDate(de.to);
             sentence = (
               <>{name} reprogramó las <strong>fechas</strong> de <strong>{taskTitle}</strong>{" · "}
-                Inicio: <span style={{ color: "#8E97A0", textDecoration: "line-through" }}>{sf}</span>{" → "}<strong>{st}</strong>
+                Inicio: <span style={{ color: "#6B7580", textDecoration: "line-through" }}>{sf}</span>{" → "}<strong>{st}</strong>
                 {" · "}
-                Fin: <span style={{ color: "#8E97A0", textDecoration: "line-through" }}>{df}</span>{" → "}<strong>{dt}</strong>
+                Fin: <span style={{ color: "#6B7580", textDecoration: "line-through" }}>{df}</span>{" → "}<strong>{dt}</strong>
               </>
             );
           } else {
@@ -180,7 +180,7 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
             const to   = entry.to_label   != null ? String(entry.to_label)   : fmtDate(entry.to);
             sentence = (
               <>{name} reprogramó la <strong>{dateLabel}</strong> de <strong>{taskTitle}</strong>{" · "}
-                <span style={{ color: "#8E97A0", textDecoration: "line-through" }}>{from}</span>
+                <span style={{ color: "#6B7580", textDecoration: "line-through" }}>{from}</span>
                 {" → "}<strong>{to}</strong>
               </>
             );
@@ -206,7 +206,7 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
       const to   = fmtDate(ev.payload?.to);
       sentence = (
         <>{name} reprogramó la <strong>fecha de fin</strong> de <strong>{taskTitle}</strong>{" · "}
-          <span style={{ color: "#8E97A0", textDecoration: "line-through" }}>{from}</span>
+          <span style={{ color: "#6B7580", textDecoration: "line-through" }}>{from}</span>
           {" → "}<strong>{to}</strong>
         </>
       );
@@ -220,7 +220,7 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
       const names = list.slice(0, 3).map(a => a.title).filter(Boolean).join(", ");
       sentence = (
         <>{name} reprogramó <strong>{count} tarea{count !== 1 ? "s" : ""}</strong> en cascada por el cambio de fechas en <strong>{taskTitle}</strong>
-          {names && <span style={{ color: "#8E97A0" }}> · {names}{count > 3 ? "…" : ""}</span>}
+          {names && <span style={{ color: "#6B7580" }}> · {names}{count > 3 ? "…" : ""}</span>}
         </>
       );
       badge = "reschedule";
@@ -239,8 +239,8 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
       const alertLabel = ALERT_LABELS[alertType] ?? "alerta";
       const hasTask    = !!ev.task_id;
       sentence = hasTask
-        ? <span style={{ color: "#8E97A0" }}>Sistema detectó <strong style={{ color: "#C97D0E" }}>{alertLabel}</strong> en <strong style={{ color: "#1A2329" }}>{taskTitle}</strong></span>
-        : <span style={{ color: "#8E97A0" }}>Sistema detectó <strong style={{ color: "#C97D0E" }}>{alertLabel}</strong> en la obra</span>;
+        ? <span style={{ color: "#6B7580" }}>Sistema detectó <strong style={{ color: "#C97D0E" }}>{alertLabel}</strong> en <strong style={{ color: "#1A2329" }}>{taskTitle}</strong></span>
+        : <span style={{ color: "#6B7580" }}>Sistema detectó <strong style={{ color: "#C97D0E" }}>{alertLabel}</strong> en la obra</span>;
       badge = "alert";
       break;
     }
@@ -284,7 +284,7 @@ export function HistorialPanel({ events, tasks, filterable = false }: HistorialP
 
   if (events.length === 0) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", color: "#8E97A0", fontSize: 13, gap: 8 }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 0", color: "#6B7580", fontSize: 13, gap: 8 }}>
         <Activity style={{ width: 28, height: 28, opacity: 0.3 }} />
         <span>No hay eventos registrados.</span>
       </div>
@@ -326,7 +326,7 @@ export function HistorialPanel({ events, tasks, filterable = false }: HistorialP
 
       {/* ── Empty filtered state ── */}
       {displayed.length === 0 ? (
-        <div style={{ padding: "32px 0", textAlign: "center", color: "#8E97A0", fontSize: 13 }}>
+        <div style={{ padding: "32px 0", textAlign: "center", color: "#6B7580", fontSize: 13 }}>
           No hay eventos con este filtro.
         </div>
       ) : (
@@ -376,7 +376,7 @@ export function HistorialPanel({ events, tasks, filterable = false }: HistorialP
                       <span style={{ width: 6, height: 6, borderRadius: 99, background: bdg.dot, flexShrink: 0 }} />
                       {bdg.label}
                     </span>
-                    <span style={{ fontSize: 12, color: "#8E97A0", whiteSpace: "nowrap" }}>
+                    <span style={{ fontSize: 12, color: "#6B7580", whiteSpace: "nowrap" }}>
                       {row.time}
                     </span>
                   </div>

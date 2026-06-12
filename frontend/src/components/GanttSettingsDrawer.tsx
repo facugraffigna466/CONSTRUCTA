@@ -87,7 +87,7 @@ function SectionHeader({
       <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.01em" }}>{title}</span>
       <svg
         width="12" height="12" viewBox="0 0 12 12" fill="none"
-        style={{ color: "#8E97A0", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
+        style={{ color: "#6B7580", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}
       >
         <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
@@ -231,7 +231,7 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
           </div>
           <button
             onClick={onClose}
-            style={{ width: 26, height: 26, borderRadius: 7, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
+            style={{ width: 26, height: 26, borderRadius: 7, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}
           >
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
@@ -239,7 +239,7 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
           </button>
         </div>
 
-        {loading && <div style={{ padding: 20, fontSize: 13, color: "#8E97A0", textAlign: "center" }}>Cargando…</div>}
+        {loading && <div style={{ padding: 20, fontSize: 13, color: "#6B7580", textAlign: "center" }}>Cargando…</div>}
 
         {!loading && (
           <>
@@ -251,7 +251,7 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
 
                   {/* Escala */}
                   <div>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: "#8E97A0", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Escala</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 600, color: "#6B7580", letterSpacing: "0.07em", textTransform: "uppercase", marginBottom: 6 }}>Escala</div>
                     <div style={{ display: "flex", background: "#F4F1EB", borderRadius: 7, padding: 2, border: "1px solid #ECE7DD" }}>
                       {(["semana", "mes", "trim"] as const).map((v, i) => {
                         const lbl = ["Semana", "Mes", "Trimestre"][i];
@@ -311,7 +311,7 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
                       {savingBaseline ? "Guardando…" : "Guardar línea base"}
                     </button>
                     {baselineSavedAt && (
-                      <span style={{ fontSize: 11, color: "#8E97A0" }}>
+                      <span style={{ fontSize: 11, color: "#6B7580" }}>
                         Guardada: {new Date(baselineSavedAt).toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" })}
                       </span>
                     )}
@@ -344,7 +344,7 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
                     <span style={{ fontSize: 12, color: "#5B6770", flexShrink: 0 }}>Horario</span>
                     {(["hour_from", "hour_to"] as const).map((field, i) => (
                       <>
-                        {i === 1 && <span style={{ fontSize: 12, color: "#8E97A0" }}>–</span>}
+                        {i === 1 && <span style={{ fontSize: 12, color: "#6B7580" }}>–</span>}
                         <select
                           key={field}
                           value={calendar[field]}
@@ -428,7 +428,7 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
 
                   {/* Add exception form */}
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, borderRadius: 8, background: "#FAFAFA", border: "1px solid #F0F1EF" }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, color: "#8E97A0", letterSpacing: "0.06em", textTransform: "uppercase" }}>Agregar excepción</div>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7580", letterSpacing: "0.06em", textTransform: "uppercase" }}>Agregar excepción</div>
                     <input
                       type="date" value={excDate} onChange={e => setExcDate(e.target.value)}
                       style={{ padding: "6px 8px", borderRadius: 7, border: "1px solid #E6E7E5", fontSize: 12, color: "#1A2329" }}

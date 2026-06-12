@@ -108,9 +108,9 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
         <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid #F0F1EF", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: "#1A2329" }}>Generar pedido de materiales</h3>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8E97A0" }}>Seleccioná los materiales pendientes a pedir</p>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6B7580" }}>Seleccioná los materiales pendientes a pedir</p>
           </div>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", color: "#8E97A0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", color: "#6B7580", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <X style={{ width: 13, height: 13 }} />
           </button>
         </div>
@@ -139,7 +139,7 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
           </label>
           <div style={{ border: "1px solid #EFECE6", borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
             {pendientes.length === 0 && (
-              <p style={{ margin: 0, padding: "10px 12px", fontSize: 12.5, color: "#8E97A0" }}>
+              <p style={{ margin: 0, padding: "10px 12px", fontSize: 12.5, color: "#6B7580" }}>
                 No hay materiales pendientes. Cargalos desde las tareas.
               </p>
             )}
@@ -158,7 +158,7 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
                 />
                 <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {r.name}
-                  <span style={{ fontWeight: 400, color: "#8E97A0" }}> · {r.task_title}</span>
+                  <span style={{ fontWeight: 400, color: "#6B7580" }}> · {r.task_title}</span>
                 </span>
                 <span style={{ fontSize: 11.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
                   {r.quantity != null ? `${r.quantity} ${r.unit ?? ""}` : ""} {r.subtotal > 0 && `· ${money(r.subtotal)}`}
@@ -272,9 +272,9 @@ function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
         <div style={{ padding: "18px 22px 14px", borderBottom: "1px solid #F0F1EF", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             <h3 style={{ margin: 0, fontSize: 15.5, fontWeight: 700, color: "#1A2329" }}>Agregar ítem al presupuesto</h3>
-            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#8E97A0" }}>El material queda asociado a una tarea de la obra</p>
+            <p style={{ margin: "2px 0 0", fontSize: 12, color: "#6B7580" }}>El material queda asociado a una tarea de la obra</p>
           </div>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", color: "#8E97A0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", color: "#6B7580", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <X style={{ width: 13, height: 13 }} />
           </button>
         </div>
@@ -424,7 +424,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
   }
 
   if (loading) {
-    return <p style={{ padding: 24, fontSize: 13, color: "#8E97A0", fontFamily: FONT }}>Cargando presupuesto…</p>;
+    return <p style={{ padding: 24, fontSize: 13, color: "#6B7580", fontFamily: FONT }}>Cargando presupuesto…</p>;
   }
   if (error || !data) {
     return <p style={{ padding: 24, fontSize: 13, color: "#D03A3A", fontFamily: FONT }}>{error}</p>;
@@ -443,9 +443,9 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
           { label: "Gasto real (recibido)", value: data.total_recibido, color: "#1F8A5B", hint: "Materiales ya recibidos" },
         ].map(kpi => (
           <div key={kpi.label} style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, padding: "14px 16px" }}>
-            <p style={{ margin: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0" }}>{kpi.label}</p>
+            <p style={{ margin: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580" }}>{kpi.label}</p>
             <p style={{ margin: "6px 0 0", fontSize: 21, fontWeight: 800, color: kpi.color, fontVariantNumeric: "tabular-nums" }}>{money(kpi.value)}</p>
-            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#ADAAA4" }}>{kpi.hint}</p>
+            <p style={{ margin: "2px 0 0", fontSize: 11, color: "#7D7973" }}>{kpi.hint}</p>
           </div>
         ))}
       </div>
@@ -501,7 +501,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
           padding: "9px 14px", borderBottom: "1px solid #F0EBE2", background: "#FAF8F4",
         }}>
           {["Ítem", "Cantidad", "Precio unit.", "Subtotal", "Proveedor", "Estado"].map(h => (
-            <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#94928D", letterSpacing: "0.09em", textTransform: "uppercase" }}>{h}</span>
+            <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#6B7580", letterSpacing: "0.09em", textTransform: "uppercase" }}>{h}</span>
           ))}
         </div>
 
@@ -511,7 +511,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
               <ShoppingCart style={{ width: 20, height: 20, color: "#E76A2D" }} />
             </div>
             <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#3E4A52" }}>Todavía no hay materiales cargados</p>
-            <p style={{ margin: "4px 0 14px", fontSize: 12, color: "#8E97A0" }}>
+            <p style={{ margin: "4px 0 14px", fontSize: 12, color: "#6B7580" }}>
               Empezá agregando un ítem y elegí a qué tarea de la obra pertenece.
             </p>
             <button
@@ -577,7 +577,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
       {orders.length > 0 && (
         <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden" }}>
           <div style={{ padding: "10px 14px", borderBottom: "1px solid #F0EBE2", background: "#FAF8F4" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: "#94928D", letterSpacing: "0.09em", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: "#6B7580", letterSpacing: "0.09em", textTransform: "uppercase" }}>
               Pedidos ({orders.length})
             </span>
           </div>
@@ -589,9 +589,9 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1A2329" }}>
                   Pedido #{o.id}
-                  <span style={{ fontWeight: 400, color: "#8E97A0" }}> · {o.supplier_name ?? "sin proveedor"} · {o.items.length} ítem{o.items.length !== 1 ? "s" : ""}</span>
+                  <span style={{ fontWeight: 400, color: "#6B7580" }}> · {o.supplier_name ?? "sin proveedor"} · {o.items.length} ítem{o.items.length !== 1 ? "s" : ""}</span>
                 </div>
-                <div style={{ fontSize: 11, color: "#8E97A0", marginTop: 1 }}>
+                <div style={{ fontSize: 11, color: "#6B7580", marginTop: 1 }}>
                   {new Date(o.created_at).toLocaleDateString("es-AR")} {o.total > 0 && <>· {money(o.total)}</>}
                   {o.notes && <> · {o.notes}</>}
                 </div>

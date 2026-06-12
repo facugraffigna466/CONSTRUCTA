@@ -71,7 +71,7 @@ function AutocompleteInput({ value, onChange, onSelect, suggestions, placeholder
           </div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{r.full_name}</div>
-            <div style={{ fontSize: 11, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>{r.whatsapp_number}{r.role ? ` · ${r.role}` : ""}</div>
+            <div style={{ fontSize: 11, color: "#6B7580", fontFamily: "'JetBrains Mono', monospace" }}>{r.whatsapp_number}{r.role ? ` · ${r.role}` : ""}</div>
           </div>
         </div>
       ))}
@@ -130,17 +130,17 @@ function EditMemberModal({ member, obraId, onSaved, onClose }: {
       <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 440, boxShadow: "0 24px 60px -16px rgba(0,0,0,0.3)", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "#1A2329" }}>Editar responsable</h3>
-          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "#F4F5F4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: "#F4F5F4", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}>
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
           </button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Nombre</label>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 6 }}>Nombre</label>
             <input style={BASE} autoFocus placeholder="Juan Pérez" value={name} onChange={e => setName(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>WhatsApp</label>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 6 }}>WhatsApp</label>
             <input style={BASE} placeholder="+5491112345678" value={phone} onChange={e => setPhone(e.target.value)} />
             {phone !== member.whatsapp_number && (
               <p style={{ margin: "5px 0 0", fontSize: 11.5, color: "#C97D0E", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -149,7 +149,7 @@ function EditMemberModal({ member, obraId, onSaved, onClose }: {
             )}
           </div>
           <div>
-            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 6 }}>Rol en esta obra <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+            <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 6 }}>Rol en esta obra <span style={{ fontWeight: 400 }}>(opcional)</span></label>
             <input style={BASE} placeholder="Capataz, Electricista, Director..." value={role} onChange={e => setRole(e.target.value)} onKeyDown={e => { if (e.key === "Enter") save(); }} />
           </div>
         </div>
@@ -264,7 +264,7 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
     onTeamChanged?.();
   }
 
-  if (loading) return <p style={{ padding: 24, fontSize: 13, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cargando...</p>;
+  if (loading) return <p style={{ padding: 24, fontSize: 13, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cargando...</p>;
 
   return (
     <div style={{ padding: "0 0 24px" }}>
@@ -277,15 +277,15 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
             <div>
-              <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Nombre</label>
+              <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Nombre</label>
               <AutocompleteInput value={nameInput} onChange={v => { setNameInput(v); setSelectedExisting(null); }} onSelect={handleSelectExisting} suggestions={available} placeholder="Juan Pérez" />
             </div>
             <div>
-              <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>WhatsApp</label>
+              <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>WhatsApp</label>
               <AutocompleteInput value={phoneInput} onChange={v => { setPhoneInput(v); setSelectedExisting(null); }} onSelect={handleSelectExisting} suggestions={available} placeholder="+5491112345678" />
             </div>
             <div>
-              <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#8E97A0", display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Rol en esta obra <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+              <label style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 5, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Rol en esta obra <span style={{ fontWeight: 400 }}>(opcional)</span></label>
               <input style={BASE} placeholder="Capataz, Electricista..." value={roleInput} onChange={e => setRoleInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleAdd(); }} />
             </div>
           </div>
@@ -318,13 +318,13 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
       {/* ── Lista del equipo ── */}
       {team.length === 0 ? (
         <div style={{ textAlign: "center", padding: "32px 0" }}>
-          <p style={{ margin: 0, fontSize: 13, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <p style={{ margin: 0, fontSize: 13, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Sin responsables en esta obra todavía.{isAdmin && " Agregá el primer miembro del equipo."}
           </p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#6B7580", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             {team.length} persona{team.length !== 1 ? "s" : ""} en esta obra
           </span>
           {team.map(m => {
@@ -344,18 +344,18 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
                       <span style={{ fontSize: 11, color: "#D03A3A", background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 99, padding: "2px 8px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inactivo</span>
                     )}
                   </div>
-                  <span style={{ fontSize: 11.5, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
+                  <span style={{ fontSize: 11.5, color: "#6B7580", fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
                 </div>
                 {isAdmin && (
                   <div style={{ display: "flex", gap: 4 }}>
                     <button onClick={() => setEditingMember(m)} title="Editar"
-                      style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
+                      style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}
                       onMouseEnter={e => { e.currentTarget.style.background = "#EAF1FB"; e.currentTarget.style.color = "#2A6FDB"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
                       <Pencil style={{ width: 13, height: 13 }} />
                     </button>
                     <button onClick={() => setRemovingMember(m)} title="Quitar de la obra"
-                      style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
+                      style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}
                       onMouseEnter={e => { e.currentTarget.style.background = "#FCE5E5"; e.currentTarget.style.color = "#D03A3A"; }}
                       onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
                       <Trash2 style={{ width: 13, height: 13 }} />

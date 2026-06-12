@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { confirmImport, previewImport, type ImportPreviewRow } from "../api/imports";
 import { downloadTemplateExcel } from "../api/exports";
 
@@ -30,6 +30,16 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
   const [headers, setHeaders] = useState<string[]>([]);
   const [showRemap, setShowRemap] = useState(false);
   const [remap, setRemap] = useState<Record<string, string>>({});
+
+  // Esc cierra el modal
+  useEffect(() => {
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleFile(file: File, columnMap?: Record<string, string>) {
     setLoading(true);
@@ -90,7 +100,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
               Subí un .xlsx exportado de Project o cualquier planilla con columnas de tareas
             </p>
           </div>
-          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
           </button>
         </div>
@@ -126,7 +136,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                   <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "#1A2329" }}>
                     Arrastrá el archivo aquí o hacé click para seleccionarlo
                   </p>
-                  <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>.xml o .xlsx exportado de MS Project · .csv · máx. 10 MB</p>
+                  <p style={{ margin: 0, fontSize: 12, color: "#6B7580" }}>.xml o .xlsx exportado de MS Project · .csv · máx. 10 MB</p>
                 </>
               )}
             </div>
@@ -203,7 +213,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                 {/* Header */}
                 <div style={{ display: "grid", gridTemplateColumns: "32px 1fr 140px 110px 110px", background: "#F8F9F8", borderBottom: "1px solid #E6E7E5" }}>
                   {["#", "Título", "Responsable", "Inicio", "Vencimiento"].map(h => (
-                    <div key={h} style={{ padding: "8px 10px", fontSize: 10.5, fontWeight: 700, color: "#8E97A0", textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</div>
+                    <div key={h} style={{ padding: "8px 10px", fontSize: 10.5, fontWeight: 700, color: "#6B7580", textTransform: "uppercase", letterSpacing: "0.07em" }}>{h}</div>
                   ))}
                 </div>
                 {rows.map((row, i) => (
@@ -212,7 +222,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                     background: row.error ? "#FFFAFA" : row.warning ? "#FFFBF0" : i % 2 === 0 ? "#fff" : "#FAFAFA",
                     borderBottom: i < rows.length - 1 ? "1px solid #F0F1EF" : "none",
                   }}>
-                    <div style={{ padding: "9px 10px", fontSize: 11.5, color: "#8E97A0", fontWeight: 600, display: "flex", alignItems: "center" }}>{i + 1}</div>
+                    <div style={{ padding: "9px 10px", fontSize: 11.5, color: "#6B7580", fontWeight: 600, display: "flex", alignItems: "center" }}>{i + 1}</div>
                     <div style={{ padding: "9px 10px", display: "flex", flexDirection: "column", gap: 2 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: row.error ? "#D03A3A" : "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</span>
                       {row.error && <span style={{ fontSize: 11, color: "#D03A3A" }}>{row.error}</span>}
@@ -256,7 +266,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                 {result.created} {result.created === 1 ? "tarea importada" : "tareas importadas"}
               </h3>
               {result.skipped > 0 && (
-                <p style={{ margin: 0, fontSize: 13, color: "#8E97A0" }}>{result.skipped} filas omitidas</p>
+                <p style={{ margin: 0, fontSize: 13, color: "#6B7580" }}>{result.skipped} filas omitidas</p>
               )}
             </div>
           )}

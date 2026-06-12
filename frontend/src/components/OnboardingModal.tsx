@@ -124,7 +124,7 @@ export function OnboardingModal({ onClose, onCreateObra }: { onClose: () => void
               onClick={finish}
               style={{
                 padding: "9px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
-                color: "#8E97A0", background: "transparent", border: "none", cursor: "pointer",
+                color: "#6B7580", background: "transparent", border: "none", cursor: "pointer",
               }}
             >
               Saltar

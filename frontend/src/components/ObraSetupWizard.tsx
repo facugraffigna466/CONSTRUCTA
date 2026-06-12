@@ -93,7 +93,7 @@ function FieldLabel({ children, optional }: { children: ReactNode; optional?: bo
       <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         {children}
       </span>
-      {optional && <span style={{ fontSize: 10.5, color: "#ADAAA4", fontWeight: 400 }}>(opcional)</span>}
+      {optional && <span style={{ fontSize: 10.5, color: "#7D7973", fontWeight: 400 }}>(opcional)</span>}
     </div>
   );
 }
@@ -173,7 +173,7 @@ function SmallIconBtn({ children, onClick, title, danger }: { children: ReactNod
         width: 30, height: 30, borderRadius: 8, border: "none",
         background: "transparent", cursor: "pointer",
         display: "flex", alignItems: "center", justifyContent: "center",
-        color: "#8E97A0", transition: "background 0.15s, color 0.15s",
+        color: "#6B7580", transition: "background 0.15s, color 0.15s",
       }}
       onMouseEnter={e => {
         e.currentTarget.style.background = danger ? "#FCE5E5" : "#EAF1FB";
@@ -316,7 +316,7 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
               Cambiar
             </button>
             <button type="button" onClick={clearImage}
-              style={{ width: 28, height: 28, borderRadius: 7, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}>
+              style={{ width: 28, height: 28, borderRadius: 7, background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7580" }}>
               <X style={{ width: 12, height: 12 }} />
             </button>
           </div>
@@ -334,11 +334,11 @@ function Step1({ data, onChange, errors }: { data: ObraFormData; onChange: (d: O
           >
             {imgLoadError
               ? <ImageOff style={{ width: 18, height: 18, color: "#C7CAC6", flexShrink: 0 }} />
-              : <Upload style={{ width: 18, height: 18, color: "#ADAAA4", flexShrink: 0 }} />
+              : <Upload style={{ width: 18, height: 18, color: "#7D7973", flexShrink: 0 }} />
             }
             <div style={{ textAlign: "left" }}>
               <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Agregar foto de la obra</p>
-              <p style={{ margin: 0, fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace" }}>JPG · PNG · WebP — máx. 5 MB</p>
+              <p style={{ margin: 0, fontSize: 10.5, color: "#7D7973", fontFamily: "'JetBrains Mono', monospace" }}>JPG · PNG · WebP — máx. 5 MB</p>
             </div>
           </button>
         )}
@@ -453,7 +453,7 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
       <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
         {responsibles.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
               {responsibles.length} responsable{responsibles.length !== 1 ? "s" : ""} agregado{responsibles.length !== 1 ? "s" : ""}
             </span>
             {responsibles.map(r => {
@@ -465,7 +465,7 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.full_name}</p>
-                    <p style={{ margin: "1px 0 0", fontSize: 11.5, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>{r.whatsapp_number}</p>
+                    <p style={{ margin: "1px 0 0", fontSize: 11.5, color: "#6B7580", fontFamily: "'JetBrains Mono', monospace" }}>{r.whatsapp_number}</p>
                   </div>
                   {r.role && (
                     <span style={{ fontSize: 11, color: "#5B6770", background: "#F0F1EF", padding: "3px 8px", borderRadius: 99, border: "1px solid #E6E7E5", whiteSpace: "nowrap", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -482,7 +482,7 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
           </div>
         ) : (
           <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <p style={{ fontSize: 12.5, color: "#8E97A0", textAlign: "center", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin responsables todavía — podés continuar y agregarlos después.</p>
+            <p style={{ fontSize: 12.5, color: "#6B7580", textAlign: "center", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin responsables todavía — podés continuar y agregarlos después.</p>
           </div>
         )}
       </div>
@@ -626,14 +626,14 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
       <div ref={listRef} style={{ minHeight: 200, maxHeight: 200, overflowY: "auto" }}>
         {tasks.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif", marginBottom: 2 }}>
               {tasks.length} tarea{tasks.length !== 1 ? "s" : ""} agregada{tasks.length !== 1 ? "s" : ""}
             </span>
             {tasks.map((t, i) => {
               const resp = responsibles.find(r => r._key === t.responsible_key);
               return (
                 <div key={t._key} style={{ display: "flex", alignItems: "flex-start", gap: 12, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "10px 14px" }}>
-                  <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "#ADAAA4", marginTop: 2, minWidth: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono', monospace", color: "#7D7973", marginTop: 2, minWidth: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{t.title}</p>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3, flexWrap: "wrap" }}>
@@ -645,7 +645,7 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
                         </span>
                       )}
                       {(t.start_date || t.due_date) && (
-                        <span style={{ fontSize: 11, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>
+                        <span style={{ fontSize: 11, color: "#6B7580", fontFamily: "'JetBrains Mono', monospace" }}>
                           {t.start_date && t.due_date ? `${formatDate(t.start_date)} → ${formatDate(t.due_date)}` : t.due_date ? `vence ${formatDate(t.due_date)}` : `inicio ${formatDate(t.start_date)}`}
                         </span>
                       )}
@@ -661,7 +661,7 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
           </div>
         ) : (
           <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <p style={{ fontSize: 12.5, color: "#8E97A0", textAlign: "center", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin tareas todavía — podés continuar y agregarlas desde la obra.</p>
+            <p style={{ fontSize: 12.5, color: "#6B7580", textAlign: "center", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin tareas todavía — podés continuar y agregarlas desde la obra.</p>
           </div>
         )}
       </div>
@@ -681,7 +681,7 @@ function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
   const visibleTasks = tasks.slice(0, TASK_PREVIEW);
 
   const SectionLabel = ({ children }: { children: string }) => (
-    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
       {children}
     </span>
   );
@@ -723,12 +723,12 @@ function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
       <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <SectionLabel>Responsables</SectionLabel>
-          <span style={{ fontSize: 11, fontWeight: 600, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             {responsibles.length === 0 ? "Ninguno" : `${responsibles.length}`}
           </span>
         </div>
         {responsibles.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 12, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <p style={{ margin: 0, fontSize: 12, color: "#7D7973", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Podés agregarlos después desde el detalle de la obra.
           </p>
         ) : (
@@ -742,7 +742,7 @@ function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
                     <span style={{ fontSize: 9, fontWeight: 700, color: "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{initials}</span>
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 500, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap" }}>
-                    {r.full_name}{r.role ? <span style={{ color: "#8E97A0" }}> · {r.role}</span> : null}
+                    {r.full_name}{r.role ? <span style={{ color: "#6B7580" }}> · {r.role}</span> : null}
                   </span>
                 </div>
               );
@@ -762,13 +762,13 @@ function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
                 {tasksWithoutResp} sin responsable
               </span>
             )}
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {tasks.length === 0 ? "Ninguna" : `${tasks.length}`}
             </span>
           </div>
         </div>
         {tasks.length === 0 ? (
-          <p style={{ margin: 0, fontSize: 12, color: "#ADAAA4", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          <p style={{ margin: 0, fontSize: 12, color: "#7D7973", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             Podés agregarlas después desde el detalle de la obra.
           </p>
         ) : (
@@ -778,20 +778,20 @@ function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
               const sinResp = !t.responsible_key;
               return (
                 <div key={t._key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 10.5, color: "#ADAAA4", fontFamily: "'JetBrains Mono', monospace", minWidth: 16, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
+                  <span style={{ fontSize: 10.5, color: "#7D7973", fontFamily: "'JetBrains Mono', monospace", minWidth: 16, textAlign: "right", flexShrink: 0 }}>{i + 1}</span>
                   <span style={{ fontSize: 12.5, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {t.title}
                   </span>
                   {sinResp ? (
                     <span style={{ fontSize: 10.5, color: "#C97D0E", fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>sin resp.</span>
                   ) : (
-                    <span style={{ fontSize: 10.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>{resp?.full_name.split(" ")[0]}</span>
+                    <span style={{ fontSize: 10.5, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap", flexShrink: 0 }}>{resp?.full_name.split(" ")[0]}</span>
                   )}
                 </div>
               );
             })}
             {extraTasks > 0 && (
-              <p style={{ margin: "2px 0 0 24px", fontSize: 11.5, color: "#8E97A0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <p style={{ margin: "2px 0 0 24px", fontSize: 11.5, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 + {extraTasks} tarea{extraTasks > 1 ? "s" : ""} más
               </p>
             )}
