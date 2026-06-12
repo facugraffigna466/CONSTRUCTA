@@ -361,6 +361,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
   const [showAddMaterial, setShowAddMaterial] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [actingOrder, setActingOrder] = useState<number | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -396,13 +397,14 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
 
   async function handleSend(order: PurchaseOrder, channel: "whatsapp" | "email") {
     setActingOrder(order.id);
+    setActionError(null);
     try {
       const updated = await sendPurchaseOrder(order.id, channel);
       setOrders(prev => prev.map(o => (o.id === updated.id ? updated : o)));
     } catch (e: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const detail = (e as any)?.response?.data?.detail;
-      alert(typeof detail === "string" ? detail : "No se pudo enviar el pedido.");
+      setActionError(typeof detail === "string" ? detail : "No se pudo enviar el pedido.");
     } finally {
       setActingOrder(null);
     }
@@ -410,11 +412,12 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
 
   async function handleReceive(order: PurchaseOrder) {
     setActingOrder(order.id);
+    setActionError(null);
     try {
       await receivePurchaseOrder(order.id);
       await load();
     } catch {
-      alert("No se pudo marcar como recibido.");
+      setActionError("No se pudo marcar como recibido.");
     } finally {
       setActingOrder(null);
     }
@@ -478,8 +481,9 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
           disabled={pendientesCount === 0}
           style={{
             display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px",
-            borderRadius: 10, fontSize: 12.5, fontWeight: 700, color: "#fff",
-            background: pendientesCount === 0 ? "#F0A882" : "#FF6B35", border: "none",
+            borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+            background: pendientesCount === 0 ? "#E6E7E5" : "#FF6B35", border: "none",
+            color: pendientesCount === 0 ? "#8E97A0" : "#fff",
             cursor: pendientesCount === 0 ? "not-allowed" : "pointer",
             boxShadow: pendientesCount === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
           }}
@@ -560,6 +564,14 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
           </div>
         ))}
       </div>
+
+      {/* ── Error de acción sobre pedidos ── */}
+      {actionError && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 11, padding: "9px 12px" }}>
+          <span style={{ fontSize: 12.5, color: "#A82B2B", fontWeight: 600, flex: 1 }}>{actionError}</span>
+          <button onClick={() => setActionError(null)} style={{ border: "none", background: "none", cursor: "pointer", color: "#A82B2B", fontSize: 14, fontWeight: 700, padding: 0 }} aria-label="Cerrar error">×</button>
+        </div>
+      )}
 
       {/* ── Pedidos ── */}
       {orders.length > 0 && (

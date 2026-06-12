@@ -9,7 +9,8 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { Clock, RefreshCw, CheckCircle2, AlertOctagon, XCircle } from "lucide-react";
-import { createTask, updateTask, updateTaskStatus } from "../api/tasks";
+import { createTask, deleteTask, updateTask, updateTaskStatus } from "../api/tasks";
+import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
 
@@ -245,7 +246,7 @@ function ResponsableCombobox({ currentId, options, onSelect, onKeyDown }: Combob
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
-  ({ tasks, responsibles, obraId, onTaskSaved }, ref) => {
+  ({ tasks, responsibles, obraId, onTaskSaved, onTaskDeleted }, ref) => {
     const activeResponsibles = responsibles.filter((r) => r.is_active);
 
     function makeEdit(task: Task, field: Field): EditState {
@@ -323,7 +324,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     // ── Clipboard paste state ────────────────────────────────────────────────
     const [pastePreview, setPastePreview] = useState<ParsedRow[] | null>(null);
     const [bulkSaving, setBulkSaving] = useState(false);
+    const [bulkProgress, setBulkProgress] = useState(0);
     const [bulkError, setBulkError] = useState<string | null>(null);
+    const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
+    const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+    const [deletingId, setDeletingId] = useState<number | null>(null);
 
     // Focus the right input whenever activeField changes (for non-select fields)
     useEffect(() => {
@@ -333,14 +338,22 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       el?.focus();
     }, [editing?.taskId, editing?.activeField]);
 
-    // Intercept paste on the container
+    // Intercept paste anywhere inside the sheet.
+    // Si el foco está en un input de la planilla solo interceptamos cuando el
+    // texto es claramente tabular (tabs o varias líneas) — pegar una palabra
+    // en una celda sigue funcionando normal.
     useEffect(() => {
       function onPaste(e: ClipboardEvent) {
         const active = document.activeElement;
-        if (active && (active.tagName === "INPUT" || active.tagName === "SELECT" || active.tagName === "TEXTAREA")) return;
-        if (!containerRef.current?.contains(active) && active !== containerRef.current) return;
+        const insideSheet = !!containerRef.current && (
+          containerRef.current.contains(active) || active === containerRef.current
+        );
+        if (!insideSheet) return;
         const text = e.clipboardData?.getData("text/plain") ?? "";
         if (!text.trim()) return;
+        const isFormField = !!active && ["INPUT", "SELECT", "TEXTAREA"].includes(active.tagName);
+        const looksTabular = text.includes("\t") || text.trim().split(/\r?\n/).length >= 2;
+        if (isFormField && !looksTabular) return;
         const { rows } = parseClipboardRows(text);
         if (rows.length === 0) return;
         e.preventDefault();
@@ -350,6 +363,20 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       document.addEventListener("paste", onPaste);
       return () => document.removeEventListener("paste", onPaste);
     }, []);
+
+    // Botón "Pegar desde Excel" — lee el portapapeles sin depender del foco
+    async function pasteFromClipboard() {
+      try {
+        const text = await navigator.clipboard.readText();
+        if (!text.trim()) { setBulkError("El portapapeles está vacío. Copiá las filas en Excel primero."); return; }
+        const { rows } = parseClipboardRows(text);
+        if (rows.length === 0) { setBulkError("No se detectaron tareas en el portapapeles. Copiá filas con al menos una columna de nombre."); return; }
+        setPastePreview(rows);
+        setBulkError(null);
+      } catch {
+        setBulkError("El navegador no dio acceso al portapapeles. Hacé click en la planilla y pegá con Ctrl+V / Cmd+V.");
+      }
+    }
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
@@ -393,28 +420,82 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
     // ── Bulk create from paste preview ────────────────────────────────────────
 
+    // Matchea el nombre de responsable parseado contra el equipo de la obra
+    const matchResponsible = useCallback((name: string | null): Responsible | null => {
+      if (!name?.trim()) return null;
+      const n = name.trim().toLowerCase();
+      return (
+        activeResponsibles.find(r => r.full_name.toLowerCase() === n) ??
+        activeResponsibles.find(r => r.full_name.toLowerCase().includes(n) || n.includes(r.full_name.toLowerCase())) ??
+        null
+      );
+    }, [activeResponsibles]);
+
     const confirmPaste = useCallback(async () => {
       if (!pastePreview || pastePreview.length === 0) return;
       setBulkSaving(true);
       setBulkError(null);
+      setBulkProgress(0);
+      const createdIds: (number | null)[] = [];
+      let failures = 0;
       try {
+        // 1ª pasada: crear tareas con responsable matcheado
         for (const row of pastePreview) {
-          const saved = await createTask({
-            obra_id: obraId,
-            title: row.title,
-            responsible_id: null,
-            start_date: row.startDate,
-            due_date: row.dueDate,
-          });
-          onTaskSaved(saved);
+          try {
+            const saved = await createTask({
+              obra_id: obraId,
+              title: row.title,
+              responsible_id: matchResponsible(row.responsibleName)?.id ?? null,
+              start_date: row.startDate,
+              due_date: row.dueDate,
+            });
+            createdIds.push(saved.id);
+            onTaskSaved(saved);
+          } catch (err) {
+            const limitInfo = getPlanLimitError(err);
+            if (limitInfo) {
+              setPlanLimit(limitInfo);
+              setBulkError(`Se crearon ${createdIds.filter(Boolean).length} tareas antes de llegar al límite del plan.`);
+              setPastePreview(null);
+              return;
+            }
+            createdIds.push(null);
+            failures++;
+          }
+          setBulkProgress(createdIds.length);
+        }
+        // 2ª pasada: dependencias FS por número de fila (las predecesoras ya existen)
+        for (let i = 0; i < pastePreview.length; i++) {
+          const depRow = pastePreview[i].dependsOnRow;
+          const taskId = createdIds[i];
+          if (taskId == null || depRow == null) continue;
+          const depId = createdIds[depRow];
+          if (depId == null || depId === taskId) continue;
+          try {
+            const updated = await updateTask(taskId, { dependency_links: [{ depends_on_id: depId }] });
+            onTaskSaved(updated);
+          } catch { /* la tarea quedó creada igual */ }
         }
         setPastePreview(null);
-      } catch {
-        setBulkError("No se pudieron crear algunas tareas. Revisá la conexión e intentá de nuevo.");
+        if (failures > 0) {
+          setBulkError(`${failures} fila${failures !== 1 ? "s" : ""} no se pudo crear. El resto quedó cargado.`);
+        }
       } finally {
         setBulkSaving(false);
+        setBulkProgress(0);
       }
-    }, [pastePreview, obraId, onTaskSaved]);
+    }, [pastePreview, obraId, onTaskSaved, matchResponsible]);
+
+    async function handleDeleteRow(task: Task) {
+      if (!confirm(`¿Eliminar la tarea «${task.title}»?`)) return;
+      setDeletingId(task.id);
+      try {
+        await deleteTask(task.id);
+        onTaskDeleted?.(task.id);
+      } catch { /* noop */ } finally {
+        setDeletingId(null);
+      }
+    }
 
     const saveEdit = useCallback(
       async (state: EditState, andNewRow = false) => {
@@ -460,7 +541,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
             setEditing(null);
             setShowNewRow(false);
           }
-        } catch {
+        } catch (err) {
+          const limitInfo = getPlanLimitError(err);
+          if (limitInfo) {
+            setPlanLimit(limitInfo);
+            setEditing((e) => e ? { ...e, saving: false, error: null } : e);
+            return;
+          }
           setEditing((e) => e ? { ...e, saving: false, error: "No se pudo guardar la tarea." } : e);
         }
       },
@@ -583,6 +670,50 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           ))}
         </div>
 
+        {/* ── Empty state: el momento de vender el paste ── */}
+        {tasks.length === 0 && !isNewRow && !pastePreview && (
+          <div style={{ padding: "36px 24px", textAlign: "center" }}>
+            <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: "#1A2329" }}>
+              Cargá el plan de obra como en Excel
+            </p>
+            <p style={{ margin: "0 0 16px", fontSize: 12.5, color: "#6B7580", lineHeight: 1.5 }}>
+              Escribí fila por fila, o directamente copiá tu listado desde Excel / Project y pegalo acá.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={startNewRow}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px",
+                  borderRadius: 10, fontSize: 13, fontWeight: 700, color: "#fff",
+                  background: "#FF6B35", border: "none", cursor: "pointer",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  boxShadow: "0 6px 14px -6px rgba(255,107,53,0.5)",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                Agregar primera fila
+              </button>
+              <button
+                type="button"
+                onClick={pasteFromClipboard}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 18px",
+                  borderRadius: 10, fontSize: 13, fontWeight: 600, color: "#1A2329",
+                  background: "#fff", border: "1.5px solid #E6E7E5", cursor: "pointer",
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                }}
+              >
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><rect x="3" y="1" width="10" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.4"/><path d="M6 1v2h4V1" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M5.5 7h5M5.5 10h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Pegar desde Excel
+              </button>
+            </div>
+            {bulkError && (
+              <p style={{ margin: "12px 0 0", fontSize: 12, color: "#C97D0E", fontWeight: 600 }}>{bulkError}</p>
+            )}
+          </div>
+        )}
+
         {/* ── Task rows ── */}
         {tasks.map((task, idx) => {
           const level = levelMap.get(task.id) ?? 0;
@@ -604,7 +735,34 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           const isCompleted = dStatus === "completada";
 
           return (
-            <div key={task.id} data-task-row={task.id} style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8" }}>
+            <div
+              key={task.id}
+              data-task-row={task.id}
+              onMouseEnter={() => setHoveredRow(task.id)}
+              onMouseLeave={() => setHoveredRow(prev => (prev === task.id ? null : prev))}
+              style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8", position: "relative" }}
+            >
+              {/* Eliminar fila — visible al hover */}
+              {hoveredRow === task.id && !isEditing && onTaskDeleted && (
+                <button
+                  type="button"
+                  aria-label={`Eliminar tarea ${task.title}`}
+                  title="Eliminar tarea"
+                  disabled={deletingId === task.id}
+                  onClick={e => { e.stopPropagation(); handleDeleteRow(task); }}
+                  style={{
+                    position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+                    width: 26, height: 26, borderRadius: 7, border: "1px solid #F0B0B0",
+                    background: "#fff", cursor: "pointer", zIndex: 4,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.3a1 1 0 001 .95h4.6a1 1 0 001-.95L12 4M6.6 7v4.5M9.4 7v4.5" stroke="#D03A3A" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+              )}
 
               {/* # */}
               <div style={cellStyle(0, { color: "#9BA3AB", fontSize: 11.5, fontWeight: 600, justifyContent: "center", cursor: "default" })}>
@@ -917,7 +1075,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => { setPastePreview(null); setBulkError(null); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #E6E7E5", fontSize: 12, fontWeight: 600, color: "#5B6770", background: "#fff", cursor: "pointer" }}>Cancelar</button>
                 <button onClick={confirmPaste} disabled={bulkSaving} style={{ padding: "5px 14px", borderRadius: 7, border: "none", fontSize: 12, fontWeight: 600, color: "#fff", background: bulkSaving ? "#FFAA80" : "#FF6B35", cursor: bulkSaving ? "not-allowed" : "pointer" }}>
-                  {bulkSaving ? "Importando…" : `Importar ${pastePreview.length} ${pastePreview.length === 1 ? "tarea" : "tareas"}`}
+                  {bulkSaving ? `Importando… ${bulkProgress}/${pastePreview.length}` : `Importar ${pastePreview.length} ${pastePreview.length === 1 ? "tarea" : "tareas"}`}
                 </button>
               </div>
             </div>
@@ -928,7 +1086,16 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 <div key={i} style={{ ...rowBase, background: i % 2 === 0 ? "#FFFBF8" : "#FFF6F1", opacity: bulkSaving ? 0.5 : 1 }}>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 11.5, fontWeight: 600, color: "#9BA3AB", justifyContent: "center", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER }}>{tasks.length + i + 1}</div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 13, fontWeight: 600, color: "#1A2329", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER, overflow: "hidden" }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{row.title}</span></div>
-                  <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER }}>Sin asignar</div>
+                  {(() => {
+                    const m = matchResponsible(row.responsibleName);
+                    return (
+                      <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: m ? "#1A2329" : "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER, overflow: "hidden" }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {m ? m.full_name : row.responsibleName ? `${row.responsibleName} (no está en el equipo)` : "Sin asignar"}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: row.startDate ? "#1A2329" : "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER, fontVariantNumeric: "tabular-nums" }}>{row.startDate ? fmtDate(row.startDate) : "—"}</div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: previewDur !== "—" ? "#1A2329" : "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER }}>{previewDur}</div>
                   <div style={{ padding: "0 10px", height: 38, display: "flex", alignItems: "center", fontSize: 12.5, color: row.dueDate ? "#1A2329" : "#C4C9C6", borderBottom: "1px solid #FFE8D8", borderRight: CELL_BORDER, fontVariantNumeric: "tabular-nums" }}>{row.dueDate ? fmtDate(row.dueDate) : "—"}</div>
@@ -988,8 +1155,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           >
             <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
             Agregar fila
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "#8E97A0", fontWeight: 500 }}>
+              Tip: copiá filas en Excel y pegalas acá (Ctrl+V)
+            </span>
           </button>
         )}
+
+        {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
       </div>
     );
   }

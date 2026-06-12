@@ -126,6 +126,25 @@ export function TaskFormModal({
     return () => { document.body.style.overflow = prev; };
   }, []);
 
+  // Esc cierra (primero los sub-diálogos, después el modal)
+  useEffect(() => {
+    function onKey(e: globalThis.KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      setCascadePrompt(prev => {
+        if (prev !== null) return null;
+        setPlanLimit(pl => {
+          if (pl !== null) return null;
+          onClose();
+          return pl;
+        });
+        return prev;
+      });
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const activeResponsibles = responsibles.filter(r => r.is_active);
   const previousResponsibleInactive =
     mode === "edit" &&
@@ -142,7 +161,7 @@ export function TaskFormModal({
   const [dueDate,   setDueDate]   = useState(task?.due_date ?? "");
   const [dueTime,   setDueTime]   = useState(task?.due_time?.slice(0, 5) ?? "");
   const [duration,  setDuration]  = useState<string>(
-    task?.start_date && task?.due_date ? String(diffDays(task.start_date, task.due_date)) : ""
+    task?.start_date && task?.due_date ? String(diffDays(task.start_date, task.due_date) + 1) : ""
   );
 
   const [parentTaskId,  setParentTaskId]  = useState<string>(
@@ -438,7 +457,7 @@ export function TaskFormModal({
                       setStartDate(v);
                       if (v && duration) {
                         const d = parseInt(duration, 10);
-                        if (d > 0) setDueDate(addDays(v, d));
+                        if (d > 0) setDueDate(addDays(v, d - 1));
                       }
                     }}
                     onFocus={ev => onFocusInput(ev, !!errors.startDate)}
@@ -477,7 +496,7 @@ export function TaskFormModal({
                         const v = e.target.value;
                         setDuration(v);
                         const d = parseInt(v, 10);
-                        if (startDate && d > 0) setDueDate(addDays(startDate, d));
+                        if (startDate && d > 0) setDueDate(addDays(startDate, d - 1));
                       }}
                       onFocus={ev => onFocusInput(ev)}
                       onBlur={ev => onBlurInput(ev)}
@@ -498,7 +517,7 @@ export function TaskFormModal({
                     onChange={(e: ChangeEvent<HTMLInputElement>) => {
                       const v = e.target.value;
                       setDueDate(v);
-                      if (v && startDate) setDuration(String(diffDays(startDate, v)));
+                      if (v && startDate) setDuration(String(diffDays(startDate, v) + 1));
                     }}
                     onFocus={ev => onFocusInput(ev, !!errors.dueDate)}
                     onBlur={ev => onBlurInput(ev, !!errors.dueDate)}

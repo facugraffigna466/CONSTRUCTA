@@ -353,7 +353,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
             <div style={{ marginTop: 6, fontSize: 13, color: "#5B6770" }}>
               Vista general de proyectos ·{" "}
               <strong style={{ color: "#1A2329", fontWeight: 600 }}>{byStatus("en_progreso")} activas</strong>
-              {" "}· actualizado hace un momento
+
             </div>
           )}
         </div>
@@ -402,7 +402,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                 value={obras.length}
                 icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 13.5V6l5-3.5 5 3.5v7.5h-10z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round"/><path d="M6 13.5V10h3v3.5M5 7.5h5" stroke="currentColor" strokeWidth="1.4"/></svg>}
                 iconBg="#FFF1E9" iconColor="#FF6B35"
-                delta={<><svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ color: "#1F8A5B" }}><path d="M2 11l4-4 3 3 5-6M14 4h-3M14 4v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg><strong style={{ color: "#1F8A5B" }}>+{obras.length}</strong> registradas</>}
+                delta={<>{obras.filter(o => o.status !== "cancelada").length} activas</>}
                 sparkColor="#FF6B35"
                 sparkPath="M0 30 L25 28 L50 24 L75 26 L100 18 L125 20 L150 12 L175 14 L200 8"
               />
@@ -411,7 +411,12 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                 value={byStatus("en_progreso")}
                 icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M8 4.5V8l2.4 1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>}
                 iconBg="#E5EEFB" iconColor="#2A6FDB"
-                delta={<>avance medio <strong style={{ color: "#2A6FDB" }}>50%</strong></>}
+                delta={(() => {
+                  const conTareas = obras.filter(o => o.status === "en_progreso" && o.total_tasks > 0);
+                  if (conTareas.length === 0) return <>sin tareas cargadas</>;
+                  const avg = Math.round(conTareas.reduce((a, o) => a + o.completed_tasks / o.total_tasks, 0) / conTareas.length * 100);
+                  return <>avance medio <strong style={{ color: "#2A6FDB" }}>{avg}%</strong></>;
+                })()}
                 sparkColor="#2A6FDB"
                 sparkPath="M0 26 L25 24 L50 28 L75 20 L100 22 L125 14 L150 18 L175 10 L200 12"
               />

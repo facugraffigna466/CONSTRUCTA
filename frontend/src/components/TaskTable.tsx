@@ -224,6 +224,8 @@ interface TaskTableProps {
   onStatusChange?: (task: Task, newStatus: TaskStatus) => void;
   editingMap?: Map<number, Editor>;
   highlightedTaskId?: number | null;
+  onCreateNew?: () => void;
+  onImport?: () => void;
 }
 
 export function TaskTable({
@@ -234,6 +236,8 @@ export function TaskTable({
   onStatusChange,
   editingMap,
   highlightedTaskId,
+  onCreateNew,
+  onImport,
 }: TaskTableProps) {
   const hasActions = !!(onEdit || onDelete);
   const levelMap = buildLevelMap(tasks);
@@ -350,7 +354,38 @@ export function TaskTable({
         </div>
         <div style={{ textAlign: "center" }}>
           <p style={{ fontSize: 13.5, fontWeight: 600, color: "#3E4A52", margin: 0 }}>No hay tareas registradas</p>
-          <p style={{ fontSize: 12, color: "#8E97A0", margin: "3px 0 0" }}>Creá la primera tarea para esta obra.</p>
+          <p style={{ fontSize: 12, color: "#8E97A0", margin: "3px 0 0" }}>Cargá el plan de obra para empezar a seguirlo.</p>
+          {(onCreateNew || onImport) && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 14, flexWrap: "wrap" }}>
+              {onCreateNew && (
+                <button
+                  type="button"
+                  onClick={onCreateNew}
+                  style={{
+                    padding: "9px 18px", borderRadius: 10, fontSize: 12.5, fontWeight: 700,
+                    color: "#fff", background: "#FF6B35", border: "none", cursor: "pointer",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    boxShadow: "0 6px 14px -6px rgba(255,107,53,0.5)",
+                  }}
+                >
+                  + Nueva tarea
+                </button>
+              )}
+              {onImport && (
+                <button
+                  type="button"
+                  onClick={onImport}
+                  style={{
+                    padding: "9px 16px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+                    color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer",
+                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  }}
+                >
+                  Importar desde Excel / Project
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     );
