@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
+import { parseClipboardRows } from "../utils/clipboardParser";
 import { useUser } from "../context/UserContext";
 import {
   X, Plus, Trash2, Pencil, AlertTriangle, CheckCircle2,
@@ -491,12 +492,51 @@ function Step2({ responsibles, form, onFormChange, error, onAdd, onRemove, onEdi
 
 // ─── Step 3 — Tareas ──────────────────────────────────────────────────────────
 
-function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove, onEdit }: {
+function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove, onEdit, onBulkAdd }: {
   tasks: DraftTask[]; responsibles: DraftResponsible[]; form: TaskForm;
   onFormChange: (f: TaskForm) => void; error: string | null;
   onAdd: () => void; onRemove: (k: string) => void; onEdit: (k: string) => void;
+  onBulkAdd: (rows: { title: string; startDate: string | null; dueDate: string | null }[]) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
+  const [pasteMsg, setPasteMsg] = useState<string | null>(null);
+
+  async function pasteFromExcel() {
+    setPasteMsg(null);
+    try {
+      const text = await navigator.clipboard.readText();
+      const { rows } = parseClipboardRows(text ?? "");
+      if (rows.length === 0) {
+        setPasteMsg("No se detectaron tareas. Copiá las filas en Excel (con una columna de nombre) y volvé a intentar.");
+        return;
+      }
+      onBulkAdd(rows.map(r => ({ title: r.title, startDate: r.startDate, dueDate: r.dueDate })));
+      setPasteMsg(`✓ ${rows.length} tarea${rows.length !== 1 ? "s" : ""} agregada${rows.length !== 1 ? "s" : ""} desde el portapapeles.`);
+    } catch {
+      setPasteMsg("El navegador no dio acceso al portapapeles. Probá con Ctrl+V dentro de esta ventana.");
+    }
+  }
+
+  // Ctrl+V directo dentro del paso 3
+  useEffect(() => {
+    function onPaste(e: globalThis.ClipboardEvent) {
+      const active = document.activeElement;
+      if (active && ["INPUT", "SELECT", "TEXTAREA"].includes(active.tagName)) {
+        const text = e.clipboardData?.getData("text/plain") ?? "";
+        const tabular = text.includes("\t") || text.trim().split(/\r?\n/).length >= 2;
+        if (!tabular) return;
+      }
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      const { rows } = parseClipboardRows(text);
+      if (rows.length === 0) return;
+      e.preventDefault();
+      onBulkAdd(rows.map(r => ({ title: r.title, startDate: r.startDate, dueDate: r.dueDate })));
+      setPasteMsg(`✓ ${rows.length} tarea${rows.length !== 1 ? "s" : ""} agregada${rows.length !== 1 ? "s" : ""} desde el portapapeles.`);
+    }
+    document.addEventListener("paste", onPaste);
+    return () => document.removeEventListener("paste", onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (listRef.current && tasks.length > 0) {
       listRef.current.scrollTop = listRef.current.scrollHeight;
@@ -516,6 +556,33 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
       <p style={{ margin: 0, fontSize: 13, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         Definí las tareas iniciales. Podés asignar responsables después desde el detalle de la obra.
       </p>
+
+      {/* Pegar desde Excel — el camino rápido */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap",
+        background: "#FFF8F3", border: "1.5px dashed #FDBFA0", borderRadius: 12, padding: "12px 14px",
+      }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            ¿Ya tenés el listado en Excel?
+          </p>
+          <p style={{ margin: "2px 0 0", fontSize: 11.5, color: "#9A5D08", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            Copiá las filas (nombre, inicio, fin) y pegalas acá con Ctrl+V — o usá el botón.
+          </p>
+        </div>
+        <button type="button" onClick={pasteFromExcel} style={{
+          padding: "8px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700,
+          color: "#E85A26", background: "#fff", border: "1px solid #FDBFA0", cursor: "pointer",
+          fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap",
+        }}>
+          📋 Pegar desde Excel
+        </button>
+        {pasteMsg && (
+          <p style={{ margin: 0, width: "100%", fontSize: 11.5, fontWeight: 600, color: pasteMsg.startsWith("✓") ? "#1F8A5B" : "#C97D0E", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            {pasteMsg}
+          </p>
+        )}
+      </div>
 
       {/* Add form */}
       <div style={{ background: "#F9FAF8", border: "1px solid #E6E7E5", borderRadius: 12, padding: "16px" }}>
@@ -785,6 +852,20 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
   const [respError, setRespError] = useState<string | null>(null);
 
   const [tasks, setTasks] = useState<DraftTask[]>([]);
+
+  function bulkAddTasks(rows: { title: string; startDate: string | null; dueDate: string | null }[]) {
+    setTasks(prev => [
+      ...prev,
+      ...rows.map(r => ({
+        _key: `bulk_${Date.now()}_${_seq++}`,
+        title: r.title,
+        description: "",
+        responsible_key: "",
+        start_date: r.startDate ?? "",
+        due_date: r.dueDate ?? "",
+      })),
+    ]);
+  }
   const [taskForm, setTaskForm] = useState<TaskForm>({ title: "", description: "", responsible_key: "", start_date: "", due_date: "" });
   const [taskError, setTaskError] = useState<string | null>(null);
 
@@ -985,7 +1066,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
           <div style={{ padding: "20px 28px 24px", height: "100%", overflowY: "auto" }}>
             {!done && step === 1 && <Step1 data={obraData} onChange={setObraData} errors={step1Errors} />}
             {!done && step === 2 && <Step2 responsibles={responsibles} form={respForm} onFormChange={setRespForm} error={respError} onAdd={addResponsible} onRemove={removeResponsible} onEdit={editResponsible} />}
-            {!done && step === 3 && <Step3 tasks={tasks} responsibles={responsibles} form={taskForm} onFormChange={setTaskForm} error={taskError} onAdd={addTask} onRemove={removeTask} onEdit={editTask} />}
+            {!done && step === 3 && <Step3 tasks={tasks} responsibles={responsibles} form={taskForm} onFormChange={setTaskForm} error={taskError} onAdd={addTask} onRemove={removeTask} onEdit={editTask} onBulkAdd={bulkAddTasks} />}
             {!done && step === 4 && <Step4 obraData={obraData} responsibles={responsibles} tasks={tasks} tasksWithoutResp={tasksWithoutResp} error={submitError} />}
             {done && createdObra && <SuccessView obra={createdObra} onNavigate={() => onCreated(createdObra)} />}
           </div>

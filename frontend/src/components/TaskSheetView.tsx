@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { Clock, RefreshCw, CheckCircle2, AlertOctagon, XCircle } from "lucide-react";
-import { createTask, deleteTask, updateTask, updateTaskStatus } from "../api/tasks";
+import { bulkCreateTasks, createTask, deleteTask, updateTask, updateTaskStatus } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
@@ -125,6 +125,7 @@ interface Props {
   obraId: number;
   onTaskSaved: (task: Task) => void;
   onTaskDeleted?: (taskId: number) => void;
+  onBulkImported?: () => void;
 }
 
 // ─── ResponsableCombobox ──────────────────────────────────────────────────────
@@ -246,7 +247,7 @@ function ResponsableCombobox({ currentId, options, onSelect, onKeyDown }: Combob
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
-  ({ tasks, responsibles, obraId, onTaskSaved, onTaskDeleted }, ref) => {
+  ({ tasks, responsibles, obraId, onTaskSaved, onTaskDeleted, onBulkImported }, ref) => {
     const activeResponsibles = responsibles.filter((r) => r.is_active);
 
     function makeEdit(task: Task, field: Field): EditState {
@@ -324,7 +325,6 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     // ── Clipboard paste state ────────────────────────────────────────────────
     const [pastePreview, setPastePreview] = useState<ParsedRow[] | null>(null);
     const [bulkSaving, setBulkSaving] = useState(false);
-    const [bulkProgress, setBulkProgress] = useState(0);
     const [bulkError, setBulkError] = useState<string | null>(null);
     const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
     const [hoveredRow, setHoveredRow] = useState<number | null>(null);
@@ -435,56 +435,39 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       if (!pastePreview || pastePreview.length === 0) return;
       setBulkSaving(true);
       setBulkError(null);
-      setBulkProgress(0);
-      const createdIds: (number | null)[] = [];
-      let failures = 0;
       try {
-        // 1ª pasada: crear tareas con responsable matcheado
-        for (const row of pastePreview) {
-          try {
-            const saved = await createTask({
-              obra_id: obraId,
-              title: row.title,
-              responsible_id: matchResponsible(row.responsibleName)?.id ?? null,
-              start_date: row.startDate,
-              due_date: row.dueDate,
-            });
-            createdIds.push(saved.id);
-            onTaskSaved(saved);
-          } catch (err) {
-            const limitInfo = getPlanLimitError(err);
-            if (limitInfo) {
-              setPlanLimit(limitInfo);
-              setBulkError(`Se crearon ${createdIds.filter(Boolean).length} tareas antes de llegar al límite del plan.`);
-              setPastePreview(null);
-              return;
-            }
-            createdIds.push(null);
-            failures++;
-          }
-          setBulkProgress(createdIds.length);
-        }
-        // 2ª pasada: dependencias FS por número de fila (las predecesoras ya existen)
-        for (let i = 0; i < pastePreview.length; i++) {
-          const depRow = pastePreview[i].dependsOnRow;
-          const taskId = createdIds[i];
-          if (taskId == null || depRow == null) continue;
-          const depId = createdIds[depRow];
-          if (depId == null || depId === taskId) continue;
-          try {
-            const updated = await updateTask(taskId, { dependency_links: [{ depends_on_id: depId }] });
-            onTaskSaved(updated);
-          } catch { /* la tarea quedó creada igual */ }
-        }
+        // Un solo request: transacción única + un solo evento de historial
+        const result = await bulkCreateTasks(
+          obraId,
+          pastePreview.map(row => ({
+            title: row.title,
+            start_date: row.startDate,
+            due_date: row.dueDate,
+            responsible_id: matchResponsible(row.responsibleName)?.id ?? null,
+            depends_on_row: row.dependsOnRow,
+          })),
+        );
         setPastePreview(null);
-        if (failures > 0) {
-          setBulkError(`${failures} fila${failures !== 1 ? "s" : ""} no se pudo crear. El resto quedó cargado.`);
+        onBulkImported?.();
+        if (result.failed > 0) {
+          setBulkError(
+            `${result.failed} fila${result.failed !== 1 ? "s" : ""} no se pudo crear` +
+            (result.errors[0] ? ` (${result.errors[0]})` : "") +
+            `. Las otras ${result.created} quedaron cargadas.`
+          );
         }
+      } catch (err) {
+        const limitInfo = getPlanLimitError(err);
+        if (limitInfo) {
+          setPlanLimit(limitInfo);
+          setPastePreview(null);
+          return;
+        }
+        setBulkError("No se pudo importar el lote. Revisá la conexión e intentá de nuevo.");
       } finally {
         setBulkSaving(false);
-        setBulkProgress(0);
       }
-    }, [pastePreview, obraId, onTaskSaved, matchResponsible]);
+    }, [pastePreview, obraId, matchResponsible, onBulkImported]);
 
     async function handleDeleteRow(task: Task) {
       if (!confirm(`¿Eliminar la tarea «${task.title}»?`)) return;
@@ -498,7 +481,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     }
 
     const saveEdit = useCallback(
-      async (state: EditState, andNewRow = false) => {
+      async (state: EditState, andNewRow = false, nextEdit?: { taskId: number; field: Field }) => {
         if (!state.title.trim()) {
           setEditing((e) => e ? { ...e, error: "El título es obligatorio." } : e);
           return;
@@ -534,6 +517,14 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
             }
           }
           onTaskSaved(saved);
+          if (nextEdit) {
+            const nt = tasks.find(t => t.id === nextEdit.taskId);
+            if (nt) {
+              setShowNewRow(false);
+              setEditing(makeEdit(nt, nextEdit.field));
+              return;
+            }
+          }
           if (andNewRow) {
             setEditing(blankEdit());
             setShowNewRow(true);
@@ -559,15 +550,44 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     function handleKeyDown(e: KeyboardEvent, field: Field) {
       if (!editing) return;
       if (e.key === "Escape") { e.preventDefault(); cancelEdit(); return; }
-      if (e.key === "Enter")  { e.preventDefault(); saveEdit(editing, true); return; }
+
+      const isExistingRow = editing.taskId !== null;
+      const rowIdx = isExistingRow ? tasks.findIndex(t => t.id === editing.taskId) : -1;
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        // Como Excel: guardar y seguir editando la fila de abajo en la MISMA columna
+        if (isExistingRow && rowIdx >= 0 && rowIdx < tasks.length - 1) {
+          saveEdit(editing, false, { taskId: tasks[rowIdx + 1].id, field });
+        } else {
+          saveEdit(editing, true); // última fila (o fila nueva) → guardar y abrir fila nueva
+        }
+        return;
+      }
+
       if (e.key === "Tab") {
         e.preventDefault();
         const idx = FIELD_ORDER.indexOf(field);
+        if (e.shiftKey) {
+          const prev = FIELD_ORDER[idx - 1];
+          if (prev) setEditing((s) => s ? { ...s, activeField: prev } : s);
+          return;
+        }
         const next = FIELD_ORDER[idx + 1];
         if (next) {
           setEditing((s) => s ? { ...s, activeField: next } : s);
         } else {
           saveEdit(editing, true);
+        }
+        return;
+      }
+
+      // ↑/↓ navegan entre filas (solo en el título, para no pisar los inputs de número/fecha)
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && field === "title" && isExistingRow && rowIdx >= 0) {
+        const target = tasks[rowIdx + (e.key === "ArrowDown" ? 1 : -1)];
+        if (target) {
+          e.preventDefault();
+          saveEdit(editing, false, { taskId: target.id, field });
         }
       }
     }
@@ -991,7 +1011,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
             padding: "7px 12px", background: "#F8F9F8", borderBottom: CELL_BORDER, fontSize: 12,
           }}>
             <span style={{ color: editing.error ? "#D03A3A" : "#8E97A0" }}>
-              {editing.error ?? "Tab entre celdas · Enter para guardar y nueva fila · Esc para cancelar"}
+              {editing.error ?? "Tab/Shift+Tab entre celdas · Enter guarda y baja · ↑/↓ cambian de fila · Esc cancela"}
             </span>
             <div style={{ display: "flex", gap: 6 }}>
               <button onClick={cancelEdit} style={{ padding: "4px 12px", borderRadius: 7, border: "1px solid #E6E7E5", fontSize: 12, fontWeight: 600, color: "#5B6770", background: "#fff", cursor: "pointer" }}>
@@ -1075,7 +1095,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               <div style={{ display: "flex", gap: 6 }}>
                 <button onClick={() => { setPastePreview(null); setBulkError(null); }} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #E6E7E5", fontSize: 12, fontWeight: 600, color: "#5B6770", background: "#fff", cursor: "pointer" }}>Cancelar</button>
                 <button onClick={confirmPaste} disabled={bulkSaving} style={{ padding: "5px 14px", borderRadius: 7, border: "none", fontSize: 12, fontWeight: 600, color: "#fff", background: bulkSaving ? "#FFAA80" : "#FF6B35", cursor: bulkSaving ? "not-allowed" : "pointer" }}>
-                  {bulkSaving ? `Importando… ${bulkProgress}/${pastePreview.length}` : `Importar ${pastePreview.length} ${pastePreview.length === 1 ? "tarea" : "tareas"}`}
+                  {bulkSaving ? `Importando ${pastePreview.length} tareas…` : `Importar ${pastePreview.length} ${pastePreview.length === 1 ? "tarea" : "tareas"}`}
                 </button>
               </div>
             </div>

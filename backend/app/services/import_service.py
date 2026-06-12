@@ -276,7 +276,11 @@ def parse_msproject_xml(file_bytes: bytes) -> ImportPreview:
     )
 
 
-def parse_excel(file_bytes: bytes, mime: str) -> ImportPreview:
+def parse_excel(
+    file_bytes: bytes, mime: str, column_overrides: dict[str, str] | None = None
+) -> ImportPreview:
+    """column_overrides: {campo: nombre_de_encabezado} — remapeo manual cuando
+    la detección automática falla (solo aplica a Excel/CSV, no a MS Project XML)."""
     if is_msproject_xml(file_bytes) or mime in ("text/xml", "application/xml"):
         return parse_msproject_xml(file_bytes)
     if mime == "text/csv" or mime == "application/csv":
@@ -287,6 +291,18 @@ def parse_excel(file_bytes: bytes, mime: str) -> ImportPreview:
         headers, data_rows = _rows_from_sheet(ws)
 
     col_map = _detect_column_map(headers)
+    if column_overrides:
+        norm = [str(h).strip().lower() for h in headers]
+        for field, header_name in column_overrides.items():
+            if field not in col_map:
+                continue
+            if not header_name:
+                col_map[field] = None
+                continue
+            try:
+                col_map[field] = norm.index(header_name.strip().lower())
+            except ValueError:
+                pass
     col_names: dict[str, str] = {
         field: headers[idx] for field, idx in col_map.items() if idx is not None
     }
@@ -340,6 +356,7 @@ def parse_excel(file_bytes: bytes, mime: str) -> ImportPreview:
     return ImportPreview(
         rows=preview_rows,
         column_map=col_names,
+        headers=[str(h) for h in headers if str(h).strip()],
         total_rows=len(preview_rows),
         warnings=warnings,
         errors=errors,

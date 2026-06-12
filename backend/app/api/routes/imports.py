@@ -4,7 +4,7 @@ Import endpoints for MS Project / Excel integration.
 POST /api/v1/imports/project-excel        → parse file, return preview
 POST /api/v1/imports/project-excel/confirm → create tasks from confirmed preview
 """
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.core.deps import CurrentUserId, DbSession
 from app.repositories.responsible import ResponsibleRepository
@@ -31,6 +31,7 @@ router = APIRouter(prefix="/imports", tags=["imports"])
 async def preview_import(
     _: CurrentUserId,
     file: UploadFile = File(...),
+    column_map: str | None = Form(default=None),
 ) -> ImportPreview:
     mime = file.content_type or ""
     if mime not in ALLOWED_MIME and not file.filename.endswith((".xlsx", ".xls", ".csv", ".xml")):  # type: ignore[union-attr]
@@ -40,8 +41,16 @@ async def preview_import(
     if len(content) > MAX_BYTES:
         raise HTTPException(400, "El archivo no puede superar 10 MB.")
 
+    overrides = None
+    if column_map:
+        import json
+        try:
+            overrides = json.loads(column_map)
+        except ValueError:
+            raise HTTPException(400, "column_map inválido")
+
     try:
-        return parse_excel(content, mime)
+        return parse_excel(content, mime, column_overrides=overrides)
     except Exception as exc:
         raise HTTPException(422, f"No se pudo procesar el archivo: {exc}") from exc
 

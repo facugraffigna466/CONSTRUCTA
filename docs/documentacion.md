@@ -1210,3 +1210,18 @@ Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla ti
 
 ### Validación
 `npm run build` ✓ · ESLint sin errores nuevos (solo patrones preexistentes del repo).
+
+---
+
+## 2026-06-12 — Sprint 2 UX: bulk, teclado Excel, paste en wizard, remapeo de columnas
+
+### Changes made
+- **Endpoint bulk** `POST /tasks/obra/{id}/bulk`: crea hasta 500 tareas en una transacción con UN evento de historial ("Se importaron N tareas desde Excel"); dependencias FS por índice de fila en segunda pasada; filas inválidas se reportan sin tumbar el lote; respeta límite de plan (402). La planilla ahora importa el paste con un solo request.
+- **Teclado nivel Excel en la planilla**: Enter guarda y sigue editando la fila de abajo en la misma columna; Shift+Tab retrocede; ↑/↓ cambian de fila (en el título, para no pisar inputs de número/fecha); hint de la save bar actualizado.
+- **Paste masivo en el wizard (paso 3)**: zona "¿Ya tenés el listado en Excel?" con botón "Pegar desde Excel" y Ctrl+V directo — llena la lista de tareas draft usando el mismo parser.
+- **Remapeo manual de columnas en ImportModal**: chips ahora muestran "Campo ← Columna" (y "no detectada"); panel "Remapear columnas" con selects por campo que reprocesa el archivo con el mapeo elegido (`column_map` en el endpoint de preview; el preview devuelve los headers crudos).
+- **🐛 Fix crítico preexistente**: FastAPI serializa con el validador core de Pydantic, que ignoraba el `model_validate` custom de TaskRead — `dependency_ids`/`dependency_links` llegaban **siempre vacíos por HTTP** (las flechas del Gantt y las dependencias del modal de edición no recibían datos). Las rutas ahora convierten explícitamente con `TaskRead.model_validate` antes de responder.
+
+### Validation
+- Bulk por API: 2 tareas + dependencia fila→fila verificada con links completos en el GET.
+- `npm run build` ✓ · import backend ✓ · datos de prueba eliminados.

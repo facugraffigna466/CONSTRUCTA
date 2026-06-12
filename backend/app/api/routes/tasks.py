@@ -5,6 +5,8 @@ from fastapi import APIRouter, Query, status
 from app.core.deps import CurrentUser, CurrentUserId, DbSession
 from app.core.plan_limits import check_plan_limit
 from app.schemas.task import (
+    BulkTaskCreate,
+    BulkTaskResult,
     CascadePreviewRequest,
     CascadePreviewResponse,
     TaskCreate,
@@ -28,14 +30,33 @@ async def create_task(data: TaskCreate, db: DbSession, current_user: CurrentUser
         "role": current_user.role,
         "channel": "web",
     }
-    return await TaskService(db).create(data, current_user.id, actor=actor)
+    task = await TaskService(db).create(data, current_user.id, actor=actor)
+    # Conversión explícita: FastAPI serializa con el validador core de Pydantic,
+    # que NO pasa por el model_validate custom que inyecta _dep_links.
+    return TaskRead.model_validate(task)
+
+
+@router.post("/obra/{obra_id}/bulk", response_model=BulkTaskResult, status_code=status.HTTP_201_CREATED)
+async def bulk_create_tasks(
+    obra_id: int, data: BulkTaskCreate, db: DbSession, current_user: CurrentUser
+):
+    """Carga masiva (paste desde Excel): una transacción, un evento de historial."""
+    from app.core.plan_limits import check_plan_limit
+    await check_plan_limit(db, current_user.tenant_id, "tasks", obra_id=obra_id)
+    actor = {
+        "id": current_user.id,
+        "name": current_user.full_name or current_user.email,
+        "role": current_user.role,
+        "channel": "web",
+    }
+    return await TaskService(db).bulk_create(obra_id, data.rows, current_user.id, actor=actor)
 
 
 @router.get("/obra/{obra_id}", response_model=list[TaskRead])
 async def list_tasks_for_obra(obra_id: int, db: DbSession, user_id: CurrentUserId):
     tasks = await TaskService(db).list_by_obra(obra_id, user_id)
     await AlertService(db).evaluate_task_risks_for_obra(obra_id)
-    return tasks
+    return [TaskRead.model_validate(t) for t in tasks]
 
 
 @router.get("/due-soon", response_model=list[TaskDueSoonRead])
@@ -50,7 +71,7 @@ async def list_tasks_due_soon(
 
 @router.get("/{task_id}", response_model=TaskRead)
 async def get_task(task_id: int, db: DbSession, user_id: CurrentUserId):
-    return await TaskService(db).get_for_manager(task_id, user_id)
+    return TaskRead.model_validate(await TaskService(db).get_for_manager(task_id, user_id))
 
 
 @router.post("/{task_id}/status", response_model=TaskRead)
@@ -87,9 +108,10 @@ async def update_task(
         "role": current_user.role,
         "channel": "web",
     }
-    return await TaskService(db).update(
+    task = await TaskService(db).update(
         task_id, data, current_user.id, actor=actor, cascade_dates=cascade_dates
     )
+    return TaskRead.model_validate(task)
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -26,12 +26,18 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
   const [result, setResult] = useState<{ created: number; skipped: number } | null>(null);
   const [source, setSource] = useState<string>("excel");
   const [downloadingTpl, setDownloadingTpl] = useState(false);
+  const [lastFile, setLastFile] = useState<File | null>(null);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [showRemap, setShowRemap] = useState(false);
+  const [remap, setRemap] = useState<Record<string, string>>({});
 
-  async function handleFile(file: File) {
+  async function handleFile(file: File, columnMap?: Record<string, string>) {
     setLoading(true);
     setError(null);
     try {
-      const preview = await previewImport(file);
+      const preview = await previewImport(file, columnMap);
+      setLastFile(file);
+      setHeaders(preview.headers ?? []);
       setRows(preview.rows);
       setColumnMap(preview.column_map);
       setSource(preview.source ?? (file.name.toLowerCase().endsWith(".xml") ? "msproject" : "excel"));
@@ -135,15 +141,60 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
                   MS Project — se importan subtareas, hitos y dependencias con lag
                 </div>
               )}
-              {/* Column map detected */}
-              {Object.keys(columnMap).length > 0 && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-                  {Object.entries(columnMap).map(([field, col]) => (
-                    <span key={field} style={{ fontSize: 11.5, padding: "3px 8px", borderRadius: 6, background: "#E4F3EC", color: "#136E47", fontWeight: 600 }}>
-                      {col}
-                    </span>
-                  ))}
-                  <span style={{ fontSize: 11.5, color: "#8E97A0", alignSelf: "center" }}>columnas detectadas</span>
+              {/* Column map detected — "Campo ← Columna" */}
+              {source !== "msproject" && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    {(["title", "start_date", "due_date", "responsible", "predecessors"] as const).map(field => {
+                      const LABELS: Record<string, string> = { title: "Título", start_date: "Inicio", due_date: "Fin", responsible: "Responsable", predecessors: "Predecesoras" };
+                      const col = columnMap[field];
+                      return (
+                        <span key={field} style={{
+                          fontSize: 11.5, padding: "3px 8px", borderRadius: 6, fontWeight: 600,
+                          background: col ? "#E4F3EC" : "#F4F5F4",
+                          color: col ? "#136E47" : "#8E97A0",
+                        }}>
+                          {LABELS[field]} ← {col ?? "no detectada"}
+                        </span>
+                      );
+                    })}
+                    {headers.length > 0 && (
+                      <button
+                        onClick={() => setShowRemap(v => !v)}
+                        style={{ fontSize: 11.5, fontWeight: 700, color: "#2A62C9", background: "none", border: "none", cursor: "pointer", padding: "3px 6px" }}
+                      >
+                        {showRemap ? "Ocultar remapeo" : "Remapear columnas"}
+                      </button>
+                    )}
+                  </div>
+
+                  {showRemap && (
+                    <div style={{ marginTop: 10, padding: "12px 14px", background: "#F8F9F8", borderRadius: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                      {(["title", "start_date", "due_date", "responsible", "predecessors"] as const).map(field => {
+                        const LABELS: Record<string, string> = { title: "Título", start_date: "Inicio", due_date: "Fin", responsible: "Responsable", predecessors: "Predecesoras" };
+                        return (
+                          <div key={field} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "#3E4A52", width: 110 }}>{LABELS[field]}</span>
+                            <select
+                              value={remap[field] ?? columnMap[field] ?? ""}
+                              onChange={e => setRemap(prev => ({ ...prev, [field]: e.target.value }))}
+                              style={{ flex: 1, padding: "5px 8px", fontSize: 12, borderRadius: 7, border: "1px solid #E6E7E5", cursor: "pointer" }}
+                            >
+                              <option value="">— sin columna —</option>
+                              {headers.map(h => <option key={h} value={h}>{h}</option>)}
+                            </select>
+                          </div>
+                        );
+                      })}
+                      <button
+                        onClick={() => { if (lastFile) { setShowRemap(false); handleFile(lastFile, { ...Object.fromEntries(Object.entries(columnMap)), ...remap }); } }}
+                        disabled={loading || !lastFile}
+                        style={{ alignSelf: "flex-end", padding: "6px 14px", borderRadius: 8, fontSize: 12, fontWeight: 700, color: "#fff", background: "#FF6B35", border: "none", cursor: "pointer" }}
+                      >
+                        {loading ? "Reprocesando…" : "Aplicar mapeo"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

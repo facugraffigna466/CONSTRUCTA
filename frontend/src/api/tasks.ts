@@ -59,6 +59,26 @@ export async function updateTask(
   return data;
 }
 
+export interface BulkTaskRow {
+  title: string;
+  start_date?: string | null;
+  due_date?: string | null;
+  responsible_id?: number | null;
+  depends_on_row?: number | null;
+}
+
+export interface BulkTaskResult {
+  created: number;
+  failed: number;
+  errors: string[];
+  task_ids: (number | null)[];
+}
+
+export async function bulkCreateTasks(obraId: number, rows: BulkTaskRow[]): Promise<BulkTaskResult> {
+  const { data } = await apiClient.post<BulkTaskResult>(`/tasks/obra/${obraId}/bulk`, { rows }, { timeout: 120_000 });
+  return data;
+}
+
 export interface CascadeAffectedTask {
   task_id: number;
   title: string;

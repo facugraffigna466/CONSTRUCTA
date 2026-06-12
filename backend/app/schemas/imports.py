@@ -26,6 +26,7 @@ class ImportPreviewRow(BaseModel):
 class ImportPreview(BaseModel):
     rows: list[ImportPreviewRow]
     column_map: dict[str, str]          # field → column header detected
+    headers: list[str] = []             # encabezados crudos del archivo (para remapeo manual)
     total_rows: int
     warnings: int
     errors: int
