@@ -1309,3 +1309,26 @@ Salida de la auditoría del flujo de alta (`docs/auditoria-flujo-alta.md`). Rama
 
 ### Validation
 tsc ✓ · migración 0026 ✓ · flujo registro→onboarding→wizard→obra verificado en navegador ✓ · datos de prueba limpiados ✓
+
+---
+
+## 2026-06-13 — Planilla con gestos de hoja de cálculo (Excel-grade)
+
+La `TaskSheetView` pasó de "una fila en edición a la vez" a una **grilla de celdas estilo Excel**, manteniendo todo lo existente. Rama `feature/planilla-excel-grid`, mergeada a main (`af09e28`).
+
+### Gestos nuevos
+- **Selección** de celda y de rango: click, click+arrastrar (tracking por `elementFromPoint`, robusto al drag rápido), shift+click, shift+flechas. `data-gc` por celda.
+- **Tipear para editar**: seleccionás y escribís directo; doble-click/Enter edita en sitio; click en otra celda confirma y se mueve (como Excel).
+- **Fill handle**: arrastrar la esquinita rellena hacia abajo. Las **fechas se encadenan** (cada tarea arranca cuando termina la anterior, conservando duración); el resto de columnas copia el valor.
+- **Ctrl+C / Ctrl+V / Ctrl+Z**: copia el rango (TSV), pega en celdas, deshace. Escriben al backend vía `updateTask`/`updateTaskStatus` (sin endpoints nuevos).
+- **Backspace/Delete** limpia celdas (no toca título ni estado).
+
+### Diseño / decisiones
+- El **pegar-desde-Excel que crea filas nuevas queda intacto**: se distingue por la copia interna (`clipRef`). Copia interna → pega en celdas; pegar externo → preview de import.
+- Enter al editar avanza a la fila de abajo y sigue editando (más rápido para cargar una columna).
+
+### Bug de foco (reportado por el usuario, 2 rondas)
+El combobox de Responsable se auto-enfocaba al montar siempre que la fila entraba en edición → al editar el Título el cursor saltaba a Responsable. Causa real: `autoFocus` dependía de `openDropdownFor`, que quedaba pegado al task. **Fix definitivo**: se eliminó `openDropdownFor` y `autoFocus` pasa a ser `editing.activeField === "responsible"` (la condición correcta).
+
+### Validation
+`tsc` ✓ · `npm run build` ✓ · verificado en navegador contra el backend real: encadenado de fechas persiste, copiar/pegar/deshacer OK, type-to-edit enfoca el campo correcto, edición Responsable intacta, import-desde-Excel sigue abriendo su preview.
