@@ -27,7 +27,7 @@ export interface Obra {
 
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";
 
-export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial" | "presupuesto";
+export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial" | "presupuesto" | "planos";
 
 export interface ObraTeamMember {
   responsible_id: number;
@@ -223,6 +223,24 @@ export interface BudgetComparison {
   rows: BudgetComparisonRow[];
   promedio: number | null;
   recomendacion: string | null;
+}
+
+// ─── Planos (documentos técnicos con versionado + consulta por chatbot) ──────
+
+export interface Plano {
+  id: number;
+  obra_id: number;
+  discipline: string;
+  name: string | null;
+  version: number;
+  is_latest: boolean;
+  file_url: string | null;
+  original_filename: string | null;
+  content_type: string | null;
+  file_size: number | null;
+  notes: string | null;
+  uploaded_by: number | null;
+  created_at: string;
 }
 
 export type MaterialStatus = "pendiente" | "pedido" | "recibido";

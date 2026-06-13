@@ -105,7 +105,7 @@ function App() {
     if (page === "panel") setSelectedObra(null);
   }
 
-  const OBRA_TABS: ObraTab[] = ["resumen", "tareas", "responsables", "alertas", "historial", "presupuesto"];
+  const OBRA_TABS: ObraTab[] = ["resumen", "tareas", "responsables", "alertas", "historial", "presupuesto", "planos"];
 
   function handleSelectObra(obra: Obra) {
     setSelectedObra(obra);

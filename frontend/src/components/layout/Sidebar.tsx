@@ -13,6 +13,7 @@ import {
   ArrowRightStartOnRectangleIcon,
   ShieldCheckIcon,
   BanknotesIcon,
+  MapIcon,
 } from "@heroicons/react/24/outline";
 import type { Obra, ObraStatus, ObraTab, Page } from "../../types";
 import { useUser } from "../../context/UserContext";
@@ -256,6 +257,12 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
               active={activePage === "panel" && activeTab === "presupuesto"}
               onClick={() => onTabChange("presupuesto")}
               icon={<BanknotesIcon style={ICON_SIZE} />}
+            />
+            <NavItem
+              label="Planos"
+              active={activePage === "panel" && activeTab === "planos"}
+              onClick={() => onTabChange("planos")}
+              icon={<MapIcon style={ICON_SIZE} />}
             />
             <NavItem
               label="Alertas"
