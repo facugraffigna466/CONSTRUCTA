@@ -140,8 +140,8 @@ export function AdminPage() {
 
           {/* Usage bars */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-            <UsageBar label="Obras activas" icon={<Building2 size={14} />} current={usage.obras_count} limit={usage.obras_limit} />
-            <UsageBar label="Usuarios activos" icon={<Users size={14} />} current={usage.users_count} limit={usage.users_limit} />
+            <UsageBar label="Obras" icon={<Building2 size={14} />} current={usage.obras_count} limit={usage.obras_limit} />
+            <UsageBar label="Usuarios" icon={<Users size={14} />} current={usage.users_count} limit={usage.users_limit} />
           </div>
 
           <UsageBar

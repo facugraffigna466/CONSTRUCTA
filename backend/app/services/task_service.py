@@ -101,6 +101,22 @@ class TaskService:
                 "El responsable seleccionado está inactivo. Elegí uno activo o dejá la tarea sin asignar."
             )
 
+    async def _ensure_team_member(self, obra_id: int, responsible_id: int | None) -> None:
+        """Si se asigna un responsable a una tarea, queda en el equipo de la obra.
+        Evita que el tab Responsables diga 'sin equipo' cuando hay gente asignada."""
+        if responsible_id is None:
+            return
+        from sqlalchemy import select
+        from app.models.obra_team_member import ObraTeamMember
+        exists = (await self.repo.session.execute(
+            select(ObraTeamMember).where(
+                ObraTeamMember.obra_id == obra_id,
+                ObraTeamMember.responsible_id == responsible_id,
+            )
+        )).scalar_one_or_none()
+        if not exists:
+            self.repo.session.add(ObraTeamMember(obra_id=obra_id, responsible_id=responsible_id))
+
     async def _assert_depends_on_valid(
         self, depends_on_id: int, obra_id: int, current_task_id: int | None = None
     ) -> None:
@@ -231,6 +247,7 @@ class TaskService:
                 )
                 self.repo.session.add(task)
                 await self.repo.session.flush()
+                await self._ensure_team_member(obra_id, row.responsible_id)
                 task_ids.append(task.id)
             except Exception as exc:
                 detail = getattr(exc, "detail", None) or str(exc)
@@ -416,6 +433,7 @@ class TaskService:
         task_data = data.model_dump(exclude={"dependency_links"})
         task = Task(**task_data)
         task = await self.repo.create(task)
+        await self._ensure_team_member(task.obra_id, data.responsible_id)
 
         if data.dependency_links:
             await self._sync_dependencies(task, data.dependency_links)
@@ -516,6 +534,7 @@ class TaskService:
 
         if changes.get("responsible_id") is not None:
             await self._assert_responsible_active(changes["responsible_id"])
+            await self._ensure_team_member(task.obra_id, changes["responsible_id"])
 
         if changes.get("parent_task_id") is not None:
             await self._assert_parent_valid(

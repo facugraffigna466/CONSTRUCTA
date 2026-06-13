@@ -817,8 +817,8 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
           </div>
         </header>
 
-        {/* ── Guía de completitud ── */}
-        {!loading && !error && (
+        {/* ── Guía de completitud — solo en Resumen (no robar espacio en los demás tabs) ── */}
+        {!loading && !error && activeTab === "resumen" && (
           <ObraCompletenessChecklist
             obra={obra}
             tasks={tasks}

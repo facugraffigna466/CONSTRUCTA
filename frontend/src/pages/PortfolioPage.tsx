@@ -402,7 +402,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                 value={obras.length}
                 icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2.5 13.5V6l5-3.5 5 3.5v7.5h-10z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round"/><path d="M6 13.5V10h3v3.5M5 7.5h5" stroke="currentColor" strokeWidth="1.4"/></svg>}
                 iconBg="#FFF1E9" iconColor="#FF6B35"
-                delta={<>{obras.filter(o => o.status !== "cancelada").length} activas</>}
+                delta={<>{obras.filter(o => o.status !== "cancelada").length} vigentes</>}
                 sparkColor="#FF6B35"
                 sparkPath="M0 30 L25 28 L50 24 L75 26 L100 18 L125 20 L150 12 L175 14 L200 8"
               />
@@ -465,8 +465,8 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
             <>
               {/* ── Toolbar ── */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-                {/* Filter tabs */}
-                <div style={{ display: "inline-flex", gap: 2, background: "#fff", border: "1px solid #E6E7E5", padding: 4, borderRadius: 11 }}>
+                {/* Filter tabs — scrolleable en mobile para no desbordar */}
+                <div style={{ display: "inline-flex", gap: 2, background: "#fff", border: "1px solid #E6E7E5", padding: 4, borderRadius: 11, maxWidth: "100%", overflowX: "auto", scrollbarWidth: "none" }}>
                   {FILTER_OPTIONS.map(({ id, label }) => {
                     const count = id === "todas" ? obras.length : obras.filter(o => o.status === id).length;
                     const isActive = filter === id;
@@ -486,6 +486,8 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                           display: "inline-flex",
                           alignItems: "center",
                           gap: 7,
+                          flexShrink: 0,
+                          whiteSpace: "nowrap",
                           transition: "background 0.15s, color 0.15s",
                         }}
                       >

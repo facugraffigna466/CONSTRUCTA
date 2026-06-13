@@ -47,3 +47,21 @@ Severidad: **P1** = fricción alta / inconsistencia seria · **P2** = pulido / c
 3. **#3** (banner solo en Resumen) — chico.
 4. **#7** (ocultar Testing en prod) — chico, pero atado a definir el flag de producción.
 5. **#1** (equipo ↔ responsables de tareas) — el más de fondo; decisión de producto sobre cómo unificar.
+
+---
+
+## Resolución (2026-06-13, misma sesión)
+
+Los 7 hallazgos corregidos y verificados en navegador:
+
+| # | Fix | Verificación |
+|---|-----|--------------|
+| 1 | Asignar un responsable a una tarea lo vincula al equipo de la obra (`task_service._ensure_team_member` en create/update/bulk) + backfill de obras viejas (migration 0029) | Obra 4: tab Responsables ya muestra los 5 asignados (antes "sin responsables") |
+| 2 | Header mobile: breadcrumb se reduce a ícono+título y se encoge. Barra de filtros del portfolio scrolleable en mobile | A 380px: scrollWidth = viewport (sin overflow) |
+| 3 | Checklist de completitud solo en el tab Resumen | Banner ausente en Tareas, presente en Resumen |
+| 4 | "TOTAL OBRAS · 8 activas" → "8 vigentes" | Visual |
+| 5 | Admin "Obras activas"/"Usuarios activos" → "Obras"/"Usuarios" | Visual |
+| 6 | Breadcrumb de Panel Admin (caso `admin` en App.tsx) | Header dice "Panel Admin" |
+| 7 | "Herramientas de testing" detrás de `import.meta.env.DEV` (oculto en build de producción) | Build de producción OK |
+
+`tsc` ✓ · `npm run build` ✓ · migración 0029 aplicada (backfill).

@@ -176,6 +176,9 @@ function App() {
   } else if (activePage === "presupuestos") {
     pageTitle = "Gestión de Presupuestos";
     pageSubtitle = "Lectura y comparación con IA";
+  } else if (activePage === "admin") {
+    pageTitle = "Panel Admin";
+    pageSubtitle = "Métricas del tenant y plan";
   } else {
     pageTitle = "Configuración";
     pageSubtitle = "Ajustes del sistema";
