@@ -241,7 +241,7 @@ interface ComboboxProps {
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
-function ResponsableCombobox({ currentId, options, onSelect, onKeyDown }: ComboboxProps) {
+function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDown }: ComboboxProps) {
   const currentLabel = options.find(r => String(r.id) === currentId)?.full_name ?? "";
   const [text, setText] = useState(currentLabel);
   const [open, setOpen] = useState(false);
@@ -254,10 +254,15 @@ function ResponsableCombobox({ currentId, options, onSelect, onKeyDown }: Combob
     ? all.filter(r => r.full_name.toLowerCase().includes(text.toLowerCase()) || (r.role ?? "").toLowerCase().includes(text.toLowerCase()))
     : all;
 
-  // Enfocar al montar y abrir la lista
+  // Auto-enfocar SÓLO cuando responsable es el campo que se está editando
+  // (antes se enfocaba al montar siempre → robaba el cursor al editar otra columna).
+  // Cuando responsable es el campo activo por Tab, el efecto de foco del padre
+  // enfoca este input (data-sheet-field="responsible") y onFocus abre la lista.
   useEffect(() => {
-    inputRef.current?.focus();
-    openList();
+    if (autoFocus) {
+      inputRef.current?.focus();
+      openList();
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function openList() {
