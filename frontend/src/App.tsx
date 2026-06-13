@@ -172,10 +172,10 @@ function App() {
     pageSubtitle = "Miembros de la organización";
   } else if (activePage === "bitacora") {
     pageTitle = "Bitácora de Obra";
-    pageSubtitle = "Próximamente";
+    pageSubtitle = "Audios y notas con IA";
   } else if (activePage === "presupuestos") {
     pageTitle = "Gestión de Presupuestos";
-    pageSubtitle = "Próximamente";
+    pageSubtitle = "Lectura y comparación con IA";
   } else {
     pageTitle = "Configuración";
     pageSubtitle = "Ajustes del sistema";

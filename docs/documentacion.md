@@ -1332,3 +1332,29 @@ El combobox de Responsable se auto-enfocaba al montar siempre que la fila entrab
 
 ### Validation
 `tsc` ✓ · `npm run build` ✓ · verificado en navegador contra el backend real: encadenado de fechas persiste, copiar/pegar/deshacer OK, type-to-edit enfoca el campo correcto, edición Responsable intacta, import-desde-Excel sigue abriendo su preview.
+
+---
+
+## 2026-06-13 — Módulo de Gestión de Presupuestos (lectura IA + comparación)
+
+El módulo "Gestión de Presupuestos" dejó de ser un placeholder "Próximamente" y pasó a estar **funcional**. Rama `feature/modulo-presupuestos`.
+
+### Backend
+- Modelo `Budget` (tabla `budgets`, migration 0027): presupuesto de proveedor con datos estructurados (JSON), inconsistencias (JSON), total, rubro, proveedor, aislado por tenant.
+- `budget_service.py`: lee el documento con Claude (`CLAUDE_MODEL`) → structured output (proveedor, fecha, rubro, ítems con cantidad/unidad/precio/subtotal, subtotal, IVA, total, flete, plazo, condiciones de pago, validez, inconsistencias). Soporta **PDF e imágenes nativos** (document/image blocks de Anthropic), **Excel** (openpyxl) y **texto pegado**.
+- Comparación: computa promedio, marca el más barato, calcula % vs promedio, flags (sin flete, IVA sin aclarar, sin validez, X% por encima del promedio) + recomendación generada por IA que pondera precio vs condiciones.
+- Router `budgets.py`: `POST /budgets/upload`, `/budgets/text`, `GET /budgets`, `GET /budgets/{id}`, `DELETE`, `POST /budgets/compare`. Todo tenant-scoped.
+
+### Frontend
+- `PresupuestosPage.tsx` reescrita: zona de carga (drag&drop archivo + pegar texto + obra/proveedor opcional), lista de presupuestos (proveedor, rubro, total, nº de alertas), modal de detalle (tabla de ítems, totales, condiciones, inconsistencias por severidad), selección múltiple → modal de comparación con recomendación IA.
+- `api/budgets.ts`, tipos en `types/index.ts`.
+
+### Sidebar (fix pedido por el usuario)
+- "Presupuestos" salió de la sección "Próximamente" (con badge PRONTO) y pasó a Workspace, al lado de Panel, sin badge. Se eliminó la sección Próximamente entera (resuelve el título duplicado: antes convivían el tab de obra "Presupuesto" y el global "Presupuestos" bajo Próximamente).
+- Breadcrumbs "Próximamente" de Bitácora y Presupuestos corregidos (ambos ya son módulos reales).
+
+### Validation
+`tsc` ✓ · `npm run build` ✓ · migración 0027 aplicada ✓ · verificado e2e contra Claude real: extracción de un presupuesto (proveedor, ítems, IVA, "no incluye flete", inconsistencias) ✓, comparación de 3 con recomendación que pondera precio + condiciones ✓, detalle y modales OK. Datos de prueba eliminados.
+
+### Pendiente (no bloqueante)
+Generación de documentos (presupuesto formal para cliente, solicitud de cotización, orden de compra, informe de adjudicación) — la card del placeholder los listaba como objetivo; quedan como próxima etapa.
