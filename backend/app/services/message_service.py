@@ -79,6 +79,8 @@ class MessageService:
             )
         )
 
+        media_url: str | None = None
+
         # ── 4. Settings checks ─────────────────────────────────────────────────
         if responsible is None:
             reply = (
@@ -122,6 +124,10 @@ class MessageService:
                     "Por favor respondé con el número de la opción deseada."
                 )
                 task_id = None
+            elif "plano" in (payload.Body or "").lower():
+                # "mandame el plano de electricidad" → última versión vigente
+                reply, media_url = await self._handle_plano_request(responsible, payload.Body)
+                task_id = None
             else:
                 reply, task_id = await ConversationService(self.db).handle_inbound(
                     responsible, payload.Body
@@ -135,7 +141,7 @@ class MessageService:
         )
 
         # ── 7. Send reply ──────────────────────────────────────────────────────
-        outbound_sid = await send_whatsapp_message(payload.from_number, reply)
+        outbound_sid = await send_whatsapp_message(payload.from_number, reply, media_url=media_url)
 
         # ── 8. Save outbound ───────────────────────────────────────────────────
         await self._save_message(
@@ -153,6 +159,42 @@ class MessageService:
         )
 
         return inbound
+
+    async def _handle_plano_request(self, responsible, body: str) -> tuple[str, str | None]:
+        """Responde un pedido de plano por WhatsApp con la última versión vigente.
+        Devuelve (texto, media_url|None)."""
+        from app.core.config import settings
+        from app.services.plano_service import PlanoService, match_discipline_in_text
+
+        svc = PlanoService(self.db)
+        obra_ids = await svc.obra_ids_for_responsible(responsible.id)
+        if not obra_ids:
+            return ("No tengo obras asociadas a tu número todavía. Avisale al jefe de obra.", None)
+
+        disc = match_discipline_in_text(body)
+        plano = await svc.find_latest_for_disciplines(obra_ids, disc)
+
+        if not plano:
+            disponibles = await svc.available_disciplines(obra_ids)
+            lista = ", ".join(disponibles) if disponibles else None
+            if disc:
+                msg = f"No encontré un plano de {disc} cargado para tu obra."
+            else:
+                msg = "¿De qué plano necesitás? Por ejemplo: electricidad, sanitarios o estructura."
+            if lista:
+                msg += f"\nPlanos disponibles: {lista}."
+            elif disc:
+                msg += " Todavía no hay planos cargados en el sistema."
+            return (msg, None)
+
+        base_url = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+        url = f"{base_url}/uploads/{plano.file_path}" if base_url else None
+        fecha = plano.created_at.strftime("%d/%m/%Y")
+        detalle = f" — {plano.name}" if plano.name else ""
+        caption = f"\U0001F4D0 Plano de {plano.discipline}{detalle} (v{plano.version}, cargado {fecha})."
+        if not url:
+            caption += "\nNo puedo adjuntar el archivo todavía (falta configurar la URL pública del sistema)."
+        return (caption, url)
 
     async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, responsible) -> str:
         """Audio de WhatsApp → entrada de bitácora procesada con IA.

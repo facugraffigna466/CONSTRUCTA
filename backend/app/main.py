@@ -18,6 +18,7 @@ from app.api.routes import task_materials as task_materials_router
 from app.api.routes import purchase_orders as purchase_orders_router
 from app.api.routes import bitacora as bitacora_router
 from app.api.routes import budgets as budgets_router
+from app.api.routes import planos as planos_router
 from app.core.config import settings
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.core.socket_manager import sio
@@ -78,6 +79,7 @@ fastapi_app.include_router(task_materials_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(purchase_orders_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(bitacora_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(budgets_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(planos_router.router, prefix=API_PREFIX)
 
 
 # Serve uploaded images — must be a proper route (not StaticFiles) to work

@@ -1358,3 +1358,22 @@ El módulo "Gestión de Presupuestos" dejó de ser un placeholder "Próximamente
 
 ### Pendiente (no bloqueante)
 Generación de documentos (presupuesto formal para cliente, solicitud de cotización, orden de compra, informe de adjudicación) — la card del placeholder los listaba como objetivo; quedan como próxima etapa.
+
+---
+
+## 2026-06-13 — Módulo de Planos (versionado + consulta por chatbot de WhatsApp)
+
+Nuevo módulo para cargar planos de obra de cualquier tipo, con versionado, y que los responsables los pidan por WhatsApp. Rama `feature/modulo-presupuestos` (continuación).
+
+### Backend
+- Modelo `Plano` (tabla `planos`, migration 0028): obra_id, disciplina, nombre, versión, is_latest, archivo (en /uploads), tenant-scoped.
+- `plano_service.py`: carga con **versionado** (agrupa por obra+disciplina+nombre; cada carga incrementa la versión y deja la anterior no-vigente), borrado con promoción de la versión previa, y soporte para el chatbot: `match_discipline_in_text` (detecta "electricidad/eléctrico/luz", "sanitarios/plomería/agua", "gas", "estructura", "arquitectura", etc.), `find_latest_for_disciplines`, `obra_ids_for_responsible` (vía tareas).
+- Router `planos.py`: `POST /obras/{id}/planos`, `GET /obras/{id}/planos`, `DELETE /planos/{id}`. Archivos servidos por `/uploads/{filename}` (URL pública del ngrok).
+- **Chatbot**: `message_service._handle_plano_request` — si el mensaje contiene "plano", detecta la disciplina, busca la última versión vigente en las obras del responsable y la **adjunta por WhatsApp** (Twilio `media_url`, soporte agregado a `send_whatsapp_message`). Si no existe, lista las disponibles.
+
+### Frontend
+- `PlanosTab.tsx`: tab "Planos" en la obra (sidebar). Carga (disciplina + nombre + drag&drop), lista agrupada por disciplina con la versión vigente destacada y el historial colapsable, descarga, borrado. Hint de que se piden por WhatsApp.
+- `api/planos.ts`, tipo `Plano`, `ObraTab` + `OBRA_TABS` extendidos.
+
+### Validation
+`tsc` ✓ · `npm run build` ✓ · migración 0028 aplicada ✓ · verificado e2e: subida con versionado (v2 vigente, v1 historial) ✓, lógica del chatbot (detección de disciplina, devuelve la última versión + media_url; "plano de gas" inexistente → lista disponibles) ✓, tab en navegador ✓. Datos de prueba eliminados.

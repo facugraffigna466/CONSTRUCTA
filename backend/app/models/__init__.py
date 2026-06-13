@@ -11,6 +11,7 @@ from app.models.task_material import TaskMaterial
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
 from app.models.bitacora import BitacoraEntry
 from app.models.budget import Budget
+from app.models.plano import Plano
 from app.models.historial import HistorialEvento
 from app.models.message import (
     Message,
@@ -35,6 +36,7 @@ __all__ = [
     "TaskStatus",
     "Supplier",
     "Budget",
+    "Plano",
     "TaskMaterial",
     "PurchaseOrder",
     "PurchaseOrderItem",

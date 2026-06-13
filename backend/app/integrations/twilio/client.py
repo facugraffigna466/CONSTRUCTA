@@ -20,7 +20,7 @@ def _get_client() -> Client:
     return Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
 
-async def send_whatsapp_message(to_number: str, body: str) -> str | None:
+async def send_whatsapp_message(to_number: str, body: str, media_url: str | None = None) -> str | None:
     """
     Send a WhatsApp message via the Twilio REST API.
 
@@ -42,7 +42,10 @@ async def send_whatsapp_message(to_number: str, body: str) -> str | None:
     to_wa = _ensure_wa_prefix(to_number)
 
     def _send() -> str:
-        msg = _get_client().messages.create(from_=from_wa, to=to_wa, body=body)
+        kwargs: dict = {"from_": from_wa, "to": to_wa, "body": body}
+        if media_url:
+            kwargs["media_url"] = [media_url]
+        msg = _get_client().messages.create(**kwargs)
         return msg.sid
 
     try:
