@@ -390,7 +390,6 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
     const [editing, setEditing] = useState<EditState | null>(null);
     const [showNewRow, setShowNewRow] = useState(false);
-    const [openDropdownFor, setOpenDropdownFor] = useState<number | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     // ── Anchos de columna (resize manual, persistido por obra) ───────────────
@@ -516,7 +515,6 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
         startEdit(task, field);
-        if (field === "responsible") setOpenDropdownFor(taskId);
         setTimeout(() => {
           const row = containerRef.current?.querySelector(`[data-task-row="${taskId}"]`);
           row?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -804,7 +802,6 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       const task = tasks[r]; if (!task) return;
       const field = GRID_FIELDS[c].field;
       startEdit(task, field);
-      if (field === "responsible") setOpenDropdownFor(task.id);
       if (initialChar != null) {
         if (field === "title") setEditing((s) => s ? { ...s, title: initialChar } : s);
         else if (field === "progress") setEditing((s) => s ? { ...s, progress: initialChar.replace(/[^0-9]/g, "") } : s);
@@ -1236,10 +1233,9 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                   <ResponsableCombobox
                     currentId={editing!.responsibleId}
                     options={activeResponsibles}
-                    autoFocus={openDropdownFor === task.id}
+                    autoFocus={editing!.activeField === "responsible"}
                     onSelect={(id) => {
                       setEditing(s => s ? { ...s, responsibleId: id } : s);
-                      setOpenDropdownFor(null);
                     }}
                     onKeyDown={(e) => handleKeyDown(e as unknown as KeyboardEvent<HTMLInputElement>, "responsible")}
                   />
