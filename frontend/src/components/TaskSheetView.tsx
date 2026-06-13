@@ -53,6 +53,17 @@ function addDays(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+// "15/06/2026" → "2026-06-15" (para pegar fechas en formato local). null si no parsea.
+function toIso(s: string): string | null {
+  const t = s.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  const [, d, mo, y] = m;
+  const yy = y.length === 2 ? "20" + y : y;
+  return `${yy}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+}
+
 function diffDays(a: string, b: string): number {
   return Math.round(
     (new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000
@@ -99,6 +110,98 @@ function StatusPill({ status }: { status: TaskStatus }) {
 
 const FIELD_ORDER = ["title", "responsible", "start", "duration", "due", "progress", "taskStatus"] as const;
 type Field = typeof FIELD_ORDER[number];
+
+// ── Grilla estilo Excel: columnas seleccionables (orden visual = orden de FIELD_ORDER) ──
+// gridCol 0..6 ↔ field. domCol = índice en la grilla CSS de 8 columnas (0 es "#").
+const GRID_FIELDS: { field: Field; domCol: number }[] = [
+  { field: "title",      domCol: 1 },
+  { field: "responsible", domCol: 2 },
+  { field: "start",      domCol: 3 },
+  { field: "duration",   domCol: 4 },
+  { field: "due",        domCol: 5 },
+  { field: "progress",   domCol: 6 },
+  { field: "taskStatus", domCol: 7 },
+];
+const GC_COUNT = GRID_FIELDS.length;
+const SEL_BG = "rgba(26,115,232,0.10)";
+
+// Patch parcial que se manda al backend por celda/relleno/pegado
+interface FieldPatch {
+  title?: string;
+  responsible_id?: number | null;
+  start_date?: string | null;
+  due_date?: string | null;
+  estimated_progress?: number;
+  status?: TaskStatus;
+}
+
+// Valor "crudo" de un campo de una tarea (para fuente de relleno y copiar)
+function readField(task: Task, field: Field): string {
+  switch (field) {
+    case "title":       return task.title;
+    case "responsible": return task.responsible_id ? String(task.responsible_id) : "";
+    case "start":       return task.start_date ?? "";
+    case "due":         return task.due_date ?? "";
+    case "duration":    return task.start_date && task.due_date ? calcDuration(task.start_date, task.due_date) : "";
+    case "progress":    return String(task.estimated_progress ?? 0);
+    case "taskStatus":  return task.status;
+  }
+}
+
+// Texto legible para copiar al portapapeles (TSV)
+function displayField(task: Task, field: Field, respName: (id: number | null) => string): string {
+  switch (field) {
+    case "title":       return task.title;
+    case "responsible": return respName(task.responsible_id);
+    case "start":       return task.start_date ? fmtDate(task.start_date) : "";
+    case "due":         return task.due_date ? fmtDate(task.due_date) : "";
+    case "duration":    return task.start_date && task.due_date ? calcDuration(task.start_date, task.due_date) : "";
+    case "progress":    return String(task.estimated_progress ?? 0);
+    case "taskStatus":  return STATUS_STYLE[task.status].label;
+  }
+}
+
+// Convierte (campo, valor crudo) en un patch, respetando el acople fecha/duración
+function patchFor(field: Field, raw: string, task: Task): FieldPatch | null {
+  switch (field) {
+    case "title":
+      return raw.trim() ? { title: raw.trim() } : null; // nunca borrar un título
+    case "responsible":
+      return { responsible_id: raw ? Number(raw) : null };
+    case "start": {
+      const start = raw || null;
+      let due = task.due_date ?? null;
+      if (start && task.start_date && task.due_date) {
+        due = addDays(start, diffDays(task.start_date, task.due_date));
+      } else if (start && !task.due_date) {
+        due = start;
+      }
+      return { start_date: start, due_date: due };
+    }
+    case "due":
+      return { due_date: raw || null };
+    case "duration": {
+      const d = parseInt(raw, 10);
+      if (!task.start_date || !(d > 0)) return null;
+      return { due_date: addDays(task.start_date, d - 1) };
+    }
+    case "progress":
+      return { estimated_progress: Math.min(100, Math.max(0, parseInt(raw, 10) || 0)) };
+    case "taskStatus":
+      return STATUS_OPTIONS.some(o => o.value === raw) ? { status: raw as TaskStatus } : null;
+  }
+}
+
+function fullPatch(task: Task): FieldPatch {
+  return {
+    title: task.title,
+    responsible_id: task.responsible_id ?? null,
+    start_date: task.start_date ?? null,
+    due_date: task.due_date ?? null,
+    estimated_progress: task.estimated_progress ?? 0,
+    status: task.status,
+  };
+}
 
 interface EditState {
   taskId: number | null;
@@ -349,6 +452,8 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           containerRef.current.contains(active) || active === containerRef.current
         );
         if (!insideSheet) return;
+        // Pegar bloque interno en celdas (Ctrl+C dentro de la grilla → Ctrl+V)
+        if (handleCellPasteRef.current()) { e.preventDefault(); return; }
         const text = e.clipboardData?.getData("text/plain") ?? "";
         if (!text.trim()) return;
         const isFormField = !!active && ["INPUT", "SELECT", "TEXTAREA"].includes(active.tagName);
@@ -655,12 +760,292 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       };
     }
 
+    // ─── selección estilo Excel (celda activa + rango) ────────────────────────
+
+    const [sel, setSel] = useState<{ a: { r: number; c: number }; f: { r: number; c: number } } | null>(null);
+    const selDragRef = useRef(false);
+    const fillDragRef = useRef(false);
+    const [fillTo, setFillTo] = useState<number | null>(null);
+    const undoRef = useRef<{ taskId: number; patch: FieldPatch }[][]>([]);
+    const clipRef = useRef<string[][] | null>(null);
+
+    function selRect(s = sel) {
+      if (!s) return null;
+      return { r0: Math.min(s.a.r, s.f.r), r1: Math.max(s.a.r, s.f.r), c0: Math.min(s.a.c, s.f.c), c1: Math.max(s.a.c, s.f.c) };
+    }
+    const inSel = (r: number, c: number) => { const x = selRect(); return !!x && r >= x.r0 && r <= x.r1 && c >= x.c0 && c <= x.c1; };
+    const isSelAnchor = (r: number, c: number) => !!sel && sel.a.r === r && sel.a.c === c;
+    const inFillPreview = (r: number, c: number) => {
+      if (fillTo === null) return false;
+      const x = selRect(); if (!x) return false;
+      return r > x.r1 && r <= fillTo && c >= x.c0 && c <= x.c1;
+    };
+
+    const respName = (id: number | null) => {
+      if (!id) return "";
+      const r = activeResponsibles.find((x) => x.id === id);
+      return r ? r.full_name : "";
+    };
+
+    function focusGrid() { containerRef.current?.focus(); }
+
+    function selectCell(r: number, c: number, extend: boolean) {
+      if (editing) return;
+      setSel((prev) => (extend && prev ? { a: prev.a, f: { r, c } } : { a: { r, c }, f: { r, c } }));
+      focusGrid();
+    }
+
+    function beginEdit(r: number, c: number, initialChar?: string) {
+      const task = tasks[r]; if (!task) return;
+      const field = GRID_FIELDS[c].field;
+      startEdit(task, field);
+      if (field === "responsible") setOpenDropdownFor(task.id);
+      if (initialChar != null) {
+        if (field === "title") setEditing((s) => s ? { ...s, title: initialChar } : s);
+        else if (field === "progress") setEditing((s) => s ? { ...s, progress: initialChar.replace(/[^0-9]/g, "") } : s);
+        else if (field === "duration") setEditing((s) => s ? { ...s, duration: initialChar.replace(/[^0-9]/g, "") } : s);
+      }
+    }
+
+    const applyPatches = useCallback(async (patches: { taskId: number; patch: FieldPatch }[]) => {
+      for (const { taskId, patch } of patches) {
+        try {
+          const { status, ...rest } = patch;
+          let saved: Task | null = null;
+          if (Object.keys(rest).length > 0) saved = await updateTask(taskId, rest);
+          if (status) saved = await updateTaskStatus(taskId, status);
+          if (saved) onTaskSaved(saved);
+        } catch (err) {
+          const limitInfo = getPlanLimitError(err);
+          if (limitInfo) { setPlanLimit(limitInfo); return; }
+        }
+      }
+    }, [onTaskSaved]);
+
+    function pushUndo(taskIds: number[]) {
+      const group = Array.from(new Set(taskIds)).map((id) => ({ taskId: id, patch: fullPatch(tasks.find((x) => x.id === id)!) }));
+      undoRef.current.push(group);
+      if (undoRef.current.length > 30) undoRef.current.shift();
+    }
+
+    async function doFill(toRow: number) {
+      const x = selRect(); if (!x || toRow <= x.r1) { setFillTo(null); return; }
+      const targetRows: number[] = [];
+      for (let r = x.r1 + 1; r <= toRow && r < tasks.length; r++) targetRows.push(r);
+      if (targetRows.length === 0) { setFillTo(null); return; }
+
+      pushUndo(targetRows.map((r) => tasks[r].id));
+      const byTask = new Map<number, FieldPatch>();
+      const merge = (id: number, p: FieldPatch | null) => { if (p) byTask.set(id, { ...(byTask.get(id) ?? {}), ...p }); };
+
+      const cols: number[] = [];
+      for (let c = x.c0; c <= x.c1; c++) cols.push(c);
+      const hasDate = cols.some((c) => GRID_FIELDS[c].field === "start" || GRID_FIELDS[c].field === "due");
+
+      if (hasDate) {
+        const src = tasks[x.r0];
+        const dur = src.start_date && src.due_date ? diffDays(src.start_date, src.due_date) : 0;
+        let prevEnd: string | null = src.due_date ?? src.start_date ?? null;
+        if (prevEnd) {
+          for (const r of targetRows) {
+            const ns = addDays(prevEnd, 1);
+            const ne = addDays(ns, dur);
+            merge(tasks[r].id, { start_date: ns, due_date: ne });
+            prevEnd = ne;
+          }
+        }
+      }
+      cols.forEach((c) => {
+        const field = GRID_FIELDS[c].field;
+        if (field === "start" || field === "due") return;
+        const srcRaw = readField(tasks[x.r0], field);
+        targetRows.forEach((r) => merge(tasks[r].id, patchFor(field, srcRaw, tasks[r])));
+      });
+
+      setFillTo(null);
+      setSel({ a: { r: x.r0, c: x.c0 }, f: { r: toRow, c: x.c1 } });
+      await applyPatches(Array.from(byTask, ([taskId, patch]) => ({ taskId, patch })));
+    }
+
+    function doCopy() {
+      const x = selRect(); if (!x) return;
+      const grid: string[][] = [];
+      for (let r = x.r0; r <= x.r1; r++) {
+        const line: string[] = [];
+        for (let c = x.c0; c <= x.c1; c++) line.push(displayField(tasks[r], GRID_FIELDS[c].field, respName));
+        grid.push(line);
+      }
+      clipRef.current = grid;
+      navigator.clipboard?.writeText(grid.map((l) => l.join("\t")).join("\n")).catch(() => {});
+    }
+
+    async function doPasteBlock(grid: string[][]) {
+      if (!sel) return;
+      const startR = sel.a.r, startC = sel.a.c;
+      const ids: number[] = [];
+      const byTask = new Map<number, FieldPatch>();
+      grid.forEach((line, i) => {
+        const r = startR + i; if (r >= tasks.length) return;
+        line.forEach((val, j) => {
+          const c = startC + j; if (c >= GC_COUNT) return;
+          const field = GRID_FIELDS[c].field;
+          const raw = field === "responsible"
+            ? (activeResponsibles.find((rr) => rr.full_name.toLowerCase() === val.trim().toLowerCase())?.id?.toString() ?? "")
+            : (field === "start" || field === "due") ? (toIso(val) ?? "")
+            : (field === "taskStatus") ? (STATUS_OPTIONS.find((o) => o.label.toLowerCase() === val.trim().toLowerCase())?.value ?? "")
+            : val;
+          const p = patchFor(field, raw, tasks[r]);
+          if (p) { byTask.set(tasks[r].id, { ...(byTask.get(tasks[r].id) ?? {}), ...p }); ids.push(tasks[r].id); }
+        });
+      });
+      if (ids.length === 0) return;
+      pushUndo(ids);
+      await applyPatches(Array.from(byTask, ([taskId, patch]) => ({ taskId, patch })));
+    }
+
+    async function doUndo() {
+      const group = undoRef.current.pop();
+      if (group) await applyPatches(group);
+    }
+
+    async function clearCells() {
+      const x = selRect(); if (!x) return;
+      const ids: number[] = [];
+      const byTask = new Map<number, FieldPatch>();
+      for (let r = x.r0; r <= x.r1; r++) {
+        for (let c = x.c0; c <= x.c1; c++) {
+          const field = GRID_FIELDS[c].field;
+          const p: FieldPatch | null =
+            field === "responsible" ? { responsible_id: null }
+            : field === "start" ? { start_date: null }
+            : field === "due" ? { due_date: null }
+            : field === "progress" ? { estimated_progress: 0 }
+            : null;
+          if (p) { byTask.set(tasks[r].id, { ...(byTask.get(tasks[r].id) ?? {}), ...p }); ids.push(tasks[r].id); }
+        }
+      }
+      if (ids.length === 0) return;
+      pushUndo(ids);
+      await applyPatches(Array.from(byTask, ([taskId, patch]) => ({ taskId, patch })));
+    }
+
+    function gridKeyDown(e: React.KeyboardEvent) {
+      if (editing || !sel) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); doCopy(); return; }
+      if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); doUndo(); return; }
+      if (mod) return; // Ctrl+V lo intercepta el handler de paste
+      const { r, c } = sel.a;
+      if (["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        e.preventDefault();
+        const dr = e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0;
+        const dc = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (e.shiftKey) setSel((s) => s ? { a: s.a, f: { r: Math.max(0, Math.min(tasks.length - 1, s.f.r + dr)), c: Math.max(0, Math.min(GC_COUNT - 1, s.f.c + dc)) } } : s);
+        else { const nr = Math.max(0, Math.min(tasks.length - 1, r + dr)), nc = Math.max(0, Math.min(GC_COUNT - 1, c + dc)); setSel({ a: { r: nr, c: nc }, f: { r: nr, c: nc } }); }
+        return;
+      }
+      if (e.key === "Enter") { e.preventDefault(); beginEdit(r, c); return; }
+      if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); clearCells(); return; }
+      if (e.key.length === 1 && !e.altKey) { e.preventDefault(); beginEdit(r, c, e.key); }
+    }
+
+    // Finalizar drag de selección / relleno al soltar el mouse en cualquier lado.
+    // El target del relleno y la extensión del rango se siguen por elementFromPoint
+    // (más robusto que enter/leave celda a celda, sobre todo al arrastrar rápido).
+    const doFillRef = useRef<() => void>(() => {});
+    doFillRef.current = () => { if (fillTo !== null) doFill(fillTo); else setFillTo(null); };
+    const tasksRef = useRef(tasks);
+    tasksRef.current = tasks;
+    useEffect(() => {
+      function rowIdxAt(x: number, y: number): number {
+        const el = document.elementFromPoint(x, y) as HTMLElement | null;
+        const rowEl = el?.closest?.("[data-task-row]");
+        if (!rowEl) return -1;
+        const id = Number(rowEl.getAttribute("data-task-row"));
+        return tasksRef.current.findIndex((t) => t.id === id);
+      }
+      function onMove(e: MouseEvent) {
+        if (fillDragRef.current) {
+          const idx = rowIdxAt(e.clientX, e.clientY);
+          if (idx >= 0) setFillTo(idx);
+        } else if (selDragRef.current) {
+          const cellEl = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest?.("[data-gc]");
+          if (cellEl) {
+            const idx = rowIdxAt(e.clientX, e.clientY);
+            const gc = Number(cellEl.getAttribute("data-gc"));
+            if (idx >= 0 && gc >= 0) setSel((s) => s ? { a: s.a, f: { r: idx, c: gc } } : s);
+          }
+        }
+      }
+      function onUp() {
+        if (fillDragRef.current) { fillDragRef.current = false; doFillRef.current(); }
+        selDragRef.current = false;
+      }
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+      return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    }, []);
+
+    // Pegar bloque interno (Ctrl+C dentro de la grilla → Ctrl+V en celdas).
+    // El pegar-desde-Excel que crea filas nuevas sigue intacto (clipRef vacío).
+    const handleCellPasteRef = useRef<() => boolean>(() => false);
+    handleCellPasteRef.current = () => {
+      if (editing || !sel || !clipRef.current) return false;
+      doPasteBlock(clipRef.current);
+      return true;
+    };
+
+    function cellSel(rowIdx: number, gc: number, base: React.CSSProperties): React.CSSProperties {
+      const editingRow = editing?.taskId === tasks[rowIdx]?.id;
+      if (editingRow) return { ...base, position: "relative" };
+      const anchor = isSelAnchor(rowIdx, gc);
+      const on = inSel(rowIdx, gc);
+      const prev = inFillPreview(rowIdx, gc);
+      return {
+        ...base,
+        position: "relative",
+        cursor: "cell",
+        background: anchor ? "#E3EEFD" : on ? SEL_BG : prev ? "#EAF6EE" : base.background,
+        boxShadow: anchor ? "inset 0 0 0 2px #1A73E8" : on ? "inset 0 0 0 1px rgba(26,115,232,0.4)" : base.boxShadow,
+      };
+    }
+    function cellHandlers(rowIdx: number, gc: number) {
+      return {
+        "data-gc": gc,
+        onMouseDown: (e: React.MouseEvent) => {
+          if (editing) {
+            // clickear otra celda mientras editás: confirmar y seleccionar la nueva (como Excel)
+            if (editing.taskId !== null) saveEdit(editing); else cancelEdit();
+            setSel({ a: { r: rowIdx, c: gc }, f: { r: rowIdx, c: gc } });
+            focusGrid();
+            return;
+          }
+          selDragRef.current = true;
+          selectCell(rowIdx, gc, e.shiftKey);
+        },
+        onDoubleClick: () => beginEdit(rowIdx, gc),
+      };
+    }
+    function fillHandle(rowIdx: number, gc: number) {
+      const x = selRect(); if (!x || editing) return null;
+      if (rowIdx !== x.r1 || gc !== x.c1) return null;
+      return (
+        <div
+          data-fill-handle
+          onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); fillDragRef.current = true; setFillTo(x.r1); }}
+          title="Arrastrá para rellenar hacia abajo"
+          style={{ position: "absolute", right: -3, bottom: -3, width: 8, height: 8, background: "#1A73E8", border: "1.5px solid #fff", borderRadius: 2, cursor: "crosshair", zIndex: 6 }}
+        />
+      );
+    }
+
     // ─── render ──────────────────────────────────────────────────────────────
 
     return (
       <div
         ref={containerRef}
         tabIndex={-1}
+        onKeyDown={gridKeyDown}
         style={{
           background: "#fff",
           border: "1px solid #D5D9D5",
@@ -794,11 +1179,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
               {/* Tarea */}
               <div
-                style={activeCellStyle(task.id, "title", 1, {
+                style={cellSel(idx, 0, activeCellStyle(task.id, "title", 1, {
                   paddingLeft: 10 + level * 16,
                   position: "relative",
-                })}
-                onClick={() => startEdit(task, "title")}
+                }))}
+                {...cellHandlers(idx, 0)}
               >
                 {/* Conector visual de subtarea (└) */}
                 {level > 0 && (
@@ -830,16 +1215,17 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     {dTitle}
                   </span>
                 )}
+                {fillHandle(idx, 0)}
               </div>
 
               {/* Responsable — combobox con búsqueda */}
-              <div style={{
+              <div style={cellSel(idx, 1, {
                 ...cellStyle(2), position: "relative",
                 boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
                 background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
                 cursor: "text",
-              }}
-                onClick={() => startEdit(task, "responsible")}
+              })}
+                {...cellHandlers(idx, 1)}
               >
                 {isEditing && editing!.taskId === task.id ? (
                   <ResponsableCombobox
@@ -860,10 +1246,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     }
                   </span>
                 )}
+                {fillHandle(idx, 1)}
               </div>
 
               {/* Inicio */}
-              <div style={activeCellStyle(task.id, "start", 3)} onClick={() => startEdit(task, "start")}>
+              <div style={cellSel(idx, 2, activeCellStyle(task.id, "start", 3))} {...cellHandlers(idx, 2)}>
                 {isActiveCell(task.id, "start") ? (
                   <input
                     type="date"
@@ -883,10 +1270,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     {fmtDate(dStart ?? null)}
                   </span>
                 )}
+                {fillHandle(idx, 2)}
               </div>
 
               {/* Duración */}
-              <div style={activeCellStyle(task.id, "duration", 4)} onClick={() => startEdit(task, "duration")}>
+              <div style={cellSel(idx, 3, activeCellStyle(task.id, "duration", 4))} {...cellHandlers(idx, 3)}>
                 {isActiveCell(task.id, "duration") ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 4, width: "100%" }}>
                     <input
@@ -909,10 +1297,11 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     {dDur}
                   </span>
                 )}
+                {fillHandle(idx, 3)}
               </div>
 
               {/* Fin */}
-              <div style={activeCellStyle(task.id, "due", 5)} onClick={() => startEdit(task, "due")}>
+              <div style={cellSel(idx, 4, activeCellStyle(task.id, "due", 5))} {...cellHandlers(idx, 4)}>
                 {isActiveCell(task.id, "due") ? (
                   <input
                     type="date"
@@ -935,12 +1324,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     {fmtDate(dDue ?? null)}{isOverdue && !isEditing && " ▲"}
                   </span>
                 )}
+                {fillHandle(idx, 4)}
               </div>
 
               {/* % Avance — per-cell editable */}
               <div
-                style={activeCellStyle(task.id, "progress", 6, { gap: 6 })}
-                onClick={() => !isCompleted && startEdit(task, "progress")}
+                style={cellSel(idx, 5, activeCellStyle(task.id, "progress", 6, { gap: 6 }))}
+                {...cellHandlers(idx, 5)}
                 title={isCompleted ? "Completada — 100%" : undefined}
               >
                 {isActiveCell(task.id, "progress") && !isCompleted ? (
@@ -972,12 +1362,13 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     </span>
                   </>
                 )}
+                {fillHandle(idx, 5)}
               </div>
 
               {/* Estado — per-cell editable */}
               <div
-                style={activeCellStyle(task.id, "taskStatus", 7)}
-                onClick={() => startEdit(task, "taskStatus")}
+                style={cellSel(idx, 6, activeCellStyle(task.id, "taskStatus", 7))}
+                {...cellHandlers(idx, 6)}
               >
                 {isActiveCell(task.id, "taskStatus") ? (
                   <select
@@ -1002,6 +1393,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 ) : (
                   <StatusPill status={dStatus} />
                 )}
+                {fillHandle(idx, 6)}
               </div>
             </div>
           );
