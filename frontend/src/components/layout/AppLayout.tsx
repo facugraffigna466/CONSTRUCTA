@@ -133,18 +133,18 @@ export function AppLayout({
             </button>
           )}
 
-          {/* Breadcrumb */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {/* Breadcrumb — en mobile se reduce a ícono + título para no desbordar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 1, minWidth: 0, overflow: "hidden" }}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ color: "#6B7580", flexShrink: 0 }}>
               <path d="M2 13.5V7L8 2.5l6 4.5v6.5H2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" fill="none"/>
               <path d="M5.5 13.5V10h5v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/>
             </svg>
-            <span style={{ fontSize: 11.5, color: "#B0B8BF" }}>Constructa</span>
-            <span style={{ fontSize: 11.5, color: "#C9D0D5" }}>/</span>
-            <span style={{ fontSize: 11.5, color: "#4D5760", fontWeight: 600 }}>{pageTitle}</span>
-            {pageSubtitle && (
+            {!isCompact && <span style={{ fontSize: 11.5, color: "#B0B8BF", flexShrink: 0 }}>Constructa</span>}
+            {!isCompact && <span style={{ fontSize: 11.5, color: "#C9D0D5", flexShrink: 0 }}>/</span>}
+            <span style={{ fontSize: 11.5, color: "#4D5760", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{pageTitle}</span>
+            {pageSubtitle && !isCompact && (
               <>
-                <span style={{ fontSize: 11.5, color: "#C9D0D5" }}>/</span>
+                <span style={{ fontSize: 11.5, color: "#C9D0D5", flexShrink: 0 }}>/</span>
                 <span style={{ fontSize: 11.5, color: "#6B7580", maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {pageSubtitle}
                 </span>

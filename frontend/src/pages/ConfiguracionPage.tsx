@@ -817,7 +817,7 @@ export function ConfiguracionPage() {
           { id: "cfg-whatsapp", label: "WhatsApp" },
           { id: "cfg-auto", label: "Automatizaciones" },
           { id: "cfg-tiempo", label: "Tiempo real" },
-          { id: "cfg-testing", label: "Testing" },
+          ...(import.meta.env.DEV ? [{ id: "cfg-testing", label: "Testing" }] : []),
           ...(canEdit && planUsage ? [{ id: "cfg-plan", label: "Tu plan" }] : []),
           ...(canEdit ? [{ id: "cfg-proveedores", label: "Proveedores" }] : []),
           { id: "cfg-calendario", label: "Calendario" },
@@ -1208,7 +1208,8 @@ export function ConfiguracionPage() {
             </div>
           </div>
 
-          {/* ═══ HERRAMIENTAS DE TESTING ═══ */}
+          {/* ═══ HERRAMIENTAS DE TESTING — solo visibles en desarrollo ═══ */}
+          {import.meta.env.DEV && (
           <div id="cfg-testing" style={{ scrollMarginTop: 112, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
 
             {/* Test WhatsApp */}
@@ -1260,6 +1261,7 @@ export function ConfiguracionPage() {
               )}
             </Card>
           </div>
+          )}
 
           {/* ═══ TU PLAN ═══ */}
           {canEdit && planUsage && (
