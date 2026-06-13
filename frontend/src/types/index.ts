@@ -153,6 +153,78 @@ export interface Supplier {
   created_at: string;
 }
 
+// ─── Presupuestos (módulo de gestión documental con IA) ──────────────────────
+
+export interface BudgetItem {
+  descripcion: string;
+  cantidad: number | null;
+  unidad: string | null;
+  precio_unitario: number | null;
+  subtotal: number | null;
+}
+
+export interface BudgetInconsistency {
+  tipo: string;
+  detalle: string;
+  severidad: "alta" | "media" | "baja";
+}
+
+export interface BudgetData {
+  proveedor: string | null;
+  fecha: string | null;
+  rubro: string | null;
+  moneda: string;
+  items: BudgetItem[];
+  subtotal: number | null;
+  iva_pct: number | null;
+  iva_monto: number | null;
+  total: number | null;
+  incluye_flete: boolean | null;
+  plazo_entrega: string | null;
+  condiciones_pago: string | null;
+  validez: string | null;
+  inconsistencias: BudgetInconsistency[];
+}
+
+export interface Budget {
+  id: number;
+  obra_id: number | null;
+  obra_name: string | null;
+  supplier_id: number | null;
+  supplier_name: string | null;
+  rubro: string | null;
+  source_type: "pdf" | "image" | "excel" | "texto";
+  source_filename: string | null;
+  total: number | null;
+  currency: string;
+  status: "procesado" | "error";
+  error: string | null;
+  data: BudgetData | null;
+  inconsistencies: BudgetInconsistency[] | null;
+  created_at: string;
+}
+
+export interface BudgetComparisonRow {
+  budget_id: number;
+  supplier_name: string | null;
+  rubro: string | null;
+  total: number | null;
+  currency: string;
+  plazo_entrega: string | null;
+  condiciones_pago: string | null;
+  validez: string | null;
+  incluye_flete: boolean | null;
+  pct_vs_promedio: number | null;
+  es_mas_barato: boolean;
+  flags: string[];
+}
+
+export interface BudgetComparison {
+  rows: BudgetComparisonRow[];
+  promedio: number | null;
+  recomendacion: string | null;
+}
+
 export type MaterialStatus = "pendiente" | "pedido" | "recibido";
 
 export interface TaskMaterial {

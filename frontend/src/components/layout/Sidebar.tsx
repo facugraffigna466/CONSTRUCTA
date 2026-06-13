@@ -203,6 +203,12 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           onClick={() => onNavigate("panel")}
           icon={<Squares2X2Icon style={ICON_SIZE} />}
         />
+        <NavItem
+          label="Presupuestos"
+          active={activePage === "presupuestos"}
+          onClick={() => onNavigate("presupuestos")}
+          icon={<DocumentTextIcon style={ICON_SIZE} />}
+        />
 
         {selectedObra && onTabChange && (
           <>
@@ -311,48 +317,6 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
               onClick={() => onNavigate("configuracion")}
               icon={<Cog6ToothIcon style={ICON_SIZE} />}
             />
-          </nav>
-        </>
-      )}
-
-      {/* ── PRÓXIMAMENTE section — solo con obra seleccionada ── */}
-      {selectedObra && (
-        <>
-          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: "0.12em", color: "#6B767E", textTransform: "uppercase", padding: "14px 10px 6px" }}>
-            Próximamente
-          </div>
-          <nav style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {(["presupuestos"] as const).map((page) => {
-              const meta = {
-                presupuestos: { label: "Presupuestos",     icon: <DocumentTextIcon style={ICON_SIZE} /> },
-              }[page];
-              const isActive = activePage === page;
-              return (
-                <button
-                  key={page}
-                  onClick={() => onNavigate(page)}
-                  style={{
-                    width: "100%", display: "flex", alignItems: "center", gap: 11,
-                    padding: "7px 10px", borderRadius: 8, fontSize: 13, fontWeight: 500,
-                    textAlign: "left", cursor: "pointer", border: "none",
-                    transition: "background 0.12s",
-                    background: isActive ? "linear-gradient(180deg, rgba(255,107,53,0.18), rgba(255,107,53,0.08))" : "transparent",
-                    boxShadow: isActive ? "inset 0 0 0 1px rgba(255,107,53,0.25)" : "none",
-                    color: isActive ? "#fff" : "#CFD4D7",
-                  }}
-                  onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; }}
-                  onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                >
-                  <span style={{ width: 16, display: "inline-flex", justifyContent: "center", color: isActive ? "#FF6B35" : "inherit", opacity: isActive ? 1 : 0.65, flexShrink: 0 }}>
-                    {meta.icon}
-                  </span>
-                  <span style={{ flex: 1 }}>{meta.label}</span>
-                  <span style={{ fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 99, background: "rgba(255,107,53,0.18)", color: "#FF6B35", letterSpacing: "0.04em", flexShrink: 0 }}>
-                    PRONTO
-                  </span>
-                </button>
-              );
-            })}
           </nav>
         </>
       )}
