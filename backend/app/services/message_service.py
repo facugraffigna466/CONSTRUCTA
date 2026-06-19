@@ -38,6 +38,8 @@ class MessageService:
         self.msg_repo = MessageRepository(session)
         self.resp_repo = ResponsibleRepository(session)
         self.settings_repo = SettingsRepository(session)
+        from app.repositories.user import UserRepository
+        self.user_repo = UserRepository(session)
 
     async def process_inbound(
         self, payload: TwilioInboundPayload, raw_params: dict[str, Any]
@@ -59,8 +61,12 @@ class MessageService:
             logger.info("Duplicate webhook for MessageSid=%s — skipping", payload.MessageSid)
             return existing
 
-        # ── 2. Identify responsible ────────────────────────────────────────────
+        # ── 2. Identificar al emisor: responsable (asignado a tareas) o staff
+        #       (usuario arquitecto/jefe/admin con su número de WhatsApp cargado) ──
         responsible = await self.resp_repo.get_by_whatsapp(payload.from_number)
+        staff = None if responsible else await self.user_repo.get_by_whatsapp(payload.from_number)
+        sender = responsible or staff
+        is_staff = responsible is None and staff is not None
 
         # ── 3. Save inbound message ────────────────────────────────────────────
         inbound = await self._save_message(
@@ -80,58 +86,53 @@ class MessageService:
         )
 
         media_url: str | None = None
+        task_id = None
 
-        # ── 4. Settings checks ─────────────────────────────────────────────────
-        if responsible is None:
+        # ── 4. Ruteo ───────────────────────────────────────────────────────────
+        if sender is None:
             reply = (
                 "Este número no está registrado en el sistema CONSTRUCTA. "
                 "Comunicáte con el encargado de tu obra."
             )
-            task_id = None
 
         else:
-            cfg = await self.settings_repo.get_for_responsible(responsible.id)
+            # La ventana horaria / chatbot_enabled aplican a los recordatorios a
+            # responsables (evitar spam). El staff inicia la conversación, no se
+            # filtra por horario.
+            if responsible is not None:
+                cfg = await self.settings_repo.get_for_responsible(responsible.id)
+                if not cfg.chatbot_enabled:
+                    logger.info("Chatbot disabled — ignoring message from %s", payload.from_number)
+                    await self.msg_repo.update_fields(inbound.id, processing_status=MessageProcessingStatus.PROCESSED)
+                    return inbound
+                if not _within_send_window(cfg.send_hour_from, cfg.send_hour_to):
+                    logger.info("Message from %s outside send window — ignoring", payload.from_number)
+                    await self.msg_repo.update_fields(inbound.id, processing_status=MessageProcessingStatus.PROCESSED)
+                    return inbound
 
-            if not cfg.chatbot_enabled:
-                logger.info(
-                    "Chatbot disabled — ignoring message from %s", payload.from_number
-                )
-                await self.msg_repo.update_fields(
-                    inbound.id, processing_status=MessageProcessingStatus.PROCESSED
-                )
-                return inbound  # no reply sent
+            body = payload.Body or ""
+            body_low = body.lower()
 
-            if not _within_send_window(cfg.send_hour_from, cfg.send_hour_to):
-                logger.info(
-                    "Message from %s outside send window (%s–%s AR) — ignoring",
-                    payload.from_number,
-                    cfg.send_hour_from,
-                    cfg.send_hour_to,
-                )
-                await self.msg_repo.update_fields(
-                    inbound.id, processing_status=MessageProcessingStatus.PROCESSED
-                )
-                return inbound  # no reply sent outside hours
-
-            # ── 5. Handle conversation ─────────────────────────────────────────
+            # ── 5. Handle ──────────────────────────────────────────────────────
             if payload.detected_type == MessageType.AUDIO and payload.MediaUrl0:
-                # Audio de obra → bitácora con IA (no pasa por el chatbot)
-                reply = await self._handle_bitacora_audio(payload, responsible)
-                task_id = None
-            elif payload.detected_type != MessageType.TEXT:
+                # Nota de voz de obra → bitácora con IA
+                reply = await self._handle_bitacora_audio(payload, sender, is_staff)
+            elif payload.detected_type == MessageType.TEXT and "plano" in body_low:
+                reply, media_url = await self._handle_plano_request(sender, is_staff, body)
+            elif payload.detected_type == MessageType.TEXT and await self._pending_bitacora_obra(sender, is_staff):
+                # respuesta numérica eligiendo la obra de una nota de voz pendiente
+                reply = await self._handle_obra_selection(sender, is_staff, body)
+            elif responsible is not None and payload.detected_type == MessageType.TEXT:
+                # responsable reportando estado → máquina de conversación existente
+                reply, task_id = await ConversationService(self.db).handle_inbound(responsible, body)
+            elif responsible is not None:
                 reply = (
                     f"Hola {responsible.full_name}. Recibimos tu mensaje. "
-                    "Por favor respondé con el número de la opción deseada."
+                    "Respondé con el número de la opción, o mandame una nota de voz para la bitácora."
                 )
-                task_id = None
-            elif "plano" in (payload.Body or "").lower():
-                # "mandame el plano de electricidad" → última versión vigente
-                reply, media_url = await self._handle_plano_request(responsible, payload.Body)
-                task_id = None
             else:
-                reply, task_id = await ConversationService(self.db).handle_inbound(
-                    responsible, payload.Body
-                )
+                # staff escribió texto (o algo que no es audio/plano) → menú
+                reply = self._staff_menu(staff)
 
         # ── 6. Update inbound message ──────────────────────────────────────────
         await self.msg_repo.update_fields(
@@ -160,14 +161,41 @@ class MessageService:
 
         return inbound
 
-    async def _handle_plano_request(self, responsible, body: str) -> tuple[str, str | None]:
+    async def _sender_obra_ids(self, sender, is_staff: bool) -> list[int]:
+        """Obras del emisor: para el staff, las que administra (manager); para un
+        responsable, las de sus tareas. Si es admin sin obras propias, las del tenant."""
+        if is_staff:
+            from sqlalchemy import select
+            from app.models.obra import Obra
+            ids = (await self.db.execute(
+                select(Obra.id).where(Obra.manager_id == sender.id)
+            )).scalars().all()
+            if not ids and getattr(sender, "role", None) == "admin" and sender.tenant_id is not None:
+                ids = (await self.db.execute(
+                    select(Obra.id).where(Obra.tenant_id == sender.tenant_id)
+                )).scalars().all()
+            return sorted(ids)
+        from app.services.plano_service import PlanoService
+        return sorted(await PlanoService(self.db).obra_ids_for_responsible(sender.id))
+
+    def _staff_menu(self, staff) -> str:
+        nombre = (staff.full_name or "").split(" ")[0] if staff.full_name else "👷"
+        return (
+            f"Hola {nombre} 👷. Soy el asistente de obra de CONSTRUCTA. Puedo:\n\n"
+            "🎤 *Bitácora de obra*: mandame una nota de voz desde la obra y la registro "
+            "(te resumo lo importante y te sugiero acciones).\n"
+            "📐 *Planos*: escribime, por ejemplo, \"plano de electricidad\" y te mando la última versión.\n\n"
+            "Si tenés varias obras, después de la nota de voz te pregunto a cuál va."
+        )
+
+    async def _handle_plano_request(self, sender, is_staff: bool, body: str) -> tuple[str, str | None]:
         """Responde un pedido de plano por WhatsApp con la última versión vigente.
         Devuelve (texto, media_url|None)."""
         from app.core.config import settings
         from app.services.plano_service import PlanoService, match_discipline_in_text
 
         svc = PlanoService(self.db)
-        obra_ids = await svc.obra_ids_for_responsible(responsible.id)
+        obra_ids = await self._sender_obra_ids(sender, is_staff)
         if not obra_ids:
             return ("No tengo obras asociadas a tu número todavía. Avisale al jefe de obra.", None)
 
@@ -196,22 +224,19 @@ class MessageService:
             caption += "\nNo puedo adjuntar el archivo todavía (falta configurar la URL pública del sistema)."
         return (caption, url)
 
-    async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, responsible) -> str:
-        """Audio de WhatsApp → entrada de bitácora procesada con IA.
-        Devuelve el texto de respuesta para el responsable."""
+    async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, sender, is_staff: bool) -> str:
+        """Nota de voz de WhatsApp → entrada de bitácora con IA. Sirve para
+        responsables y para staff (arquitecto/jefe). Si el emisor tiene varias
+        obras, la nota queda pendiente y el bot pregunta a cuál va."""
         import uuid as _uuid
         from pathlib import Path as _Path
 
         import requests as _requests
-        from sqlalchemy import func, select
 
         from app.core.config import settings as _settings
-        from app.models.obra_team_member import ObraTeamMember
-        from app.models.task import Task, TaskStatus
         from app.services.bitacora_service import BitacoraService
 
         # 1. Descargar el audio de Twilio (basic auth SID:token)
-        audio_bytes: bytes | None = None
         try:
             resp = _requests.get(
                 payload.MediaUrl0,
@@ -222,10 +247,7 @@ class MessageService:
             audio_bytes = resp.content
         except Exception:
             logger.exception("No se pudo descargar el audio de Twilio")
-            return (
-                f"Hola {responsible.full_name}. Recibimos tu audio pero no pudimos descargarlo. "
-                "Probá mandarlo de nuevo."
-            )
+            return "Recibimos tu nota de voz pero no pudimos descargarla. Probá mandarla de nuevo."
 
         ctype = (payload.MediaContentType0 or "audio/ogg").split(";")[0]
         ext = {"audio/ogg": "ogg", "audio/mpeg": "mp3", "audio/mp4": "m4a",
@@ -235,53 +257,86 @@ class MessageService:
         filename = f"bitacora_{_uuid.uuid4().hex}.{ext}"
         (uploads_dir / filename).write_bytes(audio_bytes)
 
-        # 2. Inferir la obra: la de más tareas activas del responsable;
-        #    si no tiene, su única obra del equipo; si es ambiguo, queda sin asignar.
-        obra_id: int | None = None
-        top = (await self.db.execute(
-            select(Task.obra_id, func.count(Task.id).label("n"))
-            .where(
-                Task.responsible_id == responsible.id,
-                Task.status.notin_([TaskStatus.COMPLETADA, TaskStatus.CANCELADA]),
-            )
-            .group_by(Task.obra_id)
-            .order_by(func.count(Task.id).desc())
-        )).first()
-        if top:
-            obra_id = top[0]
-        else:
-            obras = (await self.db.execute(
-                select(ObraTeamMember.obra_id).where(ObraTeamMember.responsible_id == responsible.id)
-            )).scalars().all()
-            if len(obras) == 1:
-                obra_id = obras[0]
-
-        # 3. Crear y procesar la entrada
         service = BitacoraService(self.db)
-        entry = await service.create_entry(
-            obra_id=obra_id,
-            source="whatsapp",
-            audio_path=f"/uploads/{filename}",
-            responsible_id=responsible.id,
-        )
-        entry = await service.process_entry(entry, audio_bytes=audio_bytes, filename=f"audio.{ext}")
+        responsible_id = None if is_staff else sender.id
+        created_by = sender.id if is_staff else None
 
-        # 4. Respuesta según resultado
+        # 2. ¿Qué obras tiene el emisor?
+        obra_ids = await self._sender_obra_ids(sender, is_staff)
+        if not obra_ids:
+            return ("Recibí tu nota de voz, pero no tengo obras asociadas a tu número todavía. "
+                    "Avisale al jefe de obra para que te vincule.")
+
+        # 3a. Una sola obra → procesar directo
+        if len(obra_ids) == 1:
+            entry = await service.create_entry(
+                obra_id=obra_ids[0], source="whatsapp", audio_path=f"/uploads/{filename}",
+                responsible_id=responsible_id, created_by=created_by,
+            )
+            entry = await service.process_entry(entry, audio_bytes=audio_bytes, filename=f"audio.{ext}")
+            return self._bitacora_reply(entry)
+
+        # 3b. Varias obras → transcribir, dejar pendiente y preguntar
+        transcript = await service.transcribe_audio(audio_bytes, f"audio.{ext}")
+        entry = await service.create_entry(
+            obra_id=None, source="whatsapp", audio_path=f"/uploads/{filename}",
+            responsible_id=responsible_id, created_by=created_by, transcript=transcript,
+        )
+        entry.status = "pendiente_obra"
+        await self.db.flush()
+        return "🎤 Recibí tu nota de voz. ¿Para qué obra es?\n" + await self._obra_options(obra_ids) + "\n\nRespondé con el número."
+
+    def _bitacora_reply(self, entry) -> str:
         if entry.status == "procesado":
             n = len([s for s in (entry.suggestions or []) if s.get("type") != "note"])
-            base = f"📋 Audio registrado en la bitácora{' de la obra' if obra_id else ''}. Resumen: {entry.summary}"
+            base = f"📋 Nota registrada en la bitácora{' de la obra' if entry.obra_id else ''}. Resumen: {entry.summary}"
             if n:
-                base += f"\n\nDetectamos {n} acción{'es' if n != 1 else ''} sugerida{'s' if n != 1 else ''} (mover fechas, tareas o estados). El jefe de obra puede revisarlas y aplicarlas desde la app."
+                base += (f"\n\nDetecté {n} {'acciones sugeridas' if n != 1 else 'acción sugerida'} "
+                         "(mover fechas, crear tareas o cambiar estados). Se revisan y aplican desde la app.")
             return base[:1500]
         if entry.status == "pendiente_transcripcion":
-            return (
-                "🎙️ Recibimos tu audio y quedó guardado en la bitácora. "
-                "La transcripción automática no está habilitada todavía, pero el audio queda disponible en la app."
-            )
-        return (
-            "🎙️ Recibimos tu audio y quedó guardado en la bitácora. "
-            "Hubo un problema al procesarlo con IA; se puede reintentar desde la app."
-        )
+            return ("🎙️ Recibí tu nota y quedó guardada en la bitácora. La transcripción automática no está "
+                    "habilitada todavía, pero el audio queda en la app.")
+        return ("🎙️ Recibí tu nota y quedó guardada en la bitácora. Hubo un problema al procesarla con IA; "
+                "se puede reintentar desde la app.")
+
+    async def _obra_options(self, obra_ids: list[int]) -> str:
+        from sqlalchemy import select
+        from app.models.obra import Obra
+        rows = (await self.db.execute(select(Obra.id, Obra.name).where(Obra.id.in_(obra_ids)))).all()
+        names = {r[0]: r[1] for r in rows}
+        return "\n".join(f"{i + 1}) {names.get(oid, f'Obra #{oid}')}" for i, oid in enumerate(obra_ids))
+
+    async def _pending_bitacora_obra(self, sender, is_staff: bool):
+        """Nota de voz reciente esperando que elijan la obra (None si no hay)."""
+        from datetime import timedelta
+        from sqlalchemy import select
+        from app.models.bitacora import BitacoraEntry
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
+        cond = (BitacoraEntry.created_by == sender.id) if is_staff else (BitacoraEntry.responsible_id == sender.id)
+        return (await self.db.execute(
+            select(BitacoraEntry)
+            .where(BitacoraEntry.status == "pendiente_obra", cond, BitacoraEntry.created_at >= cutoff)
+            .order_by(BitacoraEntry.created_at.desc()).limit(1)
+        )).scalars().first()
+
+    async def _handle_obra_selection(self, sender, is_staff: bool, body: str) -> str:
+        import re
+        entry = await self._pending_bitacora_obra(sender, is_staff)
+        if not entry:
+            return self._staff_menu(sender) if is_staff else "No tengo ninguna nota de voz pendiente."
+        obra_ids = await self._sender_obra_ids(sender, is_staff)
+        m = re.search(r"\d+", body)
+        if not m or not (1 <= int(m.group()) <= len(obra_ids)):
+            return "No entendí. ¿Para qué obra es la nota?\n" + await self._obra_options(obra_ids)
+        entry.obra_id = obra_ids[int(m.group()) - 1]
+        entry.status = "pendiente_analisis" if entry.transcript else "pendiente_transcripcion"
+        from app.services.bitacora_service import BitacoraService
+        if entry.transcript:
+            entry = await BitacoraService(self.db).process_entry(entry)
+        else:
+            await self.db.flush()
+        return self._bitacora_reply(entry)
 
     async def _save_message(self, data: MessageCreateInternal) -> Message:
         msg = Message(**data.model_dump())
