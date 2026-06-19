@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useUser } from "../context/UserContext";
 import { changePassword, updateProfile, uploadAvatar } from "../api/users";
+import { normalizePhone } from "../utils/phone";
 
 interface Props {
   onClose: () => void;
@@ -38,6 +39,7 @@ export function UserProfileModal({ onClose }: Props) {
 
   // ── Perfil tab ──────────────────────────────────────────────────────────────
   const [name, setName]           = useState(user.name);
+  const [whatsapp, setWhatsapp]   = useState(user.whatsapp_number ?? "");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(user.avatar_url ?? null);
   const [avatarFile, setAvatarFile]       = useState<File | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -77,7 +79,8 @@ export function UserProfileModal({ onClose }: Props) {
       if (avatarFile) avatar_url = await uploadAvatar(avatarFile);
       else if (avatarPreview === null) avatar_url = null;
 
-      await updateProfile({ full_name: name.trim(), avatar_url });
+      const wa = whatsapp.trim() ? normalizePhone(whatsapp) : null;
+      await updateProfile({ full_name: name.trim(), avatar_url, whatsapp_number: wa });
       await refetch();
       setProfileOk(true);
       setTimeout(() => setProfileOk(false), 3000);
@@ -107,7 +110,7 @@ export function UserProfileModal({ onClose }: Props) {
     }
   }
 
-  const profileChanged = name.trim() !== user.name || avatarFile !== null || (avatarPreview === null && !!user.avatar_url);
+  const profileChanged = name.trim() !== user.name || whatsapp.trim() !== (user.whatsapp_number ?? "") || avatarFile !== null || (avatarPreview === null && !!user.avatar_url);
 
   return (
     <div
@@ -253,6 +256,25 @@ export function UserProfileModal({ onClose }: Props) {
                   onFocus={e => focusStyle(e.currentTarget)}
                   onBlur={e => blurStyle(e.currentTarget)}
                 />
+              </div>
+
+              {/* WhatsApp — habilita el chatbot para el staff */}
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: C.text2, marginBottom: 6, letterSpacing: "0.04em" }}>
+                  WhatsApp
+                </label>
+                <input
+                  type="text"
+                  value={whatsapp}
+                  onChange={e => setWhatsapp(e.target.value)}
+                  placeholder="Ej: 2494 555888"
+                  style={BASE_INPUT}
+                  onFocus={e => focusStyle(e.currentTarget)}
+                  onBlur={e => blurStyle(e.currentTarget)}
+                />
+                <p style={{ margin: "5px 0 0", fontSize: 11.5, color: C.text3 }}>
+                  Cargá tu número para usar el chatbot: mandás una nota de voz y queda en la bitácora de la obra, o pedís un plano. Se guarda como +54…
+                </p>
               </div>
 
               {/* Email (read-only) */}

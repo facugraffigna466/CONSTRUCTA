@@ -7,6 +7,7 @@ export interface ApiUser {
   role: "admin" | "collaborator";
   is_active: boolean;
   avatar_url: string | null;
+  whatsapp_number?: string | null;
   tenant_name?: string | null; // solo poblado en /users/me
   created_at: string;
 }
@@ -40,7 +41,7 @@ export async function updateMemberRole(userId: number, role: "admin" | "collabor
   return data;
 }
 
-export async function updateProfile(data: { full_name?: string; avatar_url?: string | null }): Promise<ApiUser> {
+export async function updateProfile(data: { full_name?: string; avatar_url?: string | null; whatsapp_number?: string | null }): Promise<ApiUser> {
   const { data: res } = await apiClient.patch<ApiUser>("/users/me", data);
   return res;
 }

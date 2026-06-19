@@ -20,6 +20,12 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_whatsapp(self, number: str) -> User | None:
+        result = await self.session.execute(
+            select(User).where(User.whatsapp_number == number, User.is_active.is_(True))
+        )
+        return result.scalars().first()
+
     async def list_all(self, tenant_id: int | None = None) -> list[User]:
         stmt = select(User).order_by(User.created_at)
         if tenant_id is not None:

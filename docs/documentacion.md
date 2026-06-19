@@ -1377,3 +1377,25 @@ Nuevo módulo para cargar planos de obra de cualquier tipo, con versionado, y qu
 
 ### Validation
 `tsc` ✓ · `npm run build` ✓ · migración 0028 aplicada ✓ · verificado e2e: subida con versionado (v2 vigente, v1 historial) ✓, lógica del chatbot (detección de disciplina, devuelve la última versión + media_url; "plano de gas" inexistente → lista disponibles) ✓, tab en navegador ✓. Datos de prueba eliminados.
+
+---
+
+## 2026-06-13 — Bitácora por WhatsApp para el staff (arquitecto/jefe/admin)
+
+El audio de bitácora ya no es solo para responsables: el arquitecto/jefe/administrador puede mandarlo desde su WhatsApp. Rama `feature/bitacora-whatsapp-staff`.
+
+### Base de identidad
+- `users.whatsapp_number` (migration 0030, E.164). El staff lo carga en su perfil (UserProfileModal, con `normalizePhone`). El bot ahora resuelve al emisor en Responsables **y** en Usuarios.
+
+### Chatbot
+- Si el emisor es staff (usuario con WhatsApp cargado) y escribe texto → **menú**: "🎤 Bitácora de obra (mandá una nota de voz)" + "📐 Planos".
+- Nota de voz de cualquier emisor reconocido (responsable o staff) → bitácora con IA. Obra: si tiene una sola, directo; si tiene varias, el bot **pregunta a cuál va** (lista numerada) y al responder el número se procesa.
+- `_sender_obra_ids`: staff = obras que administra (manager), o todas las del tenant si es admin sin obras propias; responsable = obras de sus tareas. Orden estable para que el número elegido coincida.
+- Planos también funcionan para staff (misma resolución de obras).
+- Twilio: la ventana horaria / chatbot_enabled solo aplican a responsables (anti-spam de recordatorios); el staff inicia, no se filtra.
+
+### Validation
+`tsc` ✓ · `npm run build` ✓ · migración 0030 ✓ · verificado: identidad staff por número, obras del manager, menú, transcripción→pendiente_obra→elegir obra→análisis con IA (resumen + 2 acciones), campo de WhatsApp en el perfil persiste (PATCH/GET /users/me). Datos de prueba limpiados.
+
+### Pendiente (charlado, no construido aún)
+Feature B: avisar al jefe/manager cuando un responsable contesta un recordatorio. Queda para una próxima.

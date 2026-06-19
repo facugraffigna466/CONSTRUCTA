@@ -119,6 +119,11 @@ class BitacoraService:
         await self.session.refresh(entry)
         return entry
 
+    async def transcribe_audio(self, audio_bytes: bytes, filename: str) -> str | None:
+        """Wrapper público: transcribe sin analizar (para el flujo de WhatsApp con
+        obra pendiente — primero se transcribe, después se elige obra y se analiza)."""
+        return self._transcribe(audio_bytes, filename)
+
     # ── Transcripción (Whisper vía OpenAI API — opcional) ────────────────────
 
     def _transcribe(self, audio_bytes: bytes, filename: str) -> str | None:

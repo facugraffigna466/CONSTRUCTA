@@ -16,6 +16,8 @@ class User(Base):
     invitation_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     invitation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # E.164 — habilita al staff (arquitecto/jefe/admin) a usar el chatbot de WhatsApp
+    whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -17,6 +17,7 @@ class UserRead(BaseModel):
     role: str
     is_active: bool
     avatar_url: str | None = None
+    whatsapp_number: str | None = None
     tenant_name: str | None = None  # solo poblado en /users/me
     created_at: datetime
 
@@ -26,6 +27,7 @@ class UserRead(BaseModel):
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = Field(None, min_length=2, max_length=255)
     avatar_url: str | None = None
+    whatsapp_number: str | None = Field(None, max_length=20)
 
 
 class ChangePasswordRequest(BaseModel):

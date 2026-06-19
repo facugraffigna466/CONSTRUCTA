@@ -138,6 +138,7 @@ export interface CurrentUser {
   color: string;
   role: "admin" | "collaborator";
   avatar_url?: string | null;
+  whatsapp_number?: string | null;
   tenant_name?: string | null;
 }
 
