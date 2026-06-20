@@ -84,6 +84,11 @@ Se definen los términos específicos del dominio de la construcción y de la op
 - **WBS (Work Breakdown Structure):** estructura de descomposición del trabajo en tareas y subtareas.
 - **Bitácora de obra:** registro cronológico de los hechos relevantes ocurridos en la obra.
 - **Cómputo y presupuesto:** estimación de cantidades de materiales y costos asociados a una obra.
+- **Hito:** punto de control sin duración en el cronograma que marca un evento significativo (por ejemplo, "fin de estructura").
+- **Desfase (lag):** tiempo de espera o adelanto, en días, aplicado a una dependencia entre dos tareas.
+- **Holgura (float):** margen de tiempo que una tarea puede demorarse sin afectar la fecha de fin de la obra; las tareas de la ruta crítica tienen holgura nula.
+- **Orden de compra:** documento que formaliza el pedido de materiales o servicios a un proveedor.
+- **Empresa (inquilino):** cada empresa cliente del sistema, cuyos datos (obras, equipo, presupuestos) quedan aislados del resto.
 
 > Conforme a la guía, no se incluyen términos de uso general en ingeniería de software (por ejemplo, *backend*, *frontend* o base de datos), que se asumen conocidos por el lector técnico.
 
@@ -134,10 +139,10 @@ Desarrollar una plataforma de gestión de obras de construcción que conecte la 
 | 2. Gantt + CPM + baseline + cascada | Componente de cronograma con flechas de dependencia, toggle de ruta crítica y línea base; endpoint de ruta crítica; reprogramación en cascada con vista previa. |
 | 3. Planilla de baja fricción | Vista de planilla con selección de rangos, relleno por arrastre con encadenado de fechas, copiar/pegar y deshacer; importación de Excel/CSV/MS Project. |
 | 4. Asistente de WhatsApp | Webhook de mensajería; identificación de responsables y de staff por número; máquina de conversación para reporte de estado. |
-| 5. Bitácora de obra con IA | Pipeline audio → transcripción → análisis con modelo de lenguaje → resumen y sugerencias aplicables. |
+| 5. Bitácora de obra con IA | Cadena audio → transcripción (`gpt-4o-mini-transcribe`) → análisis con modelo de lenguaje (Claude Haiku 4.5, salida estructurada) → resumen, puntos clave y sugerencias aplicables. |
 | 6. Presupuestos con IA | Carga de PDF/imagen/Excel/texto, extracción estructurada, comparación con recomendación e inconsistencias. |
 | 7. Planos versionados | Carga con versionado por obra/disciplina; consulta y envío por WhatsApp de la última versión vigente. |
-| 8. Alertas automáticas | Servicio de evaluación de riesgos por obra; cinco tipos de alerta; emisión en tiempo real por Socket.IO. |
+| 8. Alertas automáticas | Servicio de evaluación de riesgos por obra (vencidas, bloqueadas, sin responsable, alto porcentaje de vencimiento); seis tipos de alerta; emisión en tiempo real por Socket.IO y traza en el historial. |
 | 9. Multi-inquilino y planes | Aislamiento por *tenant* en obras, responsables, alertas y usuarios; planes con límites y respuesta HTTP 402 al superarlos. |
 
 ---
@@ -146,7 +151,9 @@ Desarrollar una plataforma de gestión de obras de construcción que conecte la 
 
 ### 1. Contexto general del problema
 
-La gestión de proyectos de construcción se apoya en disciplinas consolidadas de la dirección de proyectos, en particular la planificación temporal mediante redes de actividades. El **método de la ruta crítica (CPM)** permite identificar, dentro de un conjunto de tareas con dependencias, la secuencia cuya demora afecta directamente la fecha de finalización del proyecto (Kelley & Walker, 1959). La representación habitual del cronograma es el **diagrama de Gantt**, que dispone las tareas sobre una línea de tiempo y permite visualizar duraciones, solapamientos y dependencias.
+La gestión de proyectos de construcción se apoya en disciplinas consolidadas de la dirección de proyectos, en particular la planificación temporal mediante redes de actividades. El **método de la ruta crítica (CPM)** permite identificar, dentro de un conjunto de tareas con dependencias, la secuencia cuya demora afecta directamente la fecha de finalización del proyecto (Kelley & Walker, 1959). El método calcula, para cada tarea, sus fechas más tempranas y más tardías de inicio y fin (mediante un recorrido hacia adelante y otro hacia atrás sobre la red), y de allí su **holgura**; las tareas con holgura nula conforman la ruta crítica. La representación habitual del cronograma es el **diagrama de Gantt**, atribuido a Henry L. Gantt a comienzos del siglo XX, que dispone las tareas sobre una línea de tiempo y permite visualizar duraciones, solapamientos y dependencias.
+
+La dirección de proyectos sistematiza, además, otros conceptos que la solución adopta: la **estructura de descomposición del trabajo (WBS)**, que organiza el alcance en tareas y subtareas jerárquicas; los **cuatro tipos de relación de precedencia** entre actividades —Fin–Inicio (FS), Inicio–Inicio (SS), Fin–Fin (FF) e Inicio–Fin (SF)—, eventualmente con un desfase (*lag*); y la **línea base**, fotografía del cronograma aprobado que sirve de referencia para medir desvíos durante la ejecución (Project Management Institute, 2021).
 
 En la práctica del sector, sin embargo, la planificación formal coexiste con procedimientos informales de seguimiento. El relevamiento del avance suele realizarse por comunicación verbal o mensajería, y su traslado al plan depende de la carga manual por parte de quien planifica. Este procedimiento actual —que la solución propuesta busca reemplazar— es la principal fuente de pérdida de información y de desactualización del cronograma.
 
@@ -175,7 +182,9 @@ Para la construcción de la solución se evaluaron y seleccionaron las siguiente
 - **Tiempo real:** se incorporó Socket.IO para la comunicación bidireccional (presencia de usuarios, alertas y edición colaborativa), frente a un esquema de sondeo periódico que habría sido menos eficiente.
 - **Frontend — aplicación de página única:** se utilizó React con TypeScript y Vite, por su madurez, su tipado estático y la velocidad de su entorno de desarrollo.
 - **Mensajería:** se integró la API de WhatsApp a través de Twilio, por ser un proveedor consolidado con soporte de mensajes y de envío de archivos multimedia.
-- **Inteligencia artificial:** se evaluó el uso de modelos de lenguaje de gran escala para dos tareas distintas —estructuración de texto y comprensión de documentos—, seleccionando los modelos de la familia Claude (Anthropic) por su soporte de *structured outputs* (salida con esquema JSON garantizado) y de lectura nativa de documentos PDF e imágenes. Para la transcripción de voz a texto se evaluó el uso de modelos de reconocimiento automático del habla orientados al español.
+- **Inteligencia artificial — modelos de lenguaje:** se evaluó el uso de modelos de lenguaje de gran escala (LLM) para dos tareas distintas —estructuración de texto y comprensión de documentos—, seleccionando el modelo Claude Haiku 4.5 (Anthropic) por su soporte de *structured outputs* (salida forzada a un esquema JSON, lo que garantiza que la respuesta del modelo sea procesable por el sistema sin análisis frágil de texto libre) y de lectura nativa de documentos PDF e imágenes. La técnica de salida estructurada es central para la confiabilidad de la solución: convierte lenguaje natural —mensajes y notas de voz— en datos validados contra un esquema, en lugar de texto a interpretar manualmente.
+- **Inteligencia artificial — reconocimiento del habla:** para la transcripción de voz a texto se incorporó un modelo de reconocimiento automático del habla (ASR) orientado al español rioplatense (`gpt-4o-mini-transcribe`), de bajo costo por minuto, que constituye el primer eslabón del procesamiento de las notas de voz de obra.
+- **Comunicación en tiempo real y orientada a eventos:** la solución combina dos mecanismos asíncronos. Por un lado, un *webhook* HTTP recibe los mensajes entrantes de WhatsApp (arquitectura orientada a eventos: el proveedor de mensajería notifica al sistema). Por el otro, *websockets* (Socket.IO) empujan al navegador, sin sondeo, los cambios de estado (presencia, alertas y edición colaborativa).
 - **Correo transaccional:** se integró un proveedor de correo (Brevo) para las invitaciones de equipo.
 
 > Toda otra información de sustento se incorpora en la sección siguiente (Propuesta de solución).
@@ -210,6 +219,16 @@ La propuesta de solución consiste en una plataforma web —CONSTRUCTA— compue
 - Pasarela de pago para el cobro de los planes (el sistema modela los límites del plan, pero no procesa pagos).
 - Notificación al jefe/administrador ante la respuesta de un responsable a un recordatorio (funcionalidad analizada, no implementada).
 
+#### Requerimientos no funcionales
+
+- **Seguridad:** autenticación por tokens JWT, contraseñas almacenadas con *hashing*, control de acceso por rol (administrador / colaborador) y aislamiento estricto de los datos entre empresas (multi-inquilino). La eliminación es lógica (*soft delete*), preservando la información.
+- **Usabilidad y baja fricción de adopción:** el personal de campo opera por WhatsApp sin instalar ninguna aplicación; la carga de datos en el escritorio reproduce los gestos de una hoja de cálculo. Es el requerimiento no funcional rector del proyecto.
+- **Rendimiento:** el backend emplea entrada/salida asíncrona de extremo a extremo (FastAPI + SQLAlchemy *async*); los datos de una obra se cargan una sola vez al abrirla, y las actualizaciones de estado se propagan por *websockets* en lugar de sondeo.
+- **Trazabilidad:** todo evento relevante de obra queda registrado en un historial inmutable (*append-only*), lo que garantiza un registro auditable y no repudiable.
+- **Mantenibilidad:** separación en capas (router → service → repository), esquema de base de datos versionado con migraciones (Alembic) y tipado estático en backend (Python con anotaciones de tipo) y frontend (TypeScript).
+- **Disponibilidad y escalabilidad:** backend sin estado de sesión en memoria (el estado conversacional se persiste en la base), apto para despliegue en la nube y escalado horizontal.
+- **Costo de operación acotado:** el costo variable de IA por uso es marginal (del orden de un centavo de dólar por nota de voz; véase Impacto económico).
+
 > *(Ejemplo de requerimiento, según la guía)* «El sistema debe permitir que un responsable registre una nota de voz de obra desde WhatsApp y que esta quede asociada a la obra correspondiente con un resumen generado automáticamente.»
 >
 > **[FIGURA 1: Diagrama de casos de uso de CONSTRUCTA — actores (Administrador, Responsable, Asistente de WhatsApp) y casos de uso principales.]**
@@ -236,11 +255,25 @@ CONSTRUCTA adopta una **arquitectura cliente–servidor de tres capas**, despleg
 
 El aislamiento entre empresas se resuelve a nivel de aplicación con un identificador de inquilino (*tenant*) que filtra las consultas de obras, responsables, alertas y usuarios.
 
+El sistema opera bajo dos flujos característicos:
+
+1. **Flujo de aplicación web (petición–respuesta):** el navegador realiza llamadas HTTP/JSON a la API; el *router* valida la entrada con un esquema, delega la lógica en el *service*, este accede a los datos por el *repository*, y la respuesta vuelve al cliente. Cuando un cambio debe reflejarse en otros usuarios conectados (una nueva alerta, la presencia de un par, una edición concurrente), el servidor lo emite por Socket.IO sin que el cliente deba volver a consultar.
+
+2. **Flujo de campo (orientado a eventos):** cuando un responsable envía un mensaje de WhatsApp, el proveedor de mensajería invoca el *webhook* del sistema. El servidor identifica al emisor por su número, recupera o crea su sesión de conversación y avanza la **máquina de estados** del asistente. Si el mensaje es una nota de voz, se dispara el procesamiento de inteligencia artificial (transcripción y análisis), cuyo resultado se persiste y se notifica en tiempo real a la aplicación web. De este modo, un hecho ocurrido en el campo actualiza el plan sin intervención manual.
+
 > **[FIGURA 6: Diagrama de arquitectura de tres capas con las integraciones externas.]**
 
 #### Diseño de datos
 
-El modelo de datos se compone, entre otras, de las siguientes entidades principales: `tenants` (empresas), `users` (usuarios con rol), `obras`, `tasks` (con auto-referencia para subtareas y tabla intermedia de dependencias), `responsibles`, `obra_team_members`, `alerts`, `historial_eventos` (registro append-only), `messages` y `conversation_sessions` (chatbot), `suppliers`, `task_materials`, `purchase_orders`, `budgets` (presupuestos con IA), `planos` y `bitacora_entries`.
+El modelo de datos, versionado en treinta migraciones (0001 a 0030), se organiza en torno a la entidad **obra** como agregado central y se compone de las siguientes entidades principales:
+
+- **Identidad y organización:** `tenants` (empresas, con su `plan`), `users` (usuarios con rol y número de WhatsApp), `settings`.
+- **Obra y planificación:** `obras` (con datos del comitente), `tasks` (con auto-referencia `parent_task_id` para subtareas y una tabla intermedia de dependencias que registra el tipo —FS/SS/FF/SF— y el desfase), `baselines` (líneas base de tareas), `calendar` (calendario laboral).
+- **Equipo:** `responsibles` (directorio de personas) y `obra_team_members` (relación muchos-a-muchos entre responsables y obras, con rol).
+- **Comunicación y campo:** `messages` y `conversation_sessions` (estado del asistente de WhatsApp), `bitacora_entries` (notas de voz con su transcripción, resumen y sugerencias), `historial` (registro de eventos *append-only*), `alerts`.
+- **Compras y documentación:** `suppliers`, `task_materials`, `purchase_orders` (con sus ítems), `budgets` (presupuestos leídos por IA) y `planos` (documentación versionada).
+
+El aislamiento entre empresas se materializa con la columna `tenant_id` en las entidades de cabecera. Las relaciones clave son: una empresa tiene muchos usuarios y muchas obras; una obra tiene muchas tareas, alertas, entradas de bitácora, presupuestos y planos; una tarea pertenece a una obra, puede tener una tarea padre, se relaciona con otras por dependencias y se asigna a un responsable.
 
 > **[FIGURA 7: Diagrama entidad-relación (DER) del modelo de datos. Referencia: `docs/database.md`.]**
 
@@ -253,18 +286,22 @@ El modelo de datos se compone, entre otras, de las siguientes entidades principa
 
 ### Implementación
 
-El desarrollo se dividió en módulos lógicos que se construyeron y ensamblaron de manera incremental. La cronología completa del desarrollo se documenta en `docs/documentacion.md`.
+**Enfoque de desarrollo.** La construcción se abordó de forma **incremental**, con una rama de control de versiones (Git) por cada etapa del plan, integrada al tronco principal tras su verificación. Cada cambio en el modelo de datos se materializó en una **migración** versionada (treinta en total, 0001 a 0030), de modo que el esquema de la base pudiera evolucionar de manera reproducible. La cronología completa del desarrollo, con sus decisiones y validaciones, se documenta en `docs/documentacion.md`.
 
-- **Módulo de autenticación y multi-inquilino:** registro de empresa, inicio de sesión con JWT, roles e invitaciones; aislamiento por *tenant*.
-- **Módulo de obras y tareas:** CRUD de obras y tareas, dependencias, subtareas, calendario laboral y reprogramación en cascada.
-- **Módulo de cronograma (Gantt):** visualización interactiva, ruta crítica, línea base.
-- **Módulo de planilla:** edición tipo hoja de cálculo e importación/exportación (Excel, CSV, MS Project).
-- **Módulo de alertas y tiempo real:** evaluación de riesgos y emisión por Socket.IO; presencia de usuarios.
-- **Módulo de asistente de WhatsApp:** *webhook*, identificación de emisores, reporte de estado, consulta de planos y registro de notas de voz.
-- **Módulo de bitácora con IA:** transcripción de audio y análisis con modelo de lenguaje (salida estructurada: resumen, puntos clave y sugerencias aplicables).
-- **Módulo de presupuestos con IA:** lectura de documentos de proveedores, extracción estructurada, comparación y detección de inconsistencias.
-- **Módulo de planos:** carga versionada y consulta por WhatsApp.
-- **Módulo de materiales, presupuesto y compras:** cómputo por tarea, presupuesto por obra y órdenes de compra.
+**Magnitud de la implementación.** El backend expone alrededor de veintiséis grupos de *endpoints* (autenticación, obras, tareas, dependencias, ruta crítica, línea base, calendario, alertas, notificaciones, presencia, responsables, equipo de obra, bitácora, presupuestos, planos, proveedores, materiales, órdenes de compra, importación, exportación, *webhooks*, administración, entre otros), apoyados en torno a veintiún entidades de datos y diecisiete servicios de negocio. El frontend se organiza en una docena de pantallas y unos treinta y cinco componentes reutilizables.
+
+A continuación se describen los módulos que componen la solución:
+
+- **Módulo de autenticación y multi-inquilino:** registro de empresa, inicio de sesión con tokens JWT, gestión de roles (administrador / colaborador) e invitaciones de equipo por correo. Todas las consultas se filtran por el identificador de empresa (*tenant*), garantizando el aislamiento de datos. Incorpora un esquema de **planes** (Básico, Pro, Enterprise) con límites de obras, usuarios y tareas: al superarse un límite, la API responde con el código HTTP 402 (*Payment Required*) y el frontend ofrece la mejora de plan.
+- **Módulo de obras y tareas:** alta de obra mediante asistente de cuatro pasos y gestión completa de tareas con fechas, porcentaje de avance, hitos, subtareas (WBS, vía `parent_task_id`) y dependencias en sus cuatro tipos (FS, SS, FF, SF) con desfase. Incluye la **reprogramación en cascada**: al modificar las fechas de una tarea con sucesoras, el sistema recorre el grafo de dependencias y ofrece una vista previa de las tareas afectadas antes de confirmar, registrando un único evento en el historial.
+- **Módulo de cronograma (Gantt):** visualización interactiva del cronograma con arrastre y redimensionado de barras, vistas de semana, mes y trimestre, flechas de dependencia, **cálculo de ruta crítica (CPM)** y superposición de la **línea base** para comparar lo planificado con lo replanificado.
+- **Módulo de planilla de tareas:** vista de edición tipo hoja de cálculo con selección de celdas y rangos, relleno por arrastre con encadenado automático de fechas, copiar/pegar de bloques y deshacer. Se complementa con **importación** desde Excel, CSV y MS Project (mapeo de WBS, recursos y dependencias) y **exportación** a Excel, además de una plantilla descargable.
+- **Módulo de alertas y tiempo real:** un servicio evalúa automáticamente los riesgos de cada obra (tareas vencidas, demoradas o bloqueadas, sin responsable, y alto porcentaje de vencimiento) y genera alertas de distintos tipos —tarea bloqueada, riesgo de demora, tarea vencida, sin respuesta, reprogramación solicitada y recepción de pedido—. Las alertas se emiten en tiempo real por Socket.IO y quedan trazadas en el historial. El mismo canal soporta la presencia de usuarios conectados y la edición colaborativa.
+- **Módulo de asistente de WhatsApp:** un *webhook* recibe los mensajes entrantes; el sistema identifica al emisor (responsable de tareas o personal de la empresa) por su número y conduce la conversación mediante una **máquina de estados** (estados: reposo, selección de obra, selección de tarea, menú de estado y espera de fecha), persistida en la base. Permite reportar el estado de una tarea, registrar notas de voz y consultar planos.
+- **Módulo de bitácora de obra con IA:** convierte una nota de voz en información estructurada mediante una cadena de procesamiento: el audio se transcribe con un modelo de reconocimiento del habla (`gpt-4o-mini-transcribe`) y el texto resultante se analiza con un modelo de lenguaje (Claude Haiku 4.5) configurado con **salida estructurada (JSON Schema)**. El análisis produce un resumen de dos a cuatro oraciones, una lista de puntos clave y un conjunto de **sugerencias aplicables** sobre el plan —reprogramar una tarea, crear una tarea, cambiar un estado o dejar una nota—, cada una con una cita del audio que la justifica. Si el audio no contiene nada accionable, no se fuerzan sugerencias.
+- **Módulo de presupuestos con IA:** acepta presupuestos de proveedores en múltiples formatos (PDF, imagen, Excel o texto) y, con el mismo modelo de lenguaje, extrae sus datos a una estructura validada (proveedor, fecha, rubro, moneda, ítems con cantidad/unidad/precio/subtotal, IVA, total, flete, plazo de entrega, condiciones de pago y validez). Detecta **inconsistencias** (por ejemplo, totales que no cierran o faltantes de precios) con su severidad, y **compara** varios presupuestos calculando el promedio, el más económico y el desvío porcentual de cada uno.
+- **Módulo de planos:** repositorio de documentación con **versionado** por obra y disciplina; marca la última versión vigente y permite su consulta y envío por WhatsApp, evitando que en el campo se trabaje sobre planos desactualizados.
+- **Módulo de materiales, presupuesto y compras:** cómputo de materiales por tarea, presupuesto por obra (estimado frente a real) y generación de **órdenes de compra** a proveedores, con su envío y el seguimiento de la recepción.
 
 ### Pruebas
 
@@ -274,6 +311,17 @@ La estrategia de verificación combinó distintos niveles:
 - **Pruebas funcionales y de aceptación:** cada módulo se verificó ejecutando la aplicación en el navegador contra el backend real, comprobando el comportamiento esperado de las interacciones (por ejemplo, el relleno por arrastre con encadenado de fechas persistiendo en la base, o el flujo completo de la bitácora por voz).
 - **Pruebas de integración:** se verificaron de extremo a extremo los flujos que atraviesan varias capas e integraciones, como el envío de una nota de voz por WhatsApp → transcripción → análisis con IA → registro en la bitácora, y la lectura y comparación de presupuestos con el modelo de lenguaje.
 - **Verificación de regresiones:** ante cada cambio se ejecutó la verificación de tipos (`tsc`) y la compilación de producción del frontend, y se realizó una auditoría general de la aplicación documentada en `docs/auditoria-general.md`.
+
+A modo ilustrativo, se presentan algunos casos de prueba representativos (el conjunto completo se detalla en `docs/casos_de_prueba.md`):
+
+| Caso | Acción | Resultado esperado |
+|---|---|---|
+| Carga masiva con encadenado de fechas | Arrastrar el controlador de relleno sobre una columna de fechas en la planilla | Las fechas se encadenan según la duración y persisten en la base. |
+| Reprogramación en cascada | Mover una tarea con tareas sucesoras en el Gantt | El sistema muestra la vista previa de las tareas afectadas y, al confirmar, registra un único evento. |
+| Bitácora por voz | Enviar una nota de voz de obra por WhatsApp | Se transcribe, se genera el resumen y las sugerencias, y la entrada queda asociada a la obra. |
+| Comparación de presupuestos | Cargar dos o más presupuestos de proveedores | Se extraen los datos, se marcan inconsistencias y se indica el más económico con su desvío. |
+| Límite de plan | Crear una obra por encima del límite del plan | La API responde HTTP 402 y el frontend ofrece la mejora de plan. |
+| Aislamiento multi-inquilino | Consultar datos con un usuario de otra empresa | No se exponen obras ni datos ajenos al *tenant*. |
 
 > **[COMPLETAR]** Si la cátedra exige pruebas unitarias automatizadas con cobertura, dejar constancia del estado actual y, en su caso, del plan para incorporarlas (por ejemplo, *pytest* en el backend y *Vitest*/*Playwright* en el frontend).
 
@@ -308,7 +356,7 @@ La estrategia de verificación combinó distintos niveles:
 | Modelos de IA | Transcripción de voz y análisis de texto/documentos | «~USD por operación» |
 | Correo transaccional | Invitaciones de equipo | «según volumen» |
 
-A modo de referencia verificada durante las pruebas, el costo de procesar una nota de voz de obra (transcripción + análisis con IA) se ubicó en el orden de **un centavo de dólar por audio de dos minutos**, lo que indica que el costo variable de IA por uso es marginal frente al valor que aporta.
+A modo de referencia verificada durante las pruebas, el costo de procesar una nota de voz de obra —que comprende dos llamadas a modelos de IA: la transcripción del audio y su posterior análisis con salida estructurada— se ubicó en el orden de **un centavo de dólar por audio de dos minutos**. Esto indica que el costo variable de IA por uso es marginal frente al valor que aporta, y que la elección de modelos de bajo costo por operación (un modelo de reconocimiento del habla económico y un modelo de lenguaje de la familia Haiku) es determinante para la sustentabilidad del modelo de negocio.
 
 **Ahorros potenciales para el cliente.** El principal ahorro es el **tiempo de coordinación** que hoy se pierde en transcribir avances, perseguir respuestas y reconstruir lo acordado, además del costo evitado por **demoras detectadas tarde**.
 
@@ -352,15 +400,19 @@ Como objetivos no cumplidos o pendientes se identifican: la notificación autom�
 
 > Listado en formato APA v7. Se priorizan fuentes verificables (documentación oficial y bibliografía técnica). **[COMPLETAR]** con las fuentes académicas del dominio que se hayan utilizado y con los datos de acceso (fecha de consulta) según exija la cátedra. Recordá usar la herramienta de Citas de Google Docs (Tools → Citations) y citar en el texto cada fuente que aparezca aquí.
 
+- Alembic. (2026). *Alembic documentation*. https://alembic.sqlalchemy.org
 - Anthropic. (2026). *Claude API documentation*. Anthropic. https://docs.anthropic.com
 - FastAPI. (2026). *FastAPI documentation*. https://fastapi.tiangolo.com
 - Kelley, J. E., & Walker, M. R. (1959). Critical-path planning and scheduling. *Proceedings of the Eastern Joint Computer Conference*, 160–173.
 - Meta Platforms. (2026). *WhatsApp Business Platform documentation*. https://developers.facebook.com/docs/whatsapp
+- OpenAI. (2026). *Speech-to-text (audio transcription) documentation*. https://platform.openai.com/docs/guides/speech-to-text
 - PostgreSQL Global Development Group. (2026). *PostgreSQL documentation*. https://www.postgresql.org/docs/
 - Project Management Institute. (2021). *A guide to the project management body of knowledge (PMBOK guide)* (7th ed.). PMI.
 - React. (2026). *React documentation*. Meta. https://react.dev
+- Socket.IO. (2026). *Socket.IO documentation*. https://socket.io/docs/
 - SQLAlchemy. (2026). *SQLAlchemy 2.0 documentation*. https://docs.sqlalchemy.org
 - Twilio. (2026). *Twilio API for WhatsApp documentation*. https://www.twilio.com/docs/whatsapp
+- TypeScript. (2026). *TypeScript documentation*. Microsoft. https://www.typescriptlang.org/docs/
 
 ---
 
