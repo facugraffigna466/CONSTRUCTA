@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 660" font-family="'Helvetica Neue',Arial,sans-serif">
+  <rect width="1000" height="660" fill="#ffffff"/>
+  <text x="500" y="38" text-anchor="middle" font-size="22" font-weight="700" fill="#1A2329">Arquitectura de CONSTRUCTA — cliente–servidor de tres capas</text>
+
+  <!-- Capa presentación -->
+  <rect x="40" y="70" width="600" height="120" rx="12" fill="#FFF1E9" stroke="#FF6B35" stroke-width="1.5"/>
+  <text x="60" y="98" font-size="13" font-weight="700" fill="#B23E12">CAPA DE PRESENTACIÓN</text>
+  <rect x="60" y="110" width="250" height="62" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="185" y="138" text-anchor="middle" font-size="14" font-weight="600" fill="#1A2329">Aplicación web (SPA)</text>
+  <text x="185" y="158" text-anchor="middle" font-size="12" fill="#5B6770">React + TypeScript + Vite</text>
+  <rect x="330" y="110" width="290" height="62" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="475" y="138" text-anchor="middle" font-size="13" font-weight="600" fill="#1A2329">Navegador del usuario</text>
+  <text x="475" y="158" text-anchor="middle" font-size="12" fill="#5B6770">portfolio · Gantt · planilla · presupuestos</text>
+
+  <!-- Capa servicios -->
+  <rect x="40" y="240" width="600" height="160" rx="12" fill="#EAF2FF" stroke="#2A62C9" stroke-width="1.5"/>
+  <text x="60" y="268" font-size="13" font-weight="700" fill="#1E4C9E">CAPA DE SERVICIOS (BACKEND) — FastAPI</text>
+  <rect x="60" y="282" width="130" height="46" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="125" y="310" text-anchor="middle" font-size="13" fill="#1A2329">Routers</text>
+  <rect x="205" y="282" width="130" height="46" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="270" y="310" text-anchor="middle" font-size="13" fill="#1A2329">Services</text>
+  <rect x="350" y="282" width="140" height="46" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="420" y="310" text-anchor="middle" font-size="13" fill="#1A2329">Repositories</text>
+  <rect x="505" y="282" width="115" height="46" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="562" y="304" text-anchor="middle" font-size="12" fill="#1A2329">Webhook</text>
+  <text x="562" y="320" text-anchor="middle" font-size="11" fill="#5B6770">WhatsApp</text>
+  <rect x="60" y="344" width="560" height="40" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="340" y="369" text-anchor="middle" font-size="12.5" fill="#5B6770">Socket.IO (tiempo real: presencia · alertas · edición colaborativa)</text>
+
+  <!-- Capa datos -->
+  <rect x="40" y="450" width="600" height="100" rx="12" fill="#E4F3EC" stroke="#1F8A5B" stroke-width="1.5"/>
+  <text x="60" y="478" font-size="13" font-weight="700" fill="#136E47">CAPA DE DATOS</text>
+  <rect x="60" y="490" width="560" height="46" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="340" y="512" text-anchor="middle" font-size="14" font-weight="600" fill="#1A2329">PostgreSQL</text>
+  <text x="340" y="528" text-anchor="middle" font-size="11.5" fill="#5B6770">esquema versionado con migraciones (Alembic) — obras, tareas, presupuestos, planos, bitácora…</text>
+
+  <!-- Integraciones externas -->
+  <rect x="700" y="70" width="260" height="480" rx="12" fill="#F6F7F6" stroke="#D5D9D5" stroke-width="1.5"/>
+  <text x="830" y="98" text-anchor="middle" font-size="13" font-weight="700" fill="#3E4A52">INTEGRACIONES EXTERNAS</text>
+  <rect x="720" y="118" width="220" height="58" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="830" y="143" text-anchor="middle" font-size="13" font-weight="600" fill="#1A2329">WhatsApp (Twilio)</text>
+  <text x="830" y="161" text-anchor="middle" font-size="11.5" fill="#5B6770">mensajes y archivos multimedia</text>
+  <rect x="720" y="188" width="220" height="58" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="830" y="213" text-anchor="middle" font-size="13" font-weight="600" fill="#1A2329">IA — Claude (Anthropic)</text>
+  <text x="830" y="231" text-anchor="middle" font-size="11.5" fill="#5B6770">bitácora · presupuestos</text>
+  <rect x="720" y="258" width="220" height="58" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="830" y="283" text-anchor="middle" font-size="13" font-weight="600" fill="#1A2329">Transcripción de voz</text>
+  <text x="830" y="301" text-anchor="middle" font-size="11.5" fill="#5B6770">notas de voz → texto</text>
+  <rect x="720" y="328" width="220" height="58" rx="8" fill="#ffffff" stroke="#E6E7E5"/>
+  <text x="830" y="353" text-anchor="middle" font-size="13" font-weight="600" fill="#1A2329">Correo (Brevo)</text>
+  <text x="830" y="371" text-anchor="middle" font-size="11.5" fill="#5B6770">invitaciones de equipo</text>
+
+  <!-- Flechas verticales -->
+  <g stroke="#8E97A0" stroke-width="2" fill="none" marker-end="url(#a)">
+    <line x1="340" y1="190" x2="340" y2="238"/>
+    <line x1="340" y1="400" x2="340" y2="448"/>
+  </g>
+  <line x1="640" y1="305" x2="698" y2="305" stroke="#8E97A0" stroke-width="2" marker-end="url(#a)"/>
+  <text x="355" y="218" font-size="11" fill="#5B6770">HTTP/JSON · WS</text>
+  <text x="355" y="428" font-size="11" fill="#5B6770">SQL (async)</text>
+  <defs>
+    <marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#8E97A0"/></marker>
+  </defs>
+</svg>

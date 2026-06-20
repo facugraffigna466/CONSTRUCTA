@@ -1,5 +1,7 @@
 # CONSTRUCTA — Contexto completo para agentes
 
+> ⚠️ **REGLA PERMANENTE — Mantener el IPI actualizado.** Este proyecto tiene un entregable académico: el **Informe de Proyecto Integrador** en [`docs/IPI-CONSTRUCTA.md`](docs/IPI-CONSTRUCTA.md) (sigue la plantilla IPI v2.1 de la UCC). **Después de cada feature, módulo o cambio significativo, además de actualizar `docs/documentacion.md` (bitácora), hay que reflejar el trabajo en la sección correspondiente del IPI** (típicamente: Propuesta de solución → Implementación/Módulos, Objetivos/trazabilidad, Pruebas, y si aplica Beneficios/Impactos). No tocar lo que el alumno debe completar (marcado con `[COMPLETAR]` y `«…»`: portada, cifras de costos, etc.). El IPI también se mantiene exportado a `.docx`: tras editar el `.md`, regenerar con `backend/.venv/bin/python docs/build_ipi_docx.py` (produce `docs/IPI-CONSTRUCTA.docx` con los diagramas de `docs/diagramas/` embebidos en las Figuras 1, 6 y 7). Los diagramas son SVG en `docs/diagramas/` rasterizados a PNG con `qlmanage -t -s 1600 -o docs/diagramas docs/diagramas/<f>.svg`.
+
 ## Qué es el proyecto
 
 CONSTRUCTA es una app de gestión de obras de construcción con un chatbot de WhatsApp integrado. Resuelve el problema de que la comunicación en obra es informal (WhatsApp, llamadas) y no queda registrada. El sistema conecta el plan de obra con el campo: los responsables reportan estado desde su WhatsApp de siempre, sin instalar ninguna app.
