@@ -11,12 +11,13 @@ Degradación con gracia:
 - Sin ANTHROPIC_API_KEY → la entrada queda "pendiente_analisis" con la
   transcripción visible; sin sugerencias.
 """
+import asyncio
 import json
 import logging
 from datetime import date, datetime, timezone
 
 import requests
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -89,10 +90,49 @@ class BitacoraService:
             raise NotFoundError("BitacoraEntry", entry_id)
         return entry
 
-    async def list_entries(self, obra_id: int | None = None) -> list[BitacoraEntry]:
+    async def get_scoped(
+        self, entry_id: int, tenant_id: int | None, user_id: int | None = None
+    ) -> BitacoraEntry:
+        """Como get_or_raise pero aísla por tenant: una entrada de otra empresa se
+        reporta como inexistente (404, no 403). Las entradas sin obra (audios de
+        WhatsApp pendientes) solo las maneja quien las creó."""
+        entry = await self.get_or_raise(entry_id)
+        if tenant_id is None:
+            return entry
+        if entry.obra_id is None:
+            if entry.created_by is not None and entry.created_by != user_id:
+                raise NotFoundError("BitacoraEntry", entry_id)
+            return entry
+        obra_tenant = (await self.session.execute(
+            select(Obra.tenant_id).where(Obra.id == entry.obra_id)
+        )).scalar_one_or_none()
+        if obra_tenant is not None and obra_tenant != tenant_id:
+            raise NotFoundError("BitacoraEntry", entry_id)
+        return entry
+
+    async def list_entries(
+        self,
+        *,
+        tenant_id: int | None = None,
+        user_id: int | None = None,
+        obra_id: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[BitacoraEntry]:
         q = select(BitacoraEntry).order_by(BitacoraEntry.created_at.desc())
         if obra_id is not None:
             q = q.where(BitacoraEntry.obra_id == obra_id)
+        if tenant_id is not None:
+            # Aislamiento multi-tenant: solo entradas de obras de este tenant. Las
+            # entradas sin obra (audios de WhatsApp pendientes de asignar) las ve
+            # únicamente quien las creó.
+            q = q.outerjoin(Obra, BitacoraEntry.obra_id == Obra.id).where(
+                or_(
+                    Obra.tenant_id == tenant_id,
+                    and_(BitacoraEntry.obra_id.is_(None), BitacoraEntry.created_by == user_id),
+                )
+            )
+        q = q.limit(limit).offset(offset)
         return list((await self.session.execute(q)).scalars().all())
 
     async def create_entry(
@@ -121,8 +161,9 @@ class BitacoraService:
 
     async def transcribe_audio(self, audio_bytes: bytes, filename: str) -> str | None:
         """Wrapper público: transcribe sin analizar (para el flujo de WhatsApp con
-        obra pendiente — primero se transcribe, después se elige obra y se analiza)."""
-        return self._transcribe(audio_bytes, filename)
+        obra pendiente — primero se transcribe, después se elige obra y se analiza).
+        Corre en un thread para no bloquear el event loop."""
+        return await asyncio.to_thread(self._transcribe, audio_bytes, filename)
 
     # ── Transcripción (Whisper vía OpenAI API — opcional) ────────────────────
 
@@ -211,7 +252,16 @@ class BitacoraService:
             messages=[{"role": "user", "content": user_msg}],
             output_config={"format": {"type": "json_schema", "schema": _ANALYSIS_SCHEMA}},
         )
-        text = next(b.text for b in response.content if b.type == "text")
+        if response.stop_reason == "refusal":
+            raise UnprocessableError("El modelo rechazó el análisis de este audio.")
+        if response.stop_reason == "max_tokens":
+            raise UnprocessableError(
+                "El audio es demasiado largo para analizarlo de una sola vez. "
+                "Probá dividirlo en notas más cortas."
+            )
+        text = next((b.text for b in response.content if b.type == "text"), None)
+        if not text:
+            raise UnprocessableError("El modelo no devolvió un análisis.")
         return json.loads(text)
 
     # ── Pipeline completo ─────────────────────────────────────────────────────
@@ -223,7 +273,7 @@ class BitacoraService:
         deja el estado y el error en la entrada."""
         try:
             if not entry.transcript and audio_bytes:
-                text = self._transcribe(audio_bytes, filename)
+                text = await asyncio.to_thread(self._transcribe, audio_bytes, filename)
                 if text:
                     entry.transcript = text
                     entry.status = "pendiente_analisis"

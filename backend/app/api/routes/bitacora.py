@@ -17,12 +17,13 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.deps import CurrentUser, DbSession
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
 from app.models.responsible import Responsible
 from app.schemas.bitacora import BitacoraAssignObra, BitacoraEntryRead, BitacoraTextCreate
 from app.services.bitacora_service import BitacoraService
+from app.services.obra_service import ObraService
 
 router = APIRouter(tags=["bitacora"])
 
@@ -46,6 +47,29 @@ async def _to_read(entry: BitacoraEntry, db: DbSession) -> BitacoraEntryRead:
     return data
 
 
+async def _to_read_bulk(entries: list[BitacoraEntry], db: DbSession) -> list[BitacoraEntryRead]:
+    """Resuelve nombres de obra y responsable en 2 queries para toda la lista (evita N+1)."""
+    obra_ids = {e.obra_id for e in entries if e.obra_id}
+    resp_ids = {e.responsible_id for e in entries if e.responsible_id}
+    obra_names: dict[int, str] = {}
+    resp_names: dict[int, str] = {}
+    if obra_ids:
+        obra_names = dict((await db.execute(
+            select(Obra.id, Obra.name).where(Obra.id.in_(obra_ids))
+        )).all())
+    if resp_ids:
+        resp_names = dict((await db.execute(
+            select(Responsible.id, Responsible.full_name).where(Responsible.id.in_(resp_ids))
+        )).all())
+    result: list[BitacoraEntryRead] = []
+    for e in entries:
+        data = BitacoraEntryRead.model_validate(e)
+        data.obra_name = obra_names.get(e.obra_id) if e.obra_id else None
+        data.responsible_name = resp_names.get(e.responsible_id) if e.responsible_id else None
+        result.append(data)
+    return result
+
+
 @router.post("/obras/{obra_id}/bitacora/audio", response_model=BitacoraEntryRead, status_code=status.HTTP_201_CREATED)
 async def create_audio_entry(
     obra_id: int,
@@ -53,6 +77,8 @@ async def create_audio_entry(
     current_user: CurrentUser,
     file: UploadFile = File(...),
 ):
+    # 404 si la obra no existe o pertenece a otro tenant
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     ctype = (file.content_type or "").split(";")[0].strip()
     raw_name = file.filename or "audio.ogg"
     ext = raw_name.rsplit(".", 1)[-1].lower() if "." in raw_name else "ogg"
@@ -83,6 +109,8 @@ async def create_audio_entry(
 async def create_text_entry(
     obra_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser
 ):
+    # 404 si la obra no existe o pertenece a otro tenant
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     if not data.text.strip():
         raise HTTPException(400, "El texto está vacío.")
     service = BitacoraService(db)
@@ -97,18 +125,30 @@ async def create_text_entry(
 
 
 @router.get("/bitacora", response_model=list[BitacoraEntryRead])
-async def list_entries(db: DbSession, _: CurrentUserId, obra_id: int | None = None):
+async def list_entries(
+    db: DbSession,
+    current_user: CurrentUser,
+    obra_id: int | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
     service = BitacoraService(db)
-    entries = await service.list_entries(obra_id)
-    return [await _to_read(e, db) for e in entries]
+    entries = await service.list_entries(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        obra_id=obra_id,
+        limit=limit,
+        offset=offset,
+    )
+    return await _to_read_bulk(entries, db)
 
 
 @router.post("/bitacora/{entry_id}/transcript", response_model=BitacoraEntryRead)
-async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession, _: CurrentUserId):
+async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser):
     if not data.text.strip():
         raise HTTPException(400, "El texto está vacío.")
     service = BitacoraService(db)
-    entry = await service.get_or_raise(entry_id)
+    entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     entry.transcript = data.text.strip()
     entry.status = "pendiente_analisis"
     entry.error = None
@@ -117,9 +157,9 @@ async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession,
 
 
 @router.post("/bitacora/{entry_id}/reprocess", response_model=BitacoraEntryRead)
-async def reprocess(entry_id: int, db: DbSession, _: CurrentUserId):
+async def reprocess(entry_id: int, db: DbSession, current_user: CurrentUser):
     service = BitacoraService(db)
-    entry = await service.get_or_raise(entry_id)
+    entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     audio_bytes = None
     filename = "audio.ogg"
     if entry.audio_path and not entry.transcript:
@@ -132,12 +172,11 @@ async def reprocess(entry_id: int, db: DbSession, _: CurrentUserId):
 
 
 @router.post("/bitacora/{entry_id}/obra", response_model=BitacoraEntryRead)
-async def assign_obra(entry_id: int, data: BitacoraAssignObra, db: DbSession, _: CurrentUserId):
+async def assign_obra(entry_id: int, data: BitacoraAssignObra, db: DbSession, current_user: CurrentUser):
     service = BitacoraService(db)
-    entry = await service.get_or_raise(entry_id)
-    obra = (await db.execute(select(Obra).where(Obra.id == data.obra_id))).scalar_one_or_none()
-    if not obra:
-        raise HTTPException(404, "Obra no encontrada")
+    entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
+    # 404 si la obra no existe o pertenece a otro tenant
+    await ObraService(db).get_or_raise(data.obra_id, tenant_id=current_user.tenant_id)
     entry.obra_id = data.obra_id
     # Re-analizar con el contexto de la obra correcta
     if entry.transcript:
@@ -156,20 +195,28 @@ async def apply_suggestion(entry_id: int, index: int, db: DbSession, current_use
         "channel": "bitacora",
     }
     service = BitacoraService(db)
+    # 404 si la entrada es de otro tenant
+    await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     entry = await service.apply_suggestion(entry_id, index, current_user.id, actor=actor)
     return await _to_read(entry, db)
 
 
 @router.post("/bitacora/{entry_id}/suggestions/{index}/dismiss", response_model=BitacoraEntryRead)
-async def dismiss_suggestion(entry_id: int, index: int, db: DbSession, _: CurrentUserId):
+async def dismiss_suggestion(entry_id: int, index: int, db: DbSession, current_user: CurrentUser):
     service = BitacoraService(db)
+    await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     entry = await service.dismiss_suggestion(entry_id, index)
     return await _to_read(entry, db)
 
 
 @router.delete("/bitacora/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_entry(entry_id: int, db: DbSession, _: CurrentUserId):
+async def delete_entry(entry_id: int, db: DbSession, current_user: CurrentUser):
     service = BitacoraService(db)
-    entry = await service.get_or_raise(entry_id)
+    entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
+    # Borrar el audio del disco para no dejar archivos huérfanos
+    if entry.audio_path:
+        audio_file = UPLOADS_DIR / Path(entry.audio_path).name
+        if audio_file.is_file():
+            audio_file.unlink()
     await db.delete(entry)
     await db.flush()

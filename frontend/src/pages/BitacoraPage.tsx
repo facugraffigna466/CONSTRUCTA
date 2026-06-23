@@ -12,11 +12,12 @@ import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
-const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
   pendiente_transcripcion: { label: "Falta transcribir", bg: "#FDF1DE", color: "#C97D0E" },
   pendiente_analisis:      { label: "Falta analizar",    bg: "#EBF3FF", color: "#2A62C9" },
+  pendiente_obra:          { label: "Falta elegir obra", bg: "#FDF1DE", color: "#C97D0E" },
   procesado:               { label: "Procesado",         bg: "#E4F3EC", color: "#136E47" },
   error:                   { label: "Error",             bg: "#FCE5E5", color: "#A82B2B" },
 };

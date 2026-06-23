@@ -29,7 +29,7 @@ export interface BitacoraEntry {
   summary: string | null;
   key_points: string[] | null;
   suggestions: BitacoraSuggestion[] | null;
-  status: "pendiente_transcripcion" | "pendiente_analisis" | "procesado" | "error";
+  status: "pendiente_transcripcion" | "pendiente_analisis" | "pendiente_obra" | "procesado" | "error";
   error: string | null;
   created_at: string;
   processed_at: string | null;
