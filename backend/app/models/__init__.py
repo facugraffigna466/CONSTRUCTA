@@ -24,6 +24,7 @@ from app.models.alert import Alert, AlertType
 from app.models.conversation_session import ConversationSession, ConversationStep
 from app.models.settings import SystemSettings
 from app.models.obra_team_member import ObraTeamMember
+from app.models.ai_mapping_cache import AiMappingCache
 
 __all__ = [
     "Plan",
@@ -53,4 +54,5 @@ __all__ = [
     "ConversationStep",
     "SystemSettings",
     "ObraTeamMember",
+    "AiMappingCache",
 ]

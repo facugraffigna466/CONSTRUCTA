@@ -11,3 +11,6 @@ dist/
 uploads/
 constructa.db
 constructa.db
+# Videos (demasiado grandes para GitHub)
+*.mp4
+*.mov

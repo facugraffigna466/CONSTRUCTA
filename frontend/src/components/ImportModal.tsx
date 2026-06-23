@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { confirmImport, previewImport, type ImportPreviewRow } from "../api/imports";
+import { confirmImport, detectMapping, previewImport, type AiMappingResult, type ImportPreviewRow } from "../api/imports";
 import { downloadTemplateExcel } from "../api/exports";
+import { Sparkles, Database, Zap } from "lucide-react";
 
 interface Props {
   obraId: number;
@@ -16,7 +17,9 @@ function fmtDate(iso: string | null) {
 
 export function ImportModal({ obraId, onClose, onImported }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [step, setStep] = useState<"upload" | "preview" | "done">("upload");
+  const [step, setStep] = useState<"upload" | "mapping" | "preview" | "done">("upload");
+  const [aiMapping, setAiMapping] = useState<AiMappingResult | null>(null);
+  const [editedMapping, setEditedMapping] = useState<Record<string, string | null>>({});
   const [rows, setRows] = useState<ImportPreviewRow[]>([]);
   const [columnMap, setColumnMap] = useState<Record<string, string>>({});
   const [dragging, setDragging] = useState(false);
@@ -44,17 +47,71 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
   async function handleFile(file: File, columnMap?: Record<string, string>) {
     setLoading(true);
     setError(null);
+    const isXml = file.name.toLowerCase().endsWith(".xml");
     try {
-      const preview = await previewImport(file, columnMap);
+      // XML de MS Project → saltar paso de mapeo, ir directo al preview
+      if (isXml) {
+        const preview = await previewImport(file, columnMap);
+        setLastFile(file);
+        setHeaders(preview.headers ?? []);
+        setRows(preview.rows);
+        setColumnMap(preview.column_map);
+        setSource("msproject");
+        setStep("preview");
+        return;
+      }
+      // Excel / CSV → detectar columnas con IA primero
+      const result = await detectMapping(file);
       setLastFile(file);
-      setHeaders(preview.headers ?? []);
-      setRows(preview.rows);
-      setColumnMap(preview.column_map);
-      setSource(preview.source ?? (file.name.toLowerCase().endsWith(".xml") ? "msproject" : "excel"));
-      setStep("preview");
+      setAiMapping(result);
+      setEditedMapping(result.mapping);
+      setStep("mapping");
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       setError(msg ?? "No se pudo procesar el archivo. Verificá que sea un .xlsx o .csv válido.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const [retrying, setRetrying] = useState(false);
+
+  async function retryWithAi() {
+    if (!lastFile) return;
+    setRetrying(true);
+    setError(null);
+    try {
+      // Forzamos nueva llamada subiendo el archivo de nuevo
+      const result = await detectMapping(lastFile);
+      setAiMapping(result);
+      setEditedMapping(result.mapping);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg ?? "No se pudo usar la IA. Verificá que tengas una API key configurada.");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  async function handleConfirmMapping() {
+    if (!lastFile) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // Construir column_overrides desde el mapeo editado por el usuario
+      const overrides: Record<string, string> = {};
+      for (const [field, col] of Object.entries(editedMapping)) {
+        if (col) overrides[field] = col;
+      }
+      const preview = await previewImport(lastFile, overrides);
+      setHeaders(preview.headers ?? []);
+      setRows(preview.rows);
+      setColumnMap(preview.column_map);
+      setSource(preview.source ?? "excel");
+      setStep("preview");
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(msg ?? "No se pudo procesar el archivo.");
     } finally {
       setLoading(false);
     }
@@ -142,7 +199,104 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
             </div>
           )}
 
-          {/* ── Step 2: Preview ── */}
+          {/* ── Step 2: Mapping ── */}
+          {step === "mapping" && aiMapping && (() => {
+            const FIELD_LABELS: Record<string, string> = {
+              title: "Título de la tarea",
+              start_date: "Fecha de inicio",
+              due_date: "Fecha de fin",
+              responsible: "Responsable",
+              predecessors: "Predecesoras",
+            };
+            const sourceInfo = {
+              ai:    { Icon: Sparkles, label: "Detectado con IA",  color: "#7C3AED", bg: "#F3F0FF" },
+              cache: { Icon: Database, label: "Desde caché",       color: "#1D6FA4", bg: "#EBF3FF" },
+              alias: { Icon: Zap,      label: "Detección automática", color: "#1F8A5B", bg: "#E4F3EC" },
+            }[aiMapping.source] ?? { Icon: Zap, label: "Automático", color: "#1F8A5B", bg: "#E4F3EC" };
+            const { Icon, label, color, bg } = sourceInfo;
+            const { used, limit, plan } = aiMapping.usage;
+            // Mostrar botón IA solo cuando la detección automática dejó campos vacíos
+            const hasNullFields = Object.values(editedMapping).some(v => !v);
+            const showAiButton = aiMapping.source === "alias" && hasNullFields;
+            return (
+              <div>
+                {/* Fuente + uso + botón reintentar */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, background: bg, fontSize: 12, fontWeight: 700, color }}>
+                      <Icon size={12} /> {label}
+                    </span>
+                    {/* Botón reintentar con IA solo cuando hay campos sin detectar automáticamente */}
+                    {showAiButton && (
+                      <button
+                        onClick={retryWithAi}
+                        disabled={retrying}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 5,
+                          padding: "4px 10px", borderRadius: 99, cursor: retrying ? "default" : "pointer",
+                          fontSize: 12, fontWeight: 700,
+                          border: "1.5px solid #7C3AED",
+                          background: retrying ? "#F3F0FF" : "#fff",
+                          color: "#7C3AED",
+                          opacity: retrying ? 0.7 : 1,
+                        }}
+                      >
+                        <Sparkles size={12} />
+                        {retrying ? "Analizando…" : "Detectar con IA"}
+                      </button>
+                    )}
+                  </div>
+                  {/* Mostrar contador solo cuando hay uso de IA (source ai/cache) o cuando el botón IA es visible */}
+                  {(showAiButton || aiMapping.source === "ai" || aiMapping.source === "cache") && limit !== null && (
+                    <span style={{ fontSize: 11.5, color: "#8E97A0" }}>
+                      {used} de {limit} detecciones IA · plan <b>{plan}</b>
+                    </span>
+                  )}
+                </div>
+
+                {/* Tabla de mapeo editable */}
+                <div style={{ border: "1px solid #E6E7E5", borderRadius: 12, overflow: "hidden", marginBottom: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", background: "#F8F9F8", borderBottom: "1px solid #E6E7E5" }}>
+                    <div style={{ padding: "8px 14px", fontSize: 10.5, fontWeight: 700, color: "#6B7580", textTransform: "uppercase", letterSpacing: "0.07em" }}>Campo en CONSTRUCTA</div>
+                    <div style={{ padding: "8px 14px", fontSize: 10.5, fontWeight: 700, color: "#6B7580", textTransform: "uppercase", letterSpacing: "0.07em" }}>Columna en tu archivo</div>
+                  </div>
+                  {Object.entries(FIELD_LABELS).map(([field, label], i, arr) => {
+                    const val = editedMapping[field] ?? null;
+                    const isRequired = field === "title";
+                    return (
+                      <div key={field} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: i < arr.length - 1 ? "1px solid #F0F1EF" : "none", background: i % 2 === 0 ? "#fff" : "#FAFAFA" }}>
+                        <div style={{ padding: "10px 14px", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#1A2329" }}>{label}</span>
+                          {isRequired && <span style={{ fontSize: 10, fontWeight: 700, color: "#D03A3A", background: "#FCE5E5", padding: "1px 5px", borderRadius: 4 }}>requerido</span>}
+                        </div>
+                        <div style={{ padding: "7px 12px", display: "flex", alignItems: "center" }}>
+                          <select
+                            value={val ?? ""}
+                            onChange={e => setEditedMapping(prev => ({ ...prev, [field]: e.target.value || null }))}
+                            style={{
+                              width: "100%", padding: "6px 8px", fontSize: 12.5,
+                              border: `1px solid ${val ? "#E6E7E5" : isRequired ? "#F5A8A8" : "#E6E7E5"}`,
+                              borderRadius: 8, background: "#fff", color: val ? "#1A2329" : "#8E97A0",
+                              fontFamily: "'Plus Jakarta Sans', sans-serif", cursor: "pointer",
+                            }}
+                          >
+                            <option value="">— sin columna —</option>
+                            {aiMapping.headers.map(h => <option key={h} value={h}>{h}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p style={{ margin: 0, fontSize: 12, color: "#8E97A0" }}>
+                  Revisá que cada campo apunte a la columna correcta de tu archivo. Podés corregirlo antes de continuar.
+                </p>
+              </div>
+            );
+          })()}
+
+          {/* ── Step 3: Preview ── */}
           {step === "preview" && (
             <div>
               {source === "msproject" && (
@@ -294,9 +448,26 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
               {downloadingTpl ? "Descargando…" : "Descargar plantilla"}
             </button>
           )}
-          <button onClick={onClose} style={{ padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer" }}>
-            {step === "done" ? "Cerrar" : "Cancelar"}
+          <button
+            onClick={() => step === "mapping" ? (setStep("upload"), setAiMapping(null)) : onClose()}
+            style={{ padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer" }}
+          >
+            {step === "done" ? "Cerrar" : step === "mapping" ? "← Volver" : "Cancelar"}
           </button>
+          {step === "mapping" && (
+            <button
+              onClick={handleConfirmMapping}
+              disabled={loading || !editedMapping["title"]}
+              style={{
+                padding: "9px 20px", borderRadius: 10, fontSize: 13, fontWeight: 600, color: "#fff",
+                background: loading || !editedMapping["title"] ? "#FFAA80" : "#FF6B35",
+                border: "none", cursor: loading || !editedMapping["title"] ? "not-allowed" : "pointer",
+                boxShadow: "0 4px 12px -4px rgba(255,107,53,0.4)",
+              }}
+            >
+              {loading ? "Procesando…" : "Confirmar y previsualizar →"}
+            </button>
+          )}
           {step === "preview" && importableCount > 0 && (
             <button
               onClick={handleConfirm}

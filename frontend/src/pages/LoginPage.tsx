@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { login, register } from "../api/auth";
 import { setToken } from "../lib/tokenStorage";
 import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, ArrowRightIcon, UserIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
+import { MessageCircle, BarChart2, Bell, FileUp } from "lucide-react";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -81,7 +82,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         {/* Video de fondo */}
         <video
           className="absolute inset-0 w-full h-full object-cover"
-          src="/hero-video.mp4"
+          src="/6033941-uhd_2560_1440_30fps.mp4"
           autoPlay
           muted
           loop
@@ -91,13 +92,15 @@ export function LoginPage({ onLogin }: LoginPageProps) {
         {/* Vignette superior sutil */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-transparent" />
 
-        {/* Contenido anclado al pie — panel de vidrio */}
+        {/* Contenido anclado al pie */}
         <div
-          className="relative z-10 mt-auto w-full px-10 pt-16 pb-12"
+          className="relative z-10 mt-auto w-full px-10 pt-8 pb-10"
           style={{
-            background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.28) 50%, transparent 100%)",
+            background: "linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.45) 55%, transparent 100%)",
             WebkitMaskImage: "linear-gradient(to bottom, transparent 0%, black 18%)",
             maskImage: "linear-gradient(to bottom, transparent 0%, black 18%)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
             opacity: ready ? 1 : 0,
             transform: ready ? "translateY(0)" : "translateY(20px)",
             transition: "opacity 0.7s ease 0.2s, transform 0.7s ease 0.2s",
@@ -117,7 +120,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
           {/* Headline */}
           <h2
-            className="font-display text-4xl xl:text-5xl font-extrabold text-white leading-[1.1] tracking-tight mb-8"
+            className="font-display text-4xl xl:text-5xl font-extrabold text-white leading-[1.1] tracking-tight mb-5"
             style={{
               opacity: ready ? 1 : 0,
               transform: ready ? "translateY(0)" : "translateY(16px)",
@@ -128,21 +131,38 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             con <span className="text-constructa-primary">precisión.</span>
           </h2>
 
-          {/* Qué hace el producto — sin números inventados */}
+          {/* Features */}
           <div
-            className="rounded-xl border border-white/[0.15] bg-white/[0.10] px-5 py-4"
             style={{
               opacity: ready ? 1 : 0,
               transform: ready ? "translateY(0)" : "translateY(12px)",
               transition: "opacity 0.5s ease 0.52s, transform 0.5s ease 0.52s",
+              borderTop: "1px solid rgba(255,255,255,0.15)",
+              paddingTop: 20,
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: 10,
             }}
           >
-            <ul className="font-sans text-[13px] text-white/80 leading-relaxed space-y-2 m-0 p-0 list-none">
-              <li>📱 Tu equipo reporta avances por WhatsApp, sin instalar nada</li>
-              <li>📊 Gantt con dependencias, ruta crítica y reprogramación en cascada</li>
-              <li>🔔 Alertas automáticas de demoras y tareas bloqueadas</li>
-              <li>📋 Cargá el plan pegándolo directo desde Excel o MS Project</li>
-            </ul>
+            {[
+              { Icon: MessageCircle, text: "Avances por WhatsApp, sin instalar nada" },
+              { Icon: BarChart2,     text: "Gantt con ruta crítica y cascada" },
+              { Icon: Bell,          text: "Alertas de demoras y tareas bloqueadas" },
+              { Icon: FileUp,        text: "Importá desde Excel o MS Project" },
+            ].map(({ Icon, text }, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span style={{
+                  width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+                  background: "rgba(255,107,53,0.18)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon size={14} color="#FF6B35" />
+                </span>
+                <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.78)", lineHeight: 1.35, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  {text}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
 

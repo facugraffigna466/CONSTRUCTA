@@ -11,7 +11,7 @@ from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.imports import ImportConfirmPayload, ImportPreview
 from app.schemas.task import DependencyLinkInput, TaskCreate
-from app.services.import_service import parse_excel
+from app.services.import_service import parse_excel, detect_column_mapping_ai
 from app.services.task_service import TaskService
 
 ALLOWED_MIME = {
@@ -128,3 +128,34 @@ async def confirm_import(
             skipped += 1
 
     return {"created": created, "skipped": skipped, "errors": errors}
+
+
+@router.post("/detect-mapping")
+async def detect_mapping(
+    current_user_id: CurrentUserId,
+    db: DbSession,
+    file: UploadFile = File(...),
+) -> dict:
+    """Detecta el mapeo de columnas de un archivo Excel/CSV usando IA (con caché).
+    Para XML de MS Project retorna 422 indicando que no es necesario."""
+    mime = file.content_type or ""
+    if mime not in ALLOWED_MIME and not (file.filename or "").endswith((".xlsx", ".xls", ".csv", ".xml")):
+        raise HTTPException(400, "Solo se aceptan archivos .xlsx, .csv o .xml.")
+
+    content = await file.read()
+    if len(content) > MAX_BYTES:
+        raise HTTPException(400, "El archivo no puede superar 10 MB.")
+
+    # Obtener tenant_id del usuario actual
+    from sqlalchemy import select
+    from app.models.user import User
+    user = (await db.execute(select(User).where(User.id == current_user_id))).scalar_one_or_none()
+    tenant_id = user.tenant_id if user else None
+
+    try:
+        result = await detect_column_mapping_ai(content, mime, tenant_id, db)
+        return result
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(500, f"Error al detectar columnas: {exc}") from exc
