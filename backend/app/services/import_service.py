@@ -361,3 +361,214 @@ def parse_excel(
         warnings=warnings,
         errors=errors,
     )
+
+
+# ── AI-powered column detection ──────────────────────────────────────────────
+
+import hashlib
+import json as _json
+
+# Monthly AI call limits per plan name (None = unlimited)
+_AI_MONTHLY_LIMITS: dict[str, int | None] = {
+    "basico": 10,
+    "pro": 50,
+    "enterprise": None,
+}
+_DEFAULT_LIMIT = 5  # users without a plan
+
+_FIELD_DESCRIPTIONS = {
+    "title":        "Nombre o título de la tarea/actividad (requerido)",
+    "start_date":   "Fecha de inicio de la tarea",
+    "due_date":     "Fecha de fin, vencimiento o finalización",
+    "responsible":  "Persona responsable o asignada a la tarea",
+    "predecessors": "Tareas predecesoras o dependencias (números de fila o IDs)",
+}
+
+
+def _headers_hash(headers: list[str]) -> str:
+    key = "|".join(h.strip().lower() for h in headers)
+    return hashlib.sha256(key.encode()).hexdigest()
+
+
+async def detect_column_mapping_ai(
+    file_bytes: bytes,
+    mime: str,
+    tenant_id: int | None,
+    db,  # AsyncSession
+) -> dict:
+    """
+    Returns:
+      {
+        "mapping": {"title": "Col A", "start_date": "Col B", ...},  # null si no detecta
+        "headers": [...],
+        "source": "cache" | "ai" | "alias",
+        "usage": {"used": N, "limit": N | None, "plan": str}
+      }
+    Raises ValueError on rate limit exceeded.
+    """
+    from datetime import datetime, timezone
+    from sqlalchemy import select, func as sqlfunc
+    from app.models.ai_mapping_cache import AiMappingCache
+    from app.models.tenant import Tenant
+    from app.models.plan import Plan
+    from app.core.config import settings
+
+    # ── Extraer headers y sample del archivo ──────────────────────────────────
+    if is_msproject_xml(file_bytes):
+        raise ValueError("MS Project XML no necesita detección de columnas.")
+
+    if mime == "text/csv" or mime == "application/csv":
+        headers, data_rows = _rows_from_csv(file_bytes)
+    else:
+        import openpyxl, io
+        wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
+        headers, data_rows = _rows_from_sheet(wb.active)
+
+    headers = [str(h).strip() for h in headers if str(h).strip()]
+    if not headers:
+        raise ValueError("No se encontraron encabezados en el archivo.")
+
+    sample_rows = data_rows[:3]
+    h_hash = _headers_hash(headers)
+
+    # ── Determinar plan y límite ──────────────────────────────────────────────
+    plan_name = "sin_plan"
+    monthly_limit: int | None = _DEFAULT_LIMIT
+
+    if tenant_id is not None:
+        tenant = await db.get(Tenant, tenant_id)
+        if tenant and tenant.plan_id:
+            plan = await db.get(Plan, tenant.plan_id)
+            if plan:
+                plan_name = plan.name
+                monthly_limit = _AI_MONTHLY_LIMITS.get(plan.name, _DEFAULT_LIMIT)
+
+    # ── Verificar caché ──────────────────────────────────────────────────────
+    cached = (await db.execute(
+        select(AiMappingCache).where(
+            AiMappingCache.tenant_id == tenant_id,
+            AiMappingCache.headers_hash == h_hash,
+        )
+    )).scalar_one_or_none()
+
+    if cached:
+        mapping = _json.loads(cached.mapping)
+        # Contar uso del mes para informar al frontend
+        month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        used = (await db.execute(
+            select(sqlfunc.count()).where(
+                AiMappingCache.tenant_id == tenant_id,
+                AiMappingCache.created_at >= month_start,
+            )
+        )).scalar_one()
+        return {
+            "mapping": mapping,
+            "headers": headers,
+            "source": "cache",
+            "usage": {"used": used, "limit": monthly_limit, "plan": plan_name},
+        }
+
+    # ── Verificar rate limit ──────────────────────────────────────────────────
+    if monthly_limit is not None:
+        month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        used_this_month = (await db.execute(
+            select(sqlfunc.count()).where(
+                AiMappingCache.tenant_id == tenant_id,
+                AiMappingCache.created_at >= month_start,
+            )
+        )).scalar_one()
+        if used_this_month >= monthly_limit:
+            raise ValueError(
+                f"Límite de {monthly_limit} detecciones IA por mes alcanzado "
+                f"(plan {plan_name}). Remapeá las columnas manualmente."
+            )
+    else:
+        used_this_month = 0
+
+    # ── Intentar detección por alias primero (gratis) ─────────────────────────
+    alias_map = _detect_column_map(headers)
+    alias_result = {field: headers[idx] if idx is not None else None for field, idx in alias_map.items()}
+    # Si detecta título y al menos una fecha, no necesitamos IA
+    if alias_result.get("title") and (alias_result.get("start_date") or alias_result.get("due_date")):
+        return {
+            "mapping": alias_result,
+            "headers": headers,
+            "source": "alias",
+            "usage": {"used": used_this_month, "limit": monthly_limit, "plan": plan_name},
+        }
+
+    # ── Llamar a Haiku ────────────────────────────────────────────────────────
+    if not settings.ANTHROPIC_API_KEY:
+        # Sin key → retornar detección parcial de aliases
+        return {
+            "mapping": alias_result,
+            "headers": headers,
+            "source": "alias",
+            "usage": {"used": used_this_month, "limit": monthly_limit, "plan": plan_name},
+        }
+
+    sample_lines = []
+    for i, row in enumerate(sample_rows):
+        parts = [f"{h}: {str(row[j]).strip() if j < len(row) else ''}" for j, h in enumerate(headers)]
+        sample_lines.append(f"Fila {i+1}: " + " | ".join(parts))
+
+    prompt = (
+        "Sos un experto en interpretar planillas de construcción/obra. Tu trabajo es identificar qué columna "
+        "corresponde a cada campo de una tarea de obra, aunque los nombres sean abreviados, inusuales o estén "
+        "en otro idioma.\n\n"
+        f"ENCABEZADOS DISPONIBLES: {_json.dumps(headers, ensure_ascii=False)}\n\n"
+        "DATOS DE EJEMPLO (primeras filas):\n" + "\n".join(sample_lines) + "\n\n"
+        "CAMPOS A MAPEAR:\n"
+        "- title: Nombre o título de la tarea. Buscá: 'Item', 'Nombre', 'Task', 'Actividad', 'Tarea', 'Descripción', "
+        "o cualquier columna cuyo contenido sea texto descriptivo de la actividad.\n"
+        "- start_date: Fecha de inicio. Buscá: 'Start', 'Inicio', 'Comienzo', 'Start?', 'Fecha inicio', o similares.\n"
+        "- due_date: Fecha de fin/vencimiento. Buscá: 'Fin', 'Finish', 'End', 'Fecha cierre', 'Vencimiento', 'Fecha fin', o similares.\n"
+        "- responsible: Responsable o asignado. Buscá: 'RESP.', 'Resp', 'Responsable', 'Recurso', 'Asignado', 'Resource', o similares.\n"
+        "- predecessors: Predecesoras/dependencias (números). Buscá: 'dep.', 'Dep', 'Predecesoras', 'Pred.', 'Depends', o similares.\n\n"
+        "REGLAS CRÍTICAS:\n"
+        "1. Usá el nombre EXACTO del encabezado tal como aparece en la lista.\n"
+        "2. SIEMPRE elegí la mejor opción disponible aunque el nombre sea abreviado o poco obvio. "
+        "Es mejor asignar la columna más probable que dejarla en null.\n"
+        "3. Para 'title': si hay una columna con texto libre de actividades (aunque se llame 'Item', 'Ítem', etc.), asignala.\n"
+        "4. Solo usá null si estás SEGURO de que ninguna columna puede corresponder a ese campo.\n"
+        "5. Mirá los datos de ejemplo para entender el contenido real de cada columna.\n\n"
+        "Respondé ÚNICAMENTE con JSON válido, sin texto adicional:\n"
+        '{"title": "...", "start_date": "...", "due_date": "...", "responsible": "...", "predecessors": "..."}'
+    )
+
+    import anthropic
+    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    response = await client.messages.create(
+        model=settings.CLAUDE_MODEL,
+        max_tokens=256,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = response.content[0].text.strip()
+
+    # Parsear JSON de la respuesta
+    try:
+        # Extraer JSON si viene con texto extra
+        start = raw.index("{")
+        end = raw.rindex("}") + 1
+        mapping = _json.loads(raw[start:end])
+    except (ValueError, _json.JSONDecodeError):
+        mapping = alias_result  # fallback a aliases
+
+    # Asegurar que solo tenga los campos esperados
+    mapping = {k: mapping.get(k) for k in _FIELD_DESCRIPTIONS}
+
+    # ── Guardar en caché ──────────────────────────────────────────────────────
+    cache_row = AiMappingCache(
+        tenant_id=tenant_id,
+        headers_hash=h_hash,
+        mapping=_json.dumps(mapping, ensure_ascii=False),
+    )
+    db.add(cache_row)
+    # El commit lo hace get_db()
+
+    return {
+        "mapping": mapping,
+        "headers": headers,
+        "source": "ai",
+        "usage": {"used": used_this_month + 1, "limit": monthly_limit, "plan": plan_name},
+    }

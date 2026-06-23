@@ -53,3 +53,25 @@ export async function confirmImport(obraId: number, rows: ImportPreviewRow[]): P
   });
   return data;
 }
+
+export interface AiMappingUsage {
+  used: number;
+  limit: number | null;
+  plan: string;
+}
+
+export interface AiMappingResult {
+  mapping: Record<string, string | null>;
+  headers: string[];
+  source: "ai" | "cache" | "alias";
+  usage: AiMappingUsage;
+}
+
+export async function detectMapping(file: File): Promise<AiMappingResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await apiClient.post<AiMappingResult>("/imports/detect-mapping", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
