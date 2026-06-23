@@ -34,7 +34,9 @@ export interface ObraTeamMember {
   full_name: string;
   whatsapp_number: string;
   role: string | null;
+  member_type: "equipo" | "contratista";
   is_active: boolean;
+  plan_disciplines: string[] | null; // null = acceso a todos los planos
 }
 
 export interface Responsible {
@@ -255,6 +257,10 @@ export interface TaskMaterial {
   unit_price: number | null;
   supplier_id: number | null;
   supplier_name: string | null;
+  responsible_id: number | null;
+  responsible_name: string | null;
+  created_by: number | null;
+  created_by_name: string | null;
   status: MaterialStatus;
   created_at: string;
 }

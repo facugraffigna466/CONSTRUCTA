@@ -16,9 +16,11 @@ from app.core.deps import CurrentUser, CurrentUserId, DbSession
 from app.models.alert import AlertType
 from app.models.obra import Obra
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
+from app.models.responsible import Responsible
 from app.models.supplier import Supplier
 from app.models.task import Task
 from app.models.task_material import TaskMaterial
+from app.models.user import User
 from app.repositories.alert import AlertRepository
 from app.repositories.historial import HistorialRepository
 from app.schemas.purchase_order import (
@@ -65,17 +67,22 @@ async def _order_to_read(order: PurchaseOrder, db: DbSession) -> PurchaseOrderRe
 async def get_presupuesto(obra_id: int, db: DbSession, _: CurrentUserId):
     await _get_obra_or_404(obra_id, db)
 
+    ResponsibleAlias = Responsible
+    UserAlias = User
+
     result = await db.execute(
-        select(TaskMaterial, Task.title, Supplier.name)
+        select(TaskMaterial, Task.title, Supplier.name, ResponsibleAlias.full_name, UserAlias.full_name)
         .join(Task, TaskMaterial.task_id == Task.id)
         .outerjoin(Supplier, TaskMaterial.supplier_id == Supplier.id)
+        .outerjoin(ResponsibleAlias, TaskMaterial.responsible_id == ResponsibleAlias.id)
+        .outerjoin(UserAlias, TaskMaterial.created_by == UserAlias.id)
         .where(Task.obra_id == obra_id)
         .order_by(Task.order_index, Task.id, TaskMaterial.created_at)
     )
 
     rows: list[PresupuestoRow] = []
     total_estimado = total_pedido = total_recibido = 0.0
-    for material, task_title, supplier_name in result.all():
+    for material, task_title, supplier_name, responsible_name, created_by_name in result.all():
         subtotal = float(material.quantity or 0) * float(material.unit_price or 0)
         rows.append(PresupuestoRow(
             task_id=material.task_id,
@@ -89,6 +96,10 @@ async def get_presupuesto(obra_id: int, db: DbSession, _: CurrentUserId):
             status=material.status,
             supplier_id=material.supplier_id,
             supplier_name=supplier_name,
+            responsible_id=material.responsible_id,
+            responsible_name=responsible_name,
+            created_by=material.created_by,
+            created_by_name=created_by_name,
         ))
         total_estimado += subtotal
         if material.status == "pedido":

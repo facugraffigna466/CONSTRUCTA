@@ -13,10 +13,11 @@ import {
 } from "../api/purchaseOrders";
 import { fetchSuppliers } from "../api/suppliers";
 import { createMaterial } from "../api/taskMaterials";
-import type { Supplier, Task } from "../types";
+import { fetchObraTeam } from "../api/obraTeam";
+import type { ObraTeamMember, Supplier, Task } from "../types";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
-const COLS = "1fr 80px 115px 110px 150px 90px";
+const COLS = "1fr 75px 110px 105px 130px 130px 85px";
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
   pendiente: { label: "Pendiente", bg: "#EBF3FF", color: "#2A62C9" },
@@ -216,21 +217,23 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
 
 // ─── Modal: agregar ítem (material) eligiendo la tarea ────────────────────────
 
-function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
+function AddMaterialModal({ tasks, teamMembers, onClose, onAdded }: {
   tasks: Task[];
-  suppliers: Supplier[];
+  teamMembers: ObraTeamMember[];
   onClose: () => void;
   onAdded: () => void;
 }) {
-  const [taskId, setTaskId]     = useState<string>(tasks[0] ? String(tasks[0].id) : "");
-  const [name, setName]         = useState("");
-  const [qty, setQty]           = useState("");
-  const [unit, setUnit]         = useState("");
-  const [price, setPrice]       = useState("");
-  const [supplierId, setSupplierId] = useState("");
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState<string | null>(null);
+  const [taskId, setTaskId]         = useState<string>(tasks[0] ? String(tasks[0].id) : "");
+  const [name, setName]             = useState("");
+  const [qty, setQty]               = useState("");
+  const [unit, setUnit]             = useState("");
+  const [price, setPrice]           = useState("");
+  const [contratistId, setContratistId] = useState("");
+  const [saving, setSaving]         = useState(false);
+  const [error, setError]           = useState<string | null>(null);
   const [addAnother, setAddAnother] = useState(true);
+
+  const contratistas = teamMembers.filter(m => m.member_type === "contratista");
 
   async function handleSave() {
     if (!taskId) { setError("Elegí a qué tarea pertenece el material."); return; }
@@ -243,11 +246,11 @@ function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
         quantity: qty ? Number(qty) : null,
         unit: unit.trim() || null,
         unit_price: price ? Number(price) : null,
-        supplier_id: supplierId ? Number(supplierId) : null,
+        responsible_id: contratistId ? Number(contratistId) : null,
       });
       onAdded();
       if (addAnother) {
-        setName(""); setQty(""); setUnit(""); setPrice("");
+        setName(""); setQty(""); setUnit(""); setPrice(""); setContratistId("");
       } else {
         onClose();
       }
@@ -312,10 +315,13 @@ function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
                 </div>
               </div>
               <div>
-                <label style={lbl}>Proveedor (opcional)</label>
-                <select value={supplierId} onChange={e => setSupplierId(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
-                  <option value="">Sin proveedor</option>
-                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}{s.category ? ` · ${s.category}` : ""}</option>)}
+                <label style={lbl}>Contratista (opcional)</label>
+                <select value={contratistId} onChange={e => setContratistId(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                  <option value="">Sin asignar</option>
+                  {contratistas.length === 0 && (
+                    <option disabled value="">— No hay contratistas en la obra —</option>
+                  )}
+                  {contratistas.map(m => <option key={m.responsible_id} value={m.responsible_id}>{m.full_name}{m.role ? ` · ${m.role}` : ""}</option>)}
                 </select>
               </div>
               {error && <p style={{ margin: 0, fontSize: 12, color: "#D03A3A", fontWeight: 600 }}>{error}</p>}
@@ -356,6 +362,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
   const [data, setData] = useState<PresupuestoResponse | null>(null);
   const [orders, setOrders] = useState<PurchaseOrder[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [teamMembers, setTeamMembers] = useState<ObraTeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showOrderModal, setShowOrderModal] = useState(false);
@@ -368,14 +375,16 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
 
   const load = useCallback(async () => {
     try {
-      const [pres, ords, sups] = await Promise.all([
+      const [pres, ords, sups, team] = await Promise.all([
         fetchPresupuesto(obraId),
         fetchPurchaseOrders(obraId),
         fetchSuppliers(),
+        fetchObraTeam(obraId),
       ]);
       setData(pres);
       setOrders(ords);
       setSuppliers(sups);
+      setTeamMembers(team);
       setError(null);
     } catch {
       setError("No se pudo cargar el presupuesto.");
@@ -571,7 +580,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
 
           {/* ── Encabezado de columnas (aparece una sola vez) ── */}
           <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, padding: "7px 16px", background: "#F2EFE8", borderBottom: "2px solid #D8D3CA" }}>
-            {["Descripción", "Cant.", "Precio unit.", "Subtotal", "Proveedor", "Estado"].map((h, hi) => (
+            {["Descripción", "Cant.", "Precio unit.", "Subtotal", "Pedido por", "Contratista", "Estado"].map((h, hi) => (
               <span key={h} style={{ fontSize: 9.5, fontWeight: 700, color: "#7A7167", letterSpacing: "0.09em", textTransform: "uppercase", textAlign: hi >= 1 && hi <= 3 ? "right" : "left", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>{h}</span>
             ))}
           </div>
@@ -613,7 +622,8 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
                     <span style={{ fontSize: 12.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{r.quantity != null ? `${r.quantity} ${r.unit ?? ""}` : "—"}</span>
                     <span style={{ fontSize: 12.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(r.unit_price)}</span>
                     <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{r.subtotal > 0 ? money(r.subtotal) : "—"}</span>
-                    <span style={{ fontSize: 12, color: r.supplier_name ? "#5B6770" : "#C4C9C6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.supplier_name ?? "Sin proveedor"}</span>
+                    <span style={{ fontSize: 12, color: r.created_by_name ? "#5B6770" : "#C4C9C6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.created_by_name ?? "—"}</span>
+                    <span style={{ fontSize: 12, color: r.responsible_name ? "#1A2329" : "#C4C9C6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.responsible_name ?? "—"}</span>
                     <span><Pill status={r.status} /></span>
                   </div>
                 ))}
@@ -623,7 +633,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
                   <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "6px 16px", background: "#F2EFE8", borderTop: "1px solid #D8D3CA" }}>
                     <span style={{ gridColumn: "1 / 4", fontSize: 10.5, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "right" }}>Subtotal</span>
                     <span style={{ fontSize: 13, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(g.subtotal)}</span>
-                    <span /><span />
+                    <span /><span /><span />
                   </div>
                 )}
               </div>
@@ -634,7 +644,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
           <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "11px 16px", background: "#1A2329", borderTop: "2px solid #0E161B" }}>
             <span style={{ gridColumn: "1 / 4", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "right" }}>Total general</span>
             <span style={{ fontSize: 16, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(data.total_estimado)}</span>
-            <span /><span />
+            <span /><span /><span />
           </div>
 
         </div>
@@ -725,7 +735,7 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
       {showAddMaterial && (
         <AddMaterialModal
           tasks={tasks}
-          suppliers={suppliers}
+          teamMembers={teamMembers}
           onClose={() => setShowAddMaterial(false)}
           onAdded={load}
         />

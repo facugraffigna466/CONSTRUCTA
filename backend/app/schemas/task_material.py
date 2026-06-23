@@ -10,6 +10,7 @@ class TaskMaterialCreate(BaseModel):
     unit: str | None = Field(None, max_length=50)
     unit_price: float | None = Field(None, ge=0)
     supplier_id: int | None = None
+    responsible_id: int | None = None
     status: str = Field(default="pendiente")
 
     def model_post_init(self, _context):
@@ -23,6 +24,7 @@ class TaskMaterialUpdate(BaseModel):
     unit: str | None = Field(None, max_length=50)
     unit_price: float | None = Field(None, ge=0)
     supplier_id: int | None = None
+    responsible_id: int | None = None
     status: str | None = None
 
     def model_post_init(self, _context):
@@ -39,6 +41,10 @@ class TaskMaterialRead(BaseModel):
     unit_price: float | None
     supplier_id: int | None
     supplier_name: str | None = None
+    responsible_id: int | None = None
+    responsible_name: str | None = None
+    created_by: int | None = None
+    created_by_name: str | None = None
     status: str
     created_at: datetime
 

@@ -14,6 +14,10 @@ export interface PresupuestoRow {
   status: "pendiente" | "pedido" | "recibido";
   supplier_id: number | null;
   supplier_name: string | null;
+  responsible_id: number | null;
+  responsible_name: string | null;
+  created_by: number | null;
+  created_by_name: string | null;
 }
 
 export interface PresupuestoResponse {

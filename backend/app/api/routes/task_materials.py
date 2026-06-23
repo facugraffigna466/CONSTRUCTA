@@ -2,10 +2,12 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.models.user import User
+from app.models.responsible import Responsible
+from app.models.supplier import Supplier
 from app.models.task import Task
 from app.models.task_material import TaskMaterial
-from app.models.supplier import Supplier
 from app.schemas.task_material import TaskMaterialCreate, TaskMaterialRead, TaskMaterialUpdate
 
 router = APIRouter(prefix="/tasks/{task_id}/materials", tags=["task-materials"])
@@ -24,8 +26,18 @@ async def _enrich(material: TaskMaterial, db: DbSession) -> TaskMaterialRead:
     if material.supplier_id:
         res = await db.execute(select(Supplier.name).where(Supplier.id == material.supplier_id))
         supplier_name = res.scalar_one_or_none()
+    responsible_name = None
+    if material.responsible_id:
+        res = await db.execute(select(Responsible.full_name).where(Responsible.id == material.responsible_id))
+        responsible_name = res.scalar_one_or_none()
+    created_by_name = None
+    if material.created_by:
+        res = await db.execute(select(User.full_name).where(User.id == material.created_by))
+        created_by_name = res.scalar_one_or_none()
     data = TaskMaterialRead.model_validate(material)
     data.supplier_name = supplier_name
+    data.responsible_name = responsible_name
+    data.created_by_name = created_by_name
     return data
 
 
@@ -43,7 +55,7 @@ async def list_materials(task_id: int, db: DbSession, _: CurrentUserId):
 
 @router.post("", response_model=TaskMaterialRead, status_code=status.HTTP_201_CREATED)
 async def create_material(
-    task_id: int, data: TaskMaterialCreate, db: DbSession, _: CurrentUserId
+    task_id: int, data: TaskMaterialCreate, db: DbSession, current_user: CurrentUser
 ):
     await _get_task_or_404(task_id, db)
     material = TaskMaterial(
@@ -53,6 +65,8 @@ async def create_material(
         unit=data.unit,
         unit_price=data.unit_price,
         supplier_id=data.supplier_id,
+        responsible_id=data.responsible_id,
+        created_by=current_user.id,
         status=data.status,
     )
     db.add(material)

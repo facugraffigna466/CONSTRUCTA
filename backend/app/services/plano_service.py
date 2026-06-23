@@ -151,8 +151,42 @@ class PlanoService:
         )).scalars().all()
         return sorted(set(rows))
 
+    async def available_disciplines_by_obra(self, obra_ids: list[int]) -> dict[int, list[str]]:
+        """Devuelve {obra_id: [disciplinas]} para obras que tienen al menos un plano vigente."""
+        rows = (await self.session.execute(
+            select(Plano.obra_id, Plano.discipline)
+            .where(Plano.obra_id.in_(obra_ids), Plano.is_latest.is_(True))
+            .distinct()
+        )).all()
+        result: dict[int, list[str]] = {}
+        for obra_id, disc in rows:
+            result.setdefault(obra_id, []).append(disc)
+        for v in result.values():
+            v.sort()
+        return result
+
+    async def obras_with_planos(self, obra_ids: list[int], discipline: str | None) -> list[int]:
+        """Obras que tienen al menos un plano vigente (y de la disciplina pedida si se especifica)."""
+        stmt = select(Plano.obra_id).where(Plano.obra_id.in_(obra_ids), Plano.is_latest.is_(True))
+        if discipline:
+            stmt = stmt.where(Plano.discipline == discipline)
+        rows = (await self.session.execute(stmt.distinct())).scalars().all()
+        return sorted(set(rows))
+
     async def obra_ids_for_responsible(self, responsible_id: int) -> list[int]:
         rows = (await self.session.execute(
             select(Task.obra_id).where(Task.responsible_id == responsible_id).distinct()
         )).scalars().all()
         return [r for r in rows if r is not None]
+
+    async def allowed_disciplines_for_responsible(self, responsible_id: int, obra_id: int) -> list[str] | None:
+        """Retorna las disciplinas permitidas para este responsable en esta obra.
+        None = acceso a todos los planos. [] = sin acceso."""
+        from app.models.obra_team_member import ObraTeamMember
+        row = (await self.session.execute(
+            select(ObraTeamMember.plan_disciplines).where(
+                ObraTeamMember.obra_id == obra_id,
+                ObraTeamMember.responsible_id == responsible_id,
+            )
+        )).scalar_one_or_none()
+        return row  # None si no está en el equipo o si tiene acceso total
