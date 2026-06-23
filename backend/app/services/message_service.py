@@ -228,6 +228,7 @@ class MessageService:
         """Nota de voz de WhatsApp → entrada de bitácora con IA. Sirve para
         responsables y para staff (arquitecto/jefe). Si el emisor tiene varias
         obras, la nota queda pendiente y el bot pregunta a cuál va."""
+        import asyncio as _asyncio
         import uuid as _uuid
         from pathlib import Path as _Path
 
@@ -236,12 +237,15 @@ class MessageService:
         from app.core.config import settings as _settings
         from app.services.bitacora_service import BitacoraService
 
-        # 1. Descargar el audio de Twilio (basic auth SID:token)
+        # 1. Descargar el audio de Twilio (basic auth SID:token).
+        #    En un thread para no bloquear el event loop con I/O síncrono.
         try:
-            resp = _requests.get(
-                payload.MediaUrl0,
-                auth=(_settings.TWILIO_ACCOUNT_SID, _settings.TWILIO_AUTH_TOKEN),
-                timeout=60,
+            resp = await _asyncio.to_thread(
+                lambda: _requests.get(
+                    payload.MediaUrl0,
+                    auth=(_settings.TWILIO_ACCOUNT_SID, _settings.TWILIO_AUTH_TOKEN),
+                    timeout=60,
+                )
             )
             resp.raise_for_status()
             audio_bytes = resp.content
