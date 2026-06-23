@@ -62,6 +62,10 @@ class PresupuestoRow(BaseModel):
     status: str
     supplier_id: int | None
     supplier_name: str | None
+    responsible_id: int | None = None
+    responsible_name: str | None = None
+    created_by: int | None = None
+    created_by_name: str | None = None
 
 
 class PresupuestoResponse(BaseModel):

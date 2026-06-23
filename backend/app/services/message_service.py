@@ -113,11 +113,18 @@ class MessageService:
             body = payload.Body or ""
             body_low = body.lower()
 
+            # pre-compute discipline match for routing (without importing heavy stuff)
+            from app.services.plano_service import match_discipline_in_text as _match_disc
+            _disc_keyword = _match_disc(body_low) if payload.detected_type == MessageType.TEXT else None
+
             # ── 5. Handle ──────────────────────────────────────────────────────
             if payload.detected_type == MessageType.AUDIO and payload.MediaUrl0:
                 # Nota de voz de obra → bitácora con IA
                 reply = await self._handle_bitacora_audio(payload, sender, is_staff)
-            elif payload.detected_type == MessageType.TEXT and "plano" in body_low:
+            elif payload.detected_type == MessageType.TEXT and await self._pending_plano_obra(sender, is_staff):
+                # eligiendo obra para un pedido de plano pendiente
+                reply, media_url = await self._handle_plano_obra_selection(sender, is_staff, body)
+            elif payload.detected_type == MessageType.TEXT and ("plano" in body_low or _disc_keyword):
                 reply, media_url = await self._handle_plano_request(sender, is_staff, body)
             elif payload.detected_type == MessageType.TEXT and await self._pending_bitacora_obra(sender, is_staff):
                 # respuesta numérica eligiendo la obra de una nota de voz pendiente
@@ -189,39 +196,170 @@ class MessageService:
         )
 
     async def _handle_plano_request(self, sender, is_staff: bool, body: str) -> tuple[str, str | None]:
-        """Responde un pedido de plano por WhatsApp con la última versión vigente.
-        Devuelve (texto, media_url|None)."""
+        """Responde un pedido de plano. Si el responsable trabaja en múltiples obras,
+        pide que elija una antes de enviar el archivo."""
+        from sqlalchemy import select
         from app.core.config import settings
+        from app.models.obra import Obra
+        from app.models.conversation_session import ConversationStep
+        from app.repositories.conversation_session import ConversationSessionRepository
         from app.services.plano_service import PlanoService, match_discipline_in_text
 
         svc = PlanoService(self.db)
         obra_ids = await self._sender_obra_ids(sender, is_staff)
         if not obra_ids:
-            return ("No tengo obras asociadas a tu número todavía. Avisale al jefe de obra.", None)
+            return ("No tengo obras asociadas a tu número. Avisale al jefe de obra.", None)
+
+        body_low = body.lower()
+        _LIST_KWS = {"qué", "que", "cuál", "cual", "listar", "disponible", "disponibles", "hay", "tengo", "ver"}
+
+        # ── Comando "listar planos" ────────────────────────────────────────────
+        if any(kw in body_low for kw in _LIST_KWS) or (not match_discipline_in_text(body) and "plano" in body_low and not body_low.replace("planos", "").replace("plano", "").strip()):
+            disponibles = await svc.available_disciplines_by_obra(obra_ids)
+            if not disponibles:
+                return ("No hay planos cargados en el sistema todavía. Pedíselo al jefe de obra.", None)
+            lineas = []
+            for obra_id, discs in disponibles.items():
+                # filtrar por disciplinas permitidas para este responsable
+                if not is_staff:
+                    allowed = await svc.allowed_disciplines_for_responsible(sender.id, obra_id)
+                    if allowed is not None:
+                        discs = [d for d in discs if d in allowed]
+                if not discs:
+                    continue
+                obra_row = (await self.db.execute(select(Obra).where(Obra.id == obra_id))).scalar_one_or_none()
+                nombre = obra_row.name if obra_row else f"Obra #{obra_id}"
+                lineas.append(f"📐 *{nombre}*: {', '.join(discs)}")
+            if not lineas:
+                return ("No tenés acceso a ningún plano en este momento. Consultale al jefe de obra.", None)
+            return ("Planos disponibles:\n\n" + "\n".join(lineas) + "\n\nEscribí el nombre de la disciplina para que te lo mande. Por ej: «electricidad» o «plano de gas».", None)
 
         disc = match_discipline_in_text(body)
-        plano = await svc.find_latest_for_disciplines(obra_ids, disc)
 
-        if not plano:
-            disponibles = await svc.available_disciplines(obra_ids)
-            lista = ", ".join(disponibles) if disponibles else None
+        # ── Si trabaja en varias obras, pedir cuál ───────────────────────────
+        if not is_staff and len(obra_ids) > 1:
+            obras_con_planos = await svc.obras_with_planos(obra_ids, disc)
+            # filtrar obras donde el responsable tiene permiso para la disciplina pedida
             if disc:
-                msg = f"No encontré un plano de {disc} cargado para tu obra."
+                obras_permitidas = []
+                for oid in obras_con_planos:
+                    allowed = await svc.allowed_disciplines_for_responsible(sender.id, oid)
+                    if allowed is None or disc in allowed:
+                        obras_permitidas.append(oid)
+                obras_con_planos = obras_permitidas
+            if len(obras_con_planos) == 0:
+                tipo = f"de {disc} " if disc else ""
+                return (f"No tenés acceso a planos {tipo}en ninguna de tus obras.", None)
+            if len(obras_con_planos) > 1:
+                # guardar contexto en la sesión del responsable
+                sess_repo = ConversationSessionRepository(self.db)
+                obras_rows = (await self.db.execute(select(Obra.id, Obra.name).where(Obra.id.in_(obras_con_planos)))).all()
+                obra_map = {r.id: r.name for r in obras_rows}
+                opts = [{"obra_id": oid, "name": obra_map.get(oid, f"Obra #{oid}")} for oid in obras_con_planos]
+                await sess_repo.upsert(
+                    sender.id,
+                    ConversationStep.PLANO_OBRA_SELECT,
+                    task_options=[{"type": "plano", "discipline": disc, "options": opts}],
+                )
+                lineas = "\n".join(f"{i+1}) {o['name']}" for i, o in enumerate(opts))
+                tipo = f"de {disc} " if disc else ""
+                return (f"Tenés planos {tipo}en varias obras. ¿De cuál?\n\n{lineas}\n\nRespondé con el número.", None)
+            # una sola obra con acceso → usar esa
+            obra_ids = obras_con_planos
+
+        # ── Verificar permisos por disciplina ──────────────────────────────────
+        if not is_staff and disc and len(obra_ids) == 1:
+            allowed = await svc.allowed_disciplines_for_responsible(sender.id, obra_ids[0])
+            if allowed is not None and disc not in allowed:
+                if allowed:
+                    return (f"No tenés acceso al plano de {disc}.\nPodés pedir: {', '.join(allowed)}.", None)
+                return ("No tenés acceso a los planos de esta obra. Consultale al jefe de obra.", None)
+
+        # ── Obra única (o staff) → enviar directo ────────────────────────────
+        plano = await svc.find_latest_for_disciplines(obra_ids, disc)
+        if not plano:
+            if not is_staff and len(obra_ids) == 1:
+                allowed = await svc.allowed_disciplines_for_responsible(sender.id, obra_ids[0])
+                todas = await svc.available_disciplines(obra_ids)
+                disponibles = [d for d in todas if allowed is None or d in allowed]
+            else:
+                disponibles = await svc.available_disciplines(obra_ids)
+            if disc:
+                msg = f"No encontré un plano de {disc} cargado."
             else:
                 msg = "¿De qué plano necesitás? Por ejemplo: electricidad, sanitarios o estructura."
-            if lista:
-                msg += f"\nPlanos disponibles: {lista}."
-            elif disc:
-                msg += " Todavía no hay planos cargados en el sistema."
+            if disponibles:
+                msg += f"\nPlanos disponibles: {', '.join(disponibles)}."
             return (msg, None)
 
+        return self._format_plano_reply(plano, settings)
+
+    async def _pending_plano_obra(self, sender, is_staff: bool) -> bool:
+        """True si el responsable tiene una sesión pendiente de elección de obra para un plano."""
+        if is_staff:
+            return False
+        from app.models.conversation_session import ConversationStep
+        from app.repositories.conversation_session import ConversationSessionRepository
+        sess = await ConversationSessionRepository(self.db).get_by_responsible(sender.id)
+        if not sess or sess.step != ConversationStep.PLANO_OBRA_SELECT:
+            return False
+        if sess.expires_at.tzinfo is None:
+            from datetime import timezone as _tz
+            expires = sess.expires_at.replace(tzinfo=_tz.utc)
+        else:
+            expires = sess.expires_at
+        return datetime.now(timezone.utc) < expires
+
+    async def _handle_plano_obra_selection(self, sender, is_staff: bool, body: str) -> tuple[str, str | None]:
+        """El responsable eligió una obra del menú de desambiguación de planos."""
+        import re
+        from app.core.config import settings
+        from app.models.conversation_session import ConversationStep
+        from app.repositories.conversation_session import ConversationSessionRepository
+        from app.services.plano_service import PlanoService
+
+        sess_repo = ConversationSessionRepository(self.db)
+        sess = await sess_repo.get_by_responsible(sender.id)
+        if not sess or not sess.task_options:
+            await sess_repo.upsert(sender.id, ConversationStep.IDLE)
+            return ("Sesión expirada. Volvé a pedirme el plano.", None)
+
+        ctx = sess.task_options[0]
+        opts = ctx.get("options", [])
+        disc = ctx.get("discipline")
+
+        m = re.search(r"\d+", body)
+        if not m or not (1 <= int(m.group()) <= len(opts)):
+            lineas = "\n".join(f"{i+1}) {o['name']}" for i, o in enumerate(opts))
+            return (f"No entendí. ¿De cuál obra?\n\n{lineas}", None)
+
+        elegida = opts[int(m.group()) - 1]
+        await sess_repo.upsert(sender.id, ConversationStep.IDLE)
+
+        svc = PlanoService(self.db)
+
+        # re-check permissions for chosen obra (defensive: shouldn't fail if opts were pre-filtered)
+        if disc and not is_staff:
+            allowed = await svc.allowed_disciplines_for_responsible(sender.id, elegida["obra_id"])
+            if allowed is not None and disc not in allowed:
+                accessible = ", ".join(allowed) if allowed else "ninguno"
+                return (f"No tenés acceso al plano de {disc} en {elegida['name']}.\nPodés pedir: {accessible}.", None)
+
+        plano = await svc.find_latest_for_disciplines([elegida["obra_id"]], disc)
+        if not plano:
+            tipo = f"de {disc} " if disc else ""
+            return (f"No hay planos {tipo}cargados en {elegida['name']}.", None)
+
+        return self._format_plano_reply(plano, settings)
+
+    def _format_plano_reply(self, plano, settings) -> tuple[str, str | None]:
         base_url = (settings.PUBLIC_BASE_URL or "").rstrip("/")
         url = f"{base_url}/uploads/{plano.file_path}" if base_url else None
         fecha = plano.created_at.strftime("%d/%m/%Y")
         detalle = f" — {plano.name}" if plano.name else ""
-        caption = f"\U0001F4D0 Plano de {plano.discipline}{detalle} (v{plano.version}, cargado {fecha})."
+        caption = f"📐 Plano de {plano.discipline}{detalle} (v{plano.version}, {fecha})."
         if not url:
-            caption += "\nNo puedo adjuntar el archivo todavía (falta configurar la URL pública del sistema)."
+            caption += "\nNo puedo adjuntar el archivo todavía (falta configurar la URL pública)."
         return (caption, url)
 
     async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, sender, is_staff: bool) -> str:

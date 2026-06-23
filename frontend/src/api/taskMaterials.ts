@@ -7,6 +7,7 @@ export interface TaskMaterialCreate {
   unit?: string | null;
   unit_price?: number | null;
   supplier_id?: number | null;
+  responsible_id?: number | null;
   status?: MaterialStatus;
 }
 
@@ -16,6 +17,7 @@ export interface TaskMaterialUpdate {
   unit?: string | null;
   unit_price?: number | null;
   supplier_id?: number | null;
+  responsible_id?: number | null;
   status?: MaterialStatus;
 }
 

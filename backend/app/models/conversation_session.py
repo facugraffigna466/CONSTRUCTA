@@ -14,6 +14,7 @@ class ConversationStep(str, enum.Enum):
     TASK_SELECT = "task_select"
     STATUS_MENU = "status_menu"
     AWAIT_DATE = "await_date"
+    PLANO_OBRA_SELECT = "plano_obra_select"
 
 
 class ConversationSession(Base):
