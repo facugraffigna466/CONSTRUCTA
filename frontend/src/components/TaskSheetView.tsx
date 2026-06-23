@@ -248,6 +248,7 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
   const [highlighted, setHighlighted] = useState(0);
   const [listPos, setListPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const committed = useRef(false);
 
   const all = [{ id: 0, full_name: "Sin responsable", role: null } as unknown as Responsible, ...options];
   const filtered = text.trim()
@@ -276,6 +277,7 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
 
   function commit(opt: Responsible) {
     const id = opt.id ? String(opt.id) : "";
+    committed.current = true;
     setText(id ? opt.full_name : "");
     onSelect(id);
     setOpen(false);
@@ -338,7 +340,7 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
         placeholder="Sin responsable"
         onChange={e => { const v = e.target.value; setText(v); setHighlighted(0); openList(); if (!v.trim()) onSelect(""); }}
         onFocus={openList}
-        onBlur={() => setTimeout(() => { setOpen(false); if (!text.trim()) onSelect(""); }, 150)}
+        onBlur={() => setTimeout(() => { setOpen(false); if (!committed.current && !text.trim()) onSelect(""); }, 150)}
         onKeyDown={handleKey}
         style={{
           width: "100%", boxSizing: "border-box",
@@ -1220,14 +1222,15 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 {fillHandle(idx, 0)}
               </div>
 
-              {/* Responsable — combobox con búsqueda */}
+              {/* Responsable — combobox con búsqueda, abre con un click */}
               <div style={cellSel(idx, 1, {
                 ...cellStyle(2), position: "relative",
                 boxShadow: isActiveCell(task.id, "responsible") ? ACTIVE_CELL_SHADOW : "none",
                 background: isActiveCell(task.id, "responsible") ? "#EBF3FE" : undefined,
-                cursor: "text",
+                cursor: "pointer",
               })}
                 {...cellHandlers(idx, 1)}
+                onClick={() => beginEdit(idx, 1)}
               >
                 {isEditing && editing!.taskId === task.id ? (
                   <ResponsableCombobox
@@ -1235,7 +1238,9 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                     options={activeResponsibles}
                     autoFocus={editing!.activeField === "responsible"}
                     onSelect={(id) => {
-                      setEditing(s => s ? { ...s, responsibleId: id } : s);
+                      // Auto-guardar al elegir del dropdown
+                      const updated = editing ? { ...editing, responsibleId: id } : null;
+                      if (updated) { setEditing(updated); saveEdit(updated); }
                     }}
                     onKeyDown={(e) => handleKeyDown(e as unknown as KeyboardEvent<HTMLInputElement>, "responsible")}
                   />
