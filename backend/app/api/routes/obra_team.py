@@ -60,11 +60,15 @@ async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSes
         if not resp:
             raise HTTPException(status_code=404, detail="Responsible not found")
     elif payload.full_name and payload.whatsapp_number:
+        from app.repositories.responsible import ResponsibleRepository
         from app.schemas.responsible import ResponsibleCreate
-        resp = await ResponsibleService(db).create(
-            ResponsibleCreate(full_name=payload.full_name, whatsapp_number=payload.whatsapp_number, role=None),
-            tenant_id=current_user.tenant_id,
-        )
+        # Si el número ya existe, reutilizar ese Responsible en lugar de crear uno nuevo
+        resp = await ResponsibleRepository(db).get_by_whatsapp(payload.whatsapp_number)
+        if not resp:
+            resp = await ResponsibleService(db).create(
+                ResponsibleCreate(full_name=payload.full_name, whatsapp_number=payload.whatsapp_number, role=None),
+                tenant_id=current_user.tenant_id,
+            )
     else:
         raise HTTPException(status_code=422, detail="Provide responsible_id or full_name + whatsapp_number")
 

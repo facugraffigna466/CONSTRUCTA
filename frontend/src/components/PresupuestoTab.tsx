@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Loader2, Mail, MessageCircle, PackageCheck, Plus, ShoppingCart, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Download, Loader2, Mail, MessageCircle, PackageCheck, Plus, ShoppingCart, X } from "lucide-react";
 import {
   createPurchaseOrder,
   exportPresupuestoExcel,
@@ -16,6 +16,7 @@ import { createMaterial } from "../api/taskMaterials";
 import type { Supplier, Task } from "../types";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
+const COLS = "1fr 80px 115px 110px 150px 90px";
 
 const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
   pendiente: { label: "Pendiente", bg: "#EBF3FF", color: "#2A62C9" },
@@ -362,6 +363,8 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
   const [exporting, setExporting] = useState(false);
   const [actingOrder, setActingOrder] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -394,6 +397,20 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
     }
     return Array.from(map.values());
   }, [data]);
+
+  const filteredGroups = useMemo(() => {
+    if (!search.trim()) return groups;
+    const q = search.toLowerCase();
+    return groups
+      .map(g => ({
+        ...g,
+        rows: g.rows.filter(r =>
+          r.name.toLowerCase().includes(q) ||
+          (r.supplier_name ?? "").toLowerCase().includes(q)
+        ),
+      }))
+      .filter(g => g.title.toLowerCase().includes(q) || g.rows.length > 0);
+  }, [groups, search]);
 
   async function handleSend(order: PurchaseOrder, channel: "whatsapp" | "email") {
     setActingOrder(order.id);
@@ -450,6 +467,31 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
         ))}
       </div>
 
+      {/* ── Buscador ── */}
+      <div style={{ position: "relative" }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: "#9BA3AB", pointerEvents: "none" }}>
+          <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+          <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+        </svg>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar tarea, material o proveedor…"
+          style={{
+            width: "100%", boxSizing: "border-box",
+            padding: "9px 12px 9px 32px", borderRadius: 10,
+            border: "1px solid #E6E7E5", background: "#fff",
+            fontSize: 13, color: "#1A2329", fontFamily: FONT,
+            outline: "none",
+          }}
+        />
+        {search && (
+          <button onClick={() => setSearch("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9BA3AB", padding: 0, display: "flex" }}>
+            <X style={{ width: 13, height: 13 }} />
+          </button>
+        )}
+      </div>
+
       {/* ── Acciones ── */}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <button
@@ -494,76 +536,109 @@ export function PresupuestoTab({ obraId, obraName, tasks = [] }: { obraId: numbe
         </button>
       </div>
 
-      {/* ── Tabla por tarea ── */}
-      <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden" }}>
-        <div style={{
-          display: "grid", gridTemplateColumns: "1fr 90px 100px 110px 130px 92px",
-          padding: "9px 14px", borderBottom: "1px solid #F0EBE2", background: "#FAF8F4",
-        }}>
-          {["Ítem", "Cantidad", "Precio unit.", "Subtotal", "Proveedor", "Estado"].map(h => (
-            <span key={h} style={{ fontSize: 10, fontWeight: 700, color: "#6B7580", letterSpacing: "0.09em", textTransform: "uppercase" }}>{h}</span>
-          ))}
-        </div>
-
-        {groups.length === 0 && (
-          <div style={{ padding: "40px 24px", textAlign: "center" }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FFF0E8", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-              <ShoppingCart style={{ width: 20, height: 20, color: "#E76A2D" }} />
-            </div>
-            <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#3E4A52" }}>Todavía no hay materiales cargados</p>
-            <p style={{ margin: "4px 0 14px", fontSize: 12, color: "#6B7580" }}>
-              Empezá agregando un ítem y elegí a qué tarea de la obra pertenece.
-            </p>
-            <button
-              onClick={() => setShowAddMaterial(true)}
-              disabled={tasks.length === 0}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 18px",
-                borderRadius: 10, fontSize: 13, fontWeight: 700, color: tasks.length === 0 ? "#8E97A0" : "#fff",
-                background: tasks.length === 0 ? "#E6E7E5" : "#FF6B35", border: "none",
-                cursor: tasks.length === 0 ? "not-allowed" : "pointer",
-                boxShadow: tasks.length === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
-              }}
-              title={tasks.length === 0 ? "Creá una tarea primero en el tab Tareas" : undefined}
-            >
-              <Plus style={{ width: 14, height: 14 }} />
-              Agregar primer ítem
-            </button>
-            {tasks.length === 0 && (
-              <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#C97D0E" }}>
-                Necesitás al menos una tarea en la obra. Creala en el tab Tareas.
-              </p>
-            )}
+      {groups.length === 0 ? (
+        <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, padding: "40px 24px", textAlign: "center" }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: "#FFF0E8", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
+            <ShoppingCart style={{ width: 20, height: 20, color: "#E76A2D" }} />
           </div>
-        )}
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: "#3E4A52" }}>Todavía no hay materiales cargados</p>
+          <p style={{ margin: "4px 0 14px", fontSize: 12, color: "#6B7580" }}>
+            Empezá agregando un ítem y elegí a qué tarea de la obra pertenece.
+          </p>
+          <button
+            onClick={() => setShowAddMaterial(true)}
+            disabled={tasks.length === 0}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 18px",
+              borderRadius: 10, fontSize: 13, fontWeight: 700, color: tasks.length === 0 ? "#8E97A0" : "#fff",
+              background: tasks.length === 0 ? "#E6E7E5" : "#FF6B35", border: "none",
+              cursor: tasks.length === 0 ? "not-allowed" : "pointer",
+              boxShadow: tasks.length === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
+            }}
+            title={tasks.length === 0 ? "Creá una tarea primero en el tab Tareas" : undefined}
+          >
+            <Plus style={{ width: 14, height: 14 }} />
+            Agregar primer ítem
+          </button>
+          {tasks.length === 0 && (
+            <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#C97D0E" }}>
+              Necesitás al menos una tarea en la obra. Creala en el tab Tareas.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div style={{ background: "#fff", border: "1px solid #D8D3CA", borderRadius: 12, overflow: "hidden" }}>
 
-        {groups.map(g => (
-          <div key={g.title}>
-            <div style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "7px 14px", background: "#F6F4EF", borderBottom: "1px solid #F0EBE2",
-            }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#3E4A52" }}>{g.title}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: "#5B6770", fontVariantNumeric: "tabular-nums" }}>{money(g.subtotal)}</span>
-            </div>
-            {g.rows.map((r, i) => (
-              <div key={r.material_id} style={{
-                display: "grid", gridTemplateColumns: "1fr 90px 100px 110px 130px 92px",
-                alignItems: "center", padding: "8px 14px",
-                borderBottom: "1px solid #F4F1EB",
-                background: i % 2 === 1 ? "#FBFAF7" : "#fff",
-              }}>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}</span>
-                <span style={{ fontSize: 12, color: "#5B6770", fontVariantNumeric: "tabular-nums" }}>{r.quantity != null ? `${r.quantity} ${r.unit ?? ""}` : "—"}</span>
-                <span style={{ fontSize: 12, color: "#5B6770", fontVariantNumeric: "tabular-nums" }}>{money(r.unit_price)}</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#1A2329", fontVariantNumeric: "tabular-nums" }}>{r.subtotal > 0 ? money(r.subtotal) : "—"}</span>
-                <span style={{ fontSize: 12, color: r.supplier_name ? "#5B6770" : "#C4C9C6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.supplier_name ?? "Sin proveedor"}</span>
-                <span><Pill status={r.status} /></span>
-              </div>
+          {/* ── Encabezado de columnas (aparece una sola vez) ── */}
+          <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, padding: "7px 16px", background: "#F2EFE8", borderBottom: "2px solid #D8D3CA" }}>
+            {["Descripción", "Cant.", "Precio unit.", "Subtotal", "Proveedor", "Estado"].map((h, hi) => (
+              <span key={h} style={{ fontSize: 9.5, fontWeight: 700, color: "#7A7167", letterSpacing: "0.09em", textTransform: "uppercase", textAlign: hi >= 1 && hi <= 3 ? "right" : "left", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>{h}</span>
             ))}
           </div>
-        ))}
-      </div>
+
+          {filteredGroups.length === 0 && (
+            <div style={{ padding: "20px 16px", textAlign: "center", fontSize: 13, color: "#8E97A0" }}>
+              Sin resultados para "<b>{search}</b>"
+            </div>
+          )}
+
+          {filteredGroups.map((g, gi) => {
+            const isOpen = !collapsed.has(gi);
+            const pendCount = g.rows.filter(r => r.status === "pendiente").length;
+            return (
+              <div key={g.title} style={{ borderTop: gi > 0 ? "2px solid #D8D3CA" : "none" }}>
+
+                {/* ── Fila de sección (tarea) ── */}
+                <button
+                  onClick={() => setCollapsed(prev => { const n = new Set(prev); n.has(gi) ? n.delete(gi) : n.add(gi); return n; })}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "9px 16px", background: "#F7F5F0", border: "none", borderBottom: isOpen ? "1px solid #E8E3DA" : "none", cursor: "pointer", textAlign: "left" }}
+                >
+                  <span style={{ color: "#9BA3AB", flexShrink: 0, display: "flex" }}>
+                    {isOpen ? <ChevronDown style={{ width: 13, height: 13 }} /> : <ChevronRight style={{ width: 13, height: 13 }} />}
+                  </span>
+                  <span style={{ width: 3, height: 14, borderRadius: 99, background: "#FF6B35", flexShrink: 0 }} />
+                  <span style={{ fontSize: 11.5, fontWeight: 700, color: "#3E4A52", flex: 1, textTransform: "uppercase", letterSpacing: "0.06em" }}>{g.title}</span>
+                  {pendCount > 0 && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 7px", borderRadius: 4, background: "#EBF3FF", color: "#2A62C9" }}>{pendCount} pend.</span>
+                  )}
+                  {!isOpen && (
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums", marginLeft: 8 }}>{money(g.subtotal)}</span>
+                  )}
+                </button>
+
+                {/* ── Filas de materiales ── */}
+                {isOpen && g.rows.map((r, i) => (
+                  <div key={r.material_id} style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "8px 16px", borderBottom: "1px solid #F0EDE7", background: i % 2 === 0 ? "#fff" : "#FDFCFB" }}>
+                    <span style={{ fontSize: 13, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}</span>
+                    <span style={{ fontSize: 12.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{r.quantity != null ? `${r.quantity} ${r.unit ?? ""}` : "—"}</span>
+                    <span style={{ fontSize: 12.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(r.unit_price)}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{r.subtotal > 0 ? money(r.subtotal) : "—"}</span>
+                    <span style={{ fontSize: 12, color: r.supplier_name ? "#5B6770" : "#C4C9C6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.supplier_name ?? "Sin proveedor"}</span>
+                    <span><Pill status={r.status} /></span>
+                  </div>
+                ))}
+
+                {/* ── Subtotal de la tarea ── */}
+                {isOpen && (
+                  <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "6px 16px", background: "#F2EFE8", borderTop: "1px solid #D8D3CA" }}>
+                    <span style={{ gridColumn: "1 / 4", fontSize: 10.5, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "right" }}>Subtotal</span>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(g.subtotal)}</span>
+                    <span /><span />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* ── Total general (pie de tabla) ── */}
+          <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "11px 16px", background: "#1A2329", borderTop: "2px solid #0E161B" }}>
+            <span style={{ gridColumn: "1 / 4", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "right" }}>Total general</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(data.total_estimado)}</span>
+            <span /><span />
+          </div>
+
+        </div>
+      )}
 
       {/* ── Error de acción sobre pedidos ── */}
       {actionError && (
