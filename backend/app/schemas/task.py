@@ -81,12 +81,17 @@ class TaskRead(BaseModel):
     estimated_progress: int = 0
     created_at: datetime
     updated_at: datetime
+    # Aviso transitorio (no persistido): si al crear/editar se corrió una fecha al
+    # día laboral más cercano, acá viaja el detalle para mostrarlo en la UI.
+    date_adjustment: str | None = None
 
     model_config = {"from_attributes": True}
 
     @classmethod
     def model_validate(cls, obj, **kwargs):  # type: ignore[override]
         instance = super().model_validate(obj, **kwargs)
+        if hasattr(obj, "_date_adjustment"):
+            instance.date_adjustment = obj._date_adjustment
         if hasattr(obj, "_dep_links"):
             links = obj._dep_links or []
             instance.dependency_ids = [l["depends_on_id"] for l in links]

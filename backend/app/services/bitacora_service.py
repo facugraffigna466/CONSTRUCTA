@@ -237,7 +237,29 @@ class BitacoraService:
             )
         if not tasks:
             lines.append("(sin tareas cargadas)")
+        lines.append(await self._calendar_hint(obra_id))
         return "\n".join(lines)
+
+    async def _calendar_hint(self, obra_id: int) -> str:
+        """Describe el calendario laboral para que la IA proponga fechas en días hábiles."""
+        from app.repositories.calendar import CalendarRepository
+
+        cal = await CalendarRepository(self.session).get_for_obra(obra_id)
+        wd = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+        working = [wd[i] for i in range(7) if cal.working_days & (1 << i)]
+        today = date.today()
+        hols = sorted(
+            (e for e in (getattr(cal, "exceptions", []) or []) if not e.is_working and e.date >= today),
+            key=lambda e: e.date,
+        )[:8]
+        hol_str = ", ".join(
+            e.date.strftime("%d/%m/%Y") + (f" ({e.label})" if e.label else "") for e in hols
+        ) or "ninguno cargado"
+        return (
+            f"Calendario laboral: se trabaja {', '.join(working) or '—'}. "
+            "Las fechas que propongas (inicio o fin) deben caer en días laborales — "
+            f"no fines de semana ni feriados. Feriados próximos: {hol_str}."
+        )
 
     async def _analyze(self, transcript: str, obra_id: int | None) -> dict:
         """Llama a Claude con structured output. Lanza si no hay API key."""
@@ -267,7 +289,11 @@ class BitacoraService:
             f"- Hoy es {today}. Interpretá expresiones relativas ('la semana que viene', 'el lunes') contra esa fecha.\n"
             "- Solo sugerí acciones que el audio respalde claramente; en 'reason' citá la frase que lo justifica.\n"
             "- Si una tarea mencionada no matchea ninguna de la lista, usá create_task (no inventes task_id).\n"
-            "- Para reschedule_task mantené la duración original si solo se habló de mover el inicio.\n"
+            "- Para reschedule_task completá SOLO la fecha que se discutió: si se habló de la entrega/fin, mandá "
+            "new_due_date y dejá new_start_date en null; si se habló del inicio, mandá new_start_date y dejá "
+            "new_due_date en null. No completes una fecha que el audio no mencionó.\n"
+            "- Las fechas que propongas (inicio o fin) deben caer en días laborales según el calendario del contexto: "
+            "evitá sábados, domingos y feriados.\n"
             "- Si el audio no contiene nada accionable, devolvé suggestions vacío — no fuerces sugerencias."
         )
 
@@ -320,7 +346,7 @@ class BitacoraService:
                 entry.summary = analysis.get("summary")
                 entry.key_points = analysis.get("key_points") or []
                 entry.suggestions = [
-                    {**s, "applied": False, "dismissed": False, "result_task_id": None}
+                    {**s, "applied": False, "dismissed": False, "result_task_id": None, "result_note": None}
                     for s in (analysis.get("suggestions") or [])
                 ]
                 entry.status = "procesado"
@@ -376,8 +402,10 @@ class BitacoraService:
                 due_date=date.fromisoformat(s["new_due_date"]) if s.get("new_due_date") else None,
             )
             # cascade_dates=True: si la tarea tiene dependientes, se corren en cadena
-            await task_service.update(s["task_id"], update, manager_id, actor=actor, cascade_dates=True)
+            updated = await task_service.update(s["task_id"], update, manager_id, actor=actor, cascade_dates=True)
             s["result_task_id"] = s["task_id"]
+            if getattr(updated, "_date_adjustment", None):
+                s["result_note"] = updated._date_adjustment
 
         elif stype == "create_task":
             responsible_id = None
@@ -403,6 +431,8 @@ class BitacoraService:
                 actor=actor,
             )
             s["result_task_id"] = created.id
+            if getattr(created, "_date_adjustment", None):
+                s["result_note"] = created._date_adjustment
 
         elif stype == "update_status":
             if not s.get("task_id") or not s.get("new_status"):

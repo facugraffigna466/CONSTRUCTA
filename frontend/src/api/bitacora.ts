@@ -14,6 +14,7 @@ export interface BitacoraSuggestion {
   applied: boolean;
   dismissed: boolean;
   result_task_id: number | null;
+  result_note: string | null;
 }
 
 export interface BitacoraEntry {

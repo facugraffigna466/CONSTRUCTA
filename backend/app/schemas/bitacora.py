@@ -17,6 +17,7 @@ class BitacoraSuggestion(BaseModel):
     applied: bool = False
     dismissed: bool = False
     result_task_id: int | None = None
+    result_note: str | None = None   # aviso si se ajustó una fecha al día laboral más cercano
 
 
 class BitacoraEntryRead(BaseModel):
