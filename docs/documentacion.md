@@ -1399,3 +1399,28 @@ El audio de bitácora ya no es solo para responsables: el arquitecto/jefe/admini
 
 ### Pendiente (charlado, no construido aún)
 Feature B: avisar al jefe/manager cuando un responsable contesta un recordatorio. Queda para una próxima.
+
+---
+
+## 2026-06-24 — Bitácora: hardening, badge por obra y fechas a día laboral
+
+Sesión de análisis del módulo de bitácora y tres tandas de mejoras. Tres ramas/PRs.
+
+### A. Hardening de seguridad y robustez — rama `fix/bitacora-criticos` (PR #10, mergeado)
+- **Aislamiento por tenant (fuga de datos / IDOR):** `GET /bitacora` filtraba sin `tenant_id` → un usuario veía bitácoras de otros tenants. Ahora `list_entries` filtra por tenant (LEFT JOIN a `obras`; las entradas sin obra solo las ve quien las creó). Nuevo `get_scoped()` cierra el mismo IDOR en todas las rutas por id (transcript/reprocess/obra/apply/dismiss/delete). Validación de obra por tenant al crear entradas (audio/texto).
+- **I/O no bloqueante:** la transcripción (Whisper, `requests` síncrono, hasta 120 s) y la descarga de audio de Twilio corrían en el event loop → congelaban el worker. Movidas a `asyncio.to_thread`.
+- **Limpieza:** `delete` borra el audio del disco (sin huérfanos); `BACKEND_URL` del front sale de `VITE_API_URL`; estado `pendiente_obra` agregado al front (antes mostraba badge "Error"); N+1 resuelto (`_to_read_bulk`), paginación en el listado y manejo de `stop_reason` (`refusal`/`max_tokens`) en el análisis.
+
+### B. Badge de sugerencias por obra — rama `feature/bitacora-badge` (PR #13, mergeado)
+- `GET /bitacora/pending-count?obra_id=`: cuenta sugerencias sin aplicar/descartar, scopeado por tenant y obra.
+- Badge naranja en el ítem "Bitácora de obra" (contexto de obra), refrescado al cambiar de obra y al navegar.
+- La página de bitácora, al entrar desde una obra, arranca filtrada en esa obra; encabezado "N sin revisar", orden pendientes-primero y filtro "Solo pendientes".
+
+### C. Fechas a día laboral — rama `feature/fechas-laborales` (PR abierto)
+Detectado al probar: al aplicar sugerencias de fecha, el sistema **bloqueaba** con error si la fecha caía en feriado o fin de semana (validación `_assert_dates_working` en create/update). Inconsistente: el cascade ya **ajustaba** con `next_working_day()`.
+- **Snap en vez de bloqueo (sistémico):** nuevo `_snap_working_dates()` corre inicio/fin al próximo día laboral; aplicado en `create`, `update` y `bulk`. Ya nada se rechaza.
+- **Aviso transitorio:** `TaskRead.date_adjustment` lleva el detalle de lo que se movió; en bitácora se guarda en `result_note` y se muestra en la tarjeta de la sugerencia.
+- **IA mejor de entrada:** se pasa el calendario laboral (días hábiles + feriados próximos) a Claude; el prompt de `reschedule_task` ahora completa **solo la fecha discutida** (deja en `null` la que no se mencionó — antes inventaba un inicio).
+
+### Validation
+`py_compile` + `import app.main` ✓ · `tsc -b` ✓ (las 3 ramas) · query de tenant scoping compilada a SQL correcto ✓ · test de la lógica de snap con calendario en memoria (finde/feriado → próximo día laboral; `inicio ≤ fin` preservado) ✓. Verificado e2e por WhatsApp: nota de voz → transcripción → análisis → sugerencias con Sí/No (faltaba crédito en OpenAI; resuelto). Pruebas de browser e2e del snap quedan para correr con el stack levantado.
