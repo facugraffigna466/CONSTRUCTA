@@ -313,15 +313,17 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
-export function BitacoraPage() {
+export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {}) {
   const [obras, setObras] = useState<Obra[]>([]);
-  const [obraId, setObraId] = useState<number | "todas">("todas");
+  // Al entrar desde una obra, la bitácora arranca filtrada en esa obra (es un módulo de la obra).
+  const [obraId, setObraId] = useState<number | "todas">(initialObraId ?? "todas");
   const [entries, setEntries] = useState<BitacoraEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"audio" | "texto">("audio");
+  const [onlyPending, setOnlyPending] = useState(false);
 
   // Grabación con micrófono
   const [recording, setRecording] = useState(false);
@@ -412,6 +414,15 @@ export function BitacoraPage() {
   }
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
+
+  // Sugerencias sin revisar: total para el encabezado, y orden "pendientes primero".
+  const hasPending = (e: BitacoraEntry) => (e.suggestions ?? []).some(s => !s.applied && !s.dismissed);
+  const pendingTotal = entries.reduce(
+    (n, e) => n + (e.suggestions ?? []).filter(s => !s.applied && !s.dismissed).length, 0,
+  );
+  const displayEntries = [...entries]
+    .sort((a, b) => Number(hasPending(b)) - Number(hasPending(a)))
+    .filter(e => !onlyPending || hasPending(e));
 
   return (
     <div style={{ fontFamily: FONT, maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -546,6 +557,26 @@ export function BitacoraPage() {
         )}
       </div>
 
+      {/* Encabezado de sugerencias sin revisar (Sí/No pendiente) */}
+      {!loading && entries.length > 0 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, fontSize: 12.5, fontWeight: 600, color: pendingTotal > 0 ? "#9A5D08" : "#6B7580" }}>
+            <CheckCircle2 style={{ width: 14, height: 14, color: pendingTotal > 0 ? "#E76A2D" : "#1F8A5B" }} />
+            {pendingTotal > 0
+              ? `Tenés ${pendingTotal} sugerencia${pendingTotal === 1 ? "" : "s"} sin revisar`
+              : "No hay sugerencias pendientes"}
+          </span>
+          {pendingTotal > 0 && (
+            <button
+              onClick={() => setOnlyPending(v => !v)}
+              style={{ padding: "5px 12px", borderRadius: 99, fontSize: 11.5, fontWeight: 700, border: "1px solid #E6E7E5", cursor: "pointer", fontFamily: FONT, background: onlyPending ? "#1A2329" : "#fff", color: onlyPending ? "#fff" : "#5B6770" }}
+            >
+              {onlyPending ? "Ver todas" : "Solo pendientes"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Lista de entradas */}
       {loading ? (
         <p style={{ fontSize: 13, color: "#6B7580", textAlign: "center", padding: 24 }}>Cargando bitácora…</p>
@@ -560,9 +591,13 @@ export function BitacoraPage() {
             desde un teléfono registrado como responsable — entra solo a la bitácora.
           </p>
         </div>
+      ) : displayEntries.length === 0 ? (
+        <p style={{ fontSize: 13, color: "#6B7580", textAlign: "center", padding: 24 }}>
+          No hay entradas con sugerencias pendientes.
+        </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {entries.map(e => (
+          {displayEntries.map(e => (
             <EntryCard
               key={e.id}
               entry={e}
