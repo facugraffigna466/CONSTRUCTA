@@ -99,6 +99,11 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
             “{s.reason}”
           </div>
           {error && <div style={{ fontSize: 11.5, color: "#D03A3A", marginTop: 5, fontWeight: 600 }}>{error}</div>}
+          {s.result_note && (
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 5, fontSize: 11.5, color: "#2A62C9", marginTop: 5, fontWeight: 600, lineHeight: 1.4 }}>
+              <Calendar style={{ width: 11, height: 11, flexShrink: 0, marginTop: 1 }} /> {s.result_note}
+            </div>
+          )}
         </div>
         {!done && (
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>

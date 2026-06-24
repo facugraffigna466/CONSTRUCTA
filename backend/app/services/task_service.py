@@ -200,20 +200,30 @@ class TaskService:
                 if node and node.parent_task_id:
                     stack.append(node.parent_task_id)
 
-    async def _assert_dates_working(self, obra_id: int, start_date: date | None, due_date: date | None) -> None:
+    async def _snap_working_dates(
+        self, obra_id: int, start_date: date | None, due_date: date | None
+    ) -> tuple[date | None, date | None, list[str]]:
+        """Corre inicio/fin al próximo día laboral si caen en feriado o fin de semana.
+        No bloquea: devuelve las fechas ajustadas y notas legibles de lo que se movió."""
         if start_date is None and due_date is None:
-            return
+            return start_date, due_date, []
         cal = await self.calendar_repo.get_for_obra(obra_id)
+        result: dict[str, date | None] = {"inicio": start_date, "vencimiento": due_date}
+        notes: list[str] = []
         for field_name, d in [("inicio", start_date), ("vencimiento", due_date)]:
             if d is not None and not is_working_day(cal, d):
-                exc_label = next(
+                snapped = next_working_day(cal, d)
+                result[field_name] = snapped
+                label = next(
                     (e.label for e in (getattr(cal, "exceptions", []) or []) if e.date == d and not e.is_working),
                     None,
                 )
-                detail = f" ({exc_label})" if exc_label else ""
-                raise UnprocessableError(
-                    f"La fecha de {field_name} {d.strftime('%d/%m/%Y')} es un día no laboral para esta obra{detail}."
+                reason = label or "fin de semana"
+                notes.append(
+                    f"{field_name.capitalize()}: {d.strftime('%d/%m/%Y')} ({reason}) → "
+                    f"{snapped.strftime('%d/%m/%Y')} (día laboral más cercano)"
                 )
+        return result["inicio"], result["vencimiento"], notes
 
     # ── bulk create (paste masivo desde Excel) ────────────────────────────────
 
@@ -236,12 +246,12 @@ class TaskService:
             try:
                 if row.responsible_id is not None:
                     await self._assert_responsible_active(row.responsible_id)
-                await self._assert_dates_working(obra_id, row.start_date, row.due_date)
+                s_date, d_date, _ = await self._snap_working_dates(obra_id, row.start_date, row.due_date)
                 task = Task(
                     obra_id=obra_id,
                     title=row.title.strip(),
-                    start_date=row.start_date,
-                    due_date=row.due_date,
+                    start_date=s_date,
+                    due_date=d_date,
                     responsible_id=row.responsible_id,
                     order_index=base_order + i,
                 )
@@ -428,9 +438,13 @@ class TaskService:
         if data.depends_on_id is not None:
             await self._assert_depends_on_valid(data.depends_on_id, data.obra_id)
 
-        await self._assert_dates_working(data.obra_id, data.start_date, data.due_date)
+        snap_start, snap_due, date_notes = await self._snap_working_dates(
+            data.obra_id, data.start_date, data.due_date
+        )
 
         task_data = data.model_dump(exclude={"dependency_links"})
+        task_data["start_date"] = snap_start
+        task_data["due_date"] = snap_due
         task = Task(**task_data)
         task = await self.repo.create(task)
         await self._ensure_team_member(task.obra_id, data.responsible_id)
@@ -449,6 +463,7 @@ class TaskService:
             payload={"actor": actor} if actor else None,
             triggered_by="user",
         )
+        task._date_adjustment = "; ".join(date_notes) if date_notes else None
         await emit_task_created(task, actor)
         return task
 
@@ -546,12 +561,24 @@ class TaskService:
                 changes["depends_on_id"], task.obra_id, current_task_id=task_id
             )
 
+        # Snap (no bloquea): si una fecha que se está cambiando cae en día no laboral,
+        # se corre al próximo día laboral en lugar de rechazar la operación.
+        date_notes: list[str] = []
+        if "start_date" in changes or "due_date" in changes:
+            s2, d2, date_notes = await self._snap_working_dates(
+                task.obra_id,
+                changes.get("start_date") if "start_date" in changes else None,
+                changes.get("due_date") if "due_date" in changes else None,
+            )
+            if "start_date" in changes:
+                changes["start_date"] = s2
+            if "due_date" in changes:
+                changes["due_date"] = d2
+
         new_start = changes.get("start_date", task.start_date)
         new_due   = changes.get("due_date",   task.due_date)
         start_changed = "start_date" in changes and changes["start_date"] != task.start_date
         due_changed   = "due_date"   in changes and changes["due_date"]   != task.due_date
-        if start_changed or due_changed:
-            await self._assert_dates_working(task.obra_id, new_start, new_due)  # type: ignore[arg-type]
 
         if task.status == TaskStatus.COMPLETADA and "estimated_progress" in changes:
             raise UnprocessableError(
@@ -629,6 +656,7 @@ class TaskService:
 
         await self._resolve_update_alerts(task_id, changes, task.obra_id)
         updated._dep_links = await self.repo.get_dependency_links(task_id)  # type: ignore[union-attr]
+        updated._date_adjustment = "; ".join(date_notes) if date_notes else None  # type: ignore[union-attr]
         await emit_task_updated(updated, actor)
         return updated  # type: ignore[return-value]
 
