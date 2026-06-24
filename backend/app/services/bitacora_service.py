@@ -135,6 +135,35 @@ class BitacoraService:
         q = q.limit(limit).offset(offset)
         return list((await self.session.execute(q)).scalars().all())
 
+    async def pending_suggestions_count(
+        self,
+        *,
+        tenant_id: int | None = None,
+        user_id: int | None = None,
+        obra_id: int | None = None,
+    ) -> int:
+        """Cantidad de sugerencias sin aplicar ni descartar (lo que espera el Sí/No
+        del jefe). Scopeado por tenant y, si se pasa obra_id, por esa obra (el badge
+        es por obra). Alimenta el badge del menú de cada obra."""
+        q = select(BitacoraEntry.suggestions).where(BitacoraEntry.status == "procesado")
+        if obra_id is not None:
+            q = q.where(BitacoraEntry.obra_id == obra_id)
+        if tenant_id is not None:
+            q = q.outerjoin(Obra, BitacoraEntry.obra_id == Obra.id).where(
+                or_(
+                    Obra.tenant_id == tenant_id,
+                    and_(BitacoraEntry.obra_id.is_(None), BitacoraEntry.created_by == user_id),
+                )
+            )
+        rows = (await self.session.execute(q)).scalars().all()
+        total = 0
+        for suggestions in rows:
+            if suggestions:
+                total += sum(
+                    1 for s in suggestions if not s.get("applied") and not s.get("dismissed")
+                )
+        return total
+
     async def create_entry(
         self,
         *,

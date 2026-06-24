@@ -143,6 +143,17 @@ async def list_entries(
     return await _to_read_bulk(entries, db)
 
 
+@router.get("/bitacora/pending-count")
+async def pending_count(
+    db: DbSession, current_user: CurrentUser, obra_id: int | None = None
+) -> dict[str, int]:
+    """Sugerencias sin revisar (Sí/No pendiente) de una obra — para el badge del menú."""
+    count = await BitacoraService(db).pending_suggestions_count(
+        tenant_id=current_user.tenant_id, user_id=current_user.id, obra_id=obra_id
+    )
+    return {"count": count}
+
+
 @router.post("/bitacora/{entry_id}/transcript", response_model=BitacoraEntryRead)
 async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser):
     if not data.text.strip():

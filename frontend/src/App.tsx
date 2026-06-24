@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { clearToken, getToken, setToken } from "./lib/tokenStorage";
 import { fetchObra } from "./api/obras";
+import { fetchBitacoraPendingCount } from "./api/bitacora";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ActivityToast } from "./components/ActivityToast";
 import { ObraSetupWizard } from "./components/ObraSetupWizard";
@@ -46,6 +47,7 @@ function App() {
   const [selectedObra, setSelectedObra] = useState<Obra | null>(null);
   const [activeTab, setActiveTab]       = useState<ObraTab>("resumen");
   const [obraCounts, setObraCounts]     = useState({ tasks: 0, alerts: 0, responsibles: 0 });
+  const [bitacoraPending, setBitacoraPending] = useState(0);
   const [showWizard, setShowWizard]     = useState(false);
   const [focusAlert, setFocusAlert]     = useState<{ taskId: number; field: AlertFocusField } | null>(null);
   const [pinnedObras, setPinnedObras]   = useState<Obra[]>(() => {
@@ -72,6 +74,13 @@ function App() {
   useEffect(() => {
     if (authed && !userLoading && !isOnboardingDone()) setShowOnboarding(true);
   }, [authed, userLoading]);
+
+  // Badge de sugerencias de bitácora sin revisar — por obra (es un módulo de la obra).
+  // Se refresca al cambiar de obra y al navegar (p.ej. al volver de la Bitácora tras aplicar/descartar).
+  useEffect(() => {
+    if (!authed || userLoading || !selectedObra) { setBitacoraPending(0); return; }
+    fetchBitacoraPendingCount(selectedObra.id).then(setBitacoraPending).catch(() => { /* ignore */ });
+  }, [authed, userLoading, selectedObra, activePage]);
 
   const inviteToken                     = getInviteToken();
 
@@ -205,7 +214,7 @@ function App() {
       if (role !== "admin") return <AccessDenied />;
       return <AdminPage />;
     }
-    if (activePage === "bitacora") return <BitacoraPage />;
+    if (activePage === "bitacora") return <BitacoraPage initialObraId={selectedObra?.id} />;
     if (activePage === "presupuestos") return <PresupuestosPage />;
     if (role !== "admin") return <AccessDenied />;
     return <ConfiguracionPage />;
@@ -226,6 +235,7 @@ function App() {
         activeTab={activeTab}
         onTabChange={handleTabChange}
         obraCounts={obraCounts}
+        bitacoraPending={bitacoraPending}
       >
         {renderPage()}
       </AppLayout>

@@ -42,6 +42,13 @@ export async function fetchBitacora(obraId?: number): Promise<BitacoraEntry[]> {
   return data;
 }
 
+export async function fetchBitacoraPendingCount(obraId?: number): Promise<number> {
+  const { data } = await apiClient.get<{ count: number }>("/bitacora/pending-count", {
+    params: obraId ? { obra_id: obraId } : undefined,
+  });
+  return data.count;
+}
+
 export async function createAudioEntry(obraId: number, file: File | Blob, filename = "audio.webm"): Promise<BitacoraEntry> {
   const form = new FormData();
   form.append("file", file, file instanceof File ? file.name : filename);

@@ -34,6 +34,7 @@ interface SidebarProps {
   activeTab?: ObraTab;
   onTabChange?: (tab: ObraTab) => void;
   obraCounts?: { tasks: number; alerts: number };
+  bitacoraPending?: number;
   currentUser?: { name: string; initials: string; color: string; roleLabel: string };
   workspaceName?: string | null;
   collapsed?: boolean;
@@ -113,7 +114,7 @@ function NavItem({
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, currentUser, workspaceName, collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, bitacoraPending, currentUser, workspaceName, collapsed = false, onToggle }: SidebarProps) {
   const wsName = workspaceName || "Mi empresa";
   const wsInitials = wsName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "ME";
   const { role } = useUser();
@@ -281,6 +282,8 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
             <NavItem
               label="Bitácora de obra"
               active={activePage === "bitacora"}
+              count={(bitacoraPending ?? 0) > 0 ? bitacoraPending : undefined}
+              countOrange={(bitacoraPending ?? 0) > 0}
               onClick={() => onNavigate("bitacora")}
               icon={<ChatBubbleLeftEllipsisIcon style={ICON_SIZE} />}
             />
