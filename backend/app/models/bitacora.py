@@ -38,6 +38,8 @@ class BitacoraEntry(Base):
         nullable=False,
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Último recordatorio "elegí la obra" enviado al emisor (para repetir cada 30 min)
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     obra: Mapped["Obra | None"] = relationship("Obra")
     responsible: Mapped["Responsible | None"] = relationship("Responsible")

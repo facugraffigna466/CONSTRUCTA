@@ -55,6 +55,14 @@ async def _job_check_no_response() -> None:
     logger.info("Scheduler: mark_no_response → %d alerts", count)
 
 
+async def _job_remind_bitacora_obra() -> None:
+    logger.info("Scheduler: remind_bitacora_obra")
+    from app.services.message_service import MessageService
+    async with _db() as db:
+        count = await MessageService(db).remind_pending_bitacora_obra()
+    logger.info("Scheduler: remind_bitacora_obra → %d sent", count)
+
+
 def _parse_hours() -> list[int]:
     raw = os.getenv("REMINDER_HOURS_AHEAD", "24,72")
     return [int(h.strip()) for h in raw.split(",") if h.strip().isdigit()]
@@ -90,6 +98,16 @@ def start_scheduler() -> None:
         id="check_no_response",
         replace_existing=True,
         misfire_grace_time=600,
+    )
+
+    # Recordatorio de notas de voz pendientes de asignar obra — cada 15 min
+    # (el servicio aplica la cadencia de 30 min y el tope de 48 h internamente).
+    scheduler.add_job(
+        _job_remind_bitacora_obra,
+        CronTrigger(minute="*/15"),
+        id="remind_bitacora_obra",
+        replace_existing=True,
+        misfire_grace_time=300,
     )
 
     scheduler.start()

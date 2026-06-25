@@ -214,7 +214,7 @@ function App() {
       if (role !== "admin") return <AccessDenied />;
       return <AdminPage />;
     }
-    if (activePage === "bitacora") return <BitacoraPage initialObraId={selectedObra?.id} />;
+    if (activePage === "bitacora") return <BitacoraPage obra={selectedObra ?? null} />;
     if (activePage === "presupuestos") return <PresupuestosPage />;
     if (role !== "admin") return <AccessDenied />;
     return <ConfiguracionPage />;
