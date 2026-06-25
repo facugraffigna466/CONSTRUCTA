@@ -483,13 +483,19 @@ class BitacoraService:
         elif stype == "create_task":
             responsible_id = None
             if s.get("responsible_name"):
-                resp = (await self.session.execute(
-                    select(Responsible).where(
-                        Responsible.obra_id == entry.obra_id,
-                        Responsible.is_active == True,  # noqa: E712
-                        Responsible.full_name.ilike(f"%{s['responsible_name']}%"),
-                    )
-                )).scalars().first()
+                # Responsible es global por tenant (ya no tiene obra_id): matchear por
+                # nombre dentro del tenant de la obra. Si no hay match, la tarea se crea
+                # sin responsable (no es un error).
+                obra_tenant = (await self.session.execute(
+                    select(Obra.tenant_id).where(Obra.id == entry.obra_id)
+                )).scalar_one_or_none()
+                q = select(Responsible).where(
+                    Responsible.is_active == True,  # noqa: E712
+                    Responsible.full_name.ilike(f"%{s['responsible_name']}%"),
+                )
+                if obra_tenant is not None:
+                    q = q.where(Responsible.tenant_id == obra_tenant)
+                resp = (await self.session.execute(q)).scalars().first()
                 responsible_id = resp.id if resp else None
             created = await task_service.create(
                 TaskCreate(
