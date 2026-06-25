@@ -1465,3 +1465,19 @@ Tres mejoras de uso real ("pensándolo como usuario") sobre el módulo de bitác
 
 ### Validation
 `py_compile` + `import app.main` ✓ · `emit_bitacora_created` / parámetro `edits` / schema presentes ✓ · `tsc -b` exit 0 ✓. Pruebas e2e en vivo (feedback por WhatsApp y toast en tiempo real) quedan pendientes de correr con el stack levantado.
+
+---
+
+## 2026-06-25 — Bitácora: vínculo tarea↔nota de voz y búsqueda/filtros (PR #19)
+
+Dos mejoras de trazabilidad y usabilidad sobre el módulo de bitácora.
+
+### A. Vínculo tarea ↔ nota de voz (trazabilidad navegable)
+- `GET /tasks/{id}/bitacora` (`BitacoraService.list_for_task`): devuelve las notas cuyas sugerencias **aplicadas** originaron o modificaron esa tarea. Reusa el `result_task_id` que ya guarda cada sugerencia (filtra en Python sobre las entradas de la obra; sin tabla nueva), scopeado por tenant.
+- Frontend: nuevo componente `TaskBitacoraOrigin.tsx` embebido en `TaskFormModal` (modo edición) → sección **"Origen — Bitácora"** que, por cada nota vinculada, muestra la acción (*"Reprogramada por nota de voz de Juan · fecha"*), el resumen, la cita del audio y el **audio reproducible**. La dirección tarea → audio queda completa; la inversa (nota → tarea navegable) se deja como follow-up.
+
+### B. Búsqueda y filtros en la bitácora
+- Barra de filtros (client-side sobre las entradas de la obra): **búsqueda** por texto (resumen, transcripción, puntos clave) o responsable; **filtro por tipo** de sugerencia (mover/crear/estado/nota); **filtro por fecha** (hoy / 7 / 30 días). Se combinan con el "solo pendientes" existente.
+
+### Validation
+`py_compile` + `import app.main` ✓ · `list_for_task` presente ✓ · `tsc -b` exit 0 ✓. Prueba e2e en vivo (sección "Origen" en una tarea con audio, filtros con volumen real) queda pendiente con el stack levantado.
