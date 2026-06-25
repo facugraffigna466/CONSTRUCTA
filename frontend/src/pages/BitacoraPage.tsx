@@ -8,7 +8,6 @@ import {
   dismissSuggestion, fetchBitacora, reprocessEntry, setTranscript,
   type BitacoraEntry, type BitacoraSuggestion,
 } from "../api/bitacora";
-import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
@@ -318,10 +317,9 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
-export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {}) {
-  const [obras, setObras] = useState<Obra[]>([]);
-  // Al entrar desde una obra, la bitácora arranca filtrada en esa obra (es un módulo de la obra).
-  const [obraId, setObraId] = useState<number | "todas">(initialObraId ?? "todas");
+export function BitacoraPage({ obra }: { obra: Obra | null }) {
+  // La bitácora es por obra: la página queda fija a la obra desde la que se entró.
+  const obraId = obra?.id ?? null;
   const [entries, setEntries] = useState<BitacoraEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -340,13 +338,9 @@ export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {})
   const fileRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
+    if (obraId == null) { setLoading(false); return; }
     try {
-      const [obrasData, entriesData] = await Promise.all([
-        fetchObras(),
-        fetchBitacora(obraId === "todas" ? undefined : obraId),
-      ]);
-      setObras(obrasData);
-      setEntries(entriesData);
+      setEntries(await fetchBitacora(obraId));
     } catch { /* backend caído */ } finally {
       setLoading(false);
     }
@@ -354,7 +348,7 @@ export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {})
 
   useEffect(() => { setLoading(true); load(); }, [load]);
 
-  const targetObraId = obraId === "todas" ? (obras[0]?.id ?? null) : obraId;
+  const targetObraId = obraId;
 
   function replaceEntry(updated: BitacoraEntry) {
     setEntries(prev => prev.map(e => (e.id === updated.id ? updated : e)));
@@ -440,14 +434,11 @@ export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {})
             Grabá o mandá un audio de WhatsApp desde la obra — la IA lo resume y te propone acciones sobre el plan.
           </p>
         </div>
-        <select
-          value={obraId}
-          onChange={e => setObraId(e.target.value === "todas" ? "todas" : Number(e.target.value))}
-          style={{ padding: "8px 12px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
-        >
-          <option value="todas">Todas las obras</option>
-          {obras.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
+        {obra && (
+          <span style={{ padding: "7px 14px", fontSize: 12.5, fontWeight: 700, borderRadius: 10, background: "#F4F2EE", color: "#1A2329", whiteSpace: "nowrap" }}>
+            {obra.name}
+          </span>
+        )}
       </div>
 
       {/* Creador de entradas */}
@@ -466,11 +457,6 @@ export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {})
               {m === "audio" ? "🎙️ Audio" : "✍️ Texto"}
             </button>
           ))}
-          {obraId === "todas" && obras.length > 0 && (
-            <span style={{ marginLeft: "auto", alignSelf: "center", fontSize: 11, color: "#7D7973" }}>
-              Se registra en: <strong style={{ color: "#5B6770" }}>{obras[0]?.name}</strong> (elegí otra arriba)
-            </span>
-          )}
         </div>
 
         {mode === "audio" ? (
@@ -606,7 +592,7 @@ export function BitacoraPage({ initialObraId }: { initialObraId?: number } = {})
             <EntryCard
               key={e.id}
               entry={e}
-              obras={obras}
+              obras={obra ? [obra] : []}
               onUpdated={replaceEntry}
               onDeleted={id => setEntries(prev => prev.filter(x => x.id !== id))}
             />
