@@ -6,7 +6,7 @@ import {
 import {
   applySuggestion, assignObra, createAudioEntry, createTextEntry, deleteEntry,
   dismissSuggestion, fetchBitacora, fetchBitacoraUnassigned, reprocessEntry, setTranscript,
-  type BitacoraEntry, type BitacoraSuggestion,
+  type BitacoraEntry, type BitacoraSuggestion, type SuggestionEdit,
 } from "../api/bitacora";
 import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
@@ -41,14 +41,30 @@ function fmtDate(d: string | null): string {
 
 // ─── Tarjeta de sugerencia ────────────────────────────────────────────────────
 
+const SUGG_STATUS_OPTIONS = ["pendiente", "en_progreso", "bloqueada", "completada", "cancelada"];
+const SUGG_INPUT: React.CSSProperties = { fontSize: 12, padding: "4px 7px", borderRadius: 7, border: "1px solid #E6E7E5", fontFamily: FONT, outline: "none" };
+
 function SuggestionCard({ s, index, entryId, onUpdated }: {
   s: BitacoraSuggestion; index: number; entryId: number;
   onUpdated: (e: BitacoraEntry) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [edit, setEdit] = useState<SuggestionEdit>({
+    new_start_date: s.new_start_date,
+    new_due_date: s.new_due_date,
+    new_status: s.new_status,
+    title: s.title,
+    responsible_name: s.responsible_name,
+  });
   const meta = SUGG_META[s.type] ?? SUGG_META.note;
   const done = s.applied || s.dismissed;
+  const editable = s.type !== "note";
+
+  function setField(k: keyof SuggestionEdit, v: string) {
+    setEdit(prev => ({ ...prev, [k]: v || null }));
+  }
 
   async function act(fn: () => Promise<BitacoraEntry>) {
     setBusy(true);
@@ -73,6 +89,39 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
     detail = <>«{s.task_title ?? `Tarea #${s.task_id}`}» → <strong>{s.new_status?.replace("_", " ")}</strong></>;
   }
 
+  let editForm: React.ReactNode = null;
+  if (editing && s.type === "reschedule_task") {
+    editForm = (
+      <div style={{ display: "flex", gap: 10, marginTop: 5, flexWrap: "wrap" }}>
+        <label style={{ fontSize: 11, color: "#6B7580", display: "flex", flexDirection: "column", gap: 2 }}>Inicio
+          <input type="date" value={edit.new_start_date ?? ""} onChange={e => setField("new_start_date", e.target.value)} style={SUGG_INPUT} /></label>
+        <label style={{ fontSize: 11, color: "#6B7580", display: "flex", flexDirection: "column", gap: 2 }}>Fin
+          <input type="date" value={edit.new_due_date ?? ""} onChange={e => setField("new_due_date", e.target.value)} style={SUGG_INPUT} /></label>
+      </div>
+    );
+  } else if (editing && s.type === "create_task") {
+    editForm = (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 5 }}>
+        <input placeholder="Título de la tarea" value={edit.title ?? ""} onChange={e => setField("title", e.target.value)} style={{ ...SUGG_INPUT, width: "100%", boxSizing: "border-box" }} />
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <label style={{ fontSize: 11, color: "#6B7580", display: "flex", flexDirection: "column", gap: 2 }}>Inicio
+            <input type="date" value={edit.new_start_date ?? ""} onChange={e => setField("new_start_date", e.target.value)} style={SUGG_INPUT} /></label>
+          <label style={{ fontSize: 11, color: "#6B7580", display: "flex", flexDirection: "column", gap: 2 }}>Fin
+            <input type="date" value={edit.new_due_date ?? ""} onChange={e => setField("new_due_date", e.target.value)} style={SUGG_INPUT} /></label>
+        </div>
+        <input placeholder="Responsable (nombre)" value={edit.responsible_name ?? ""} onChange={e => setField("responsible_name", e.target.value)} style={{ ...SUGG_INPUT, width: "100%", boxSizing: "border-box" }} />
+      </div>
+    );
+  } else if (editing && s.type === "update_status") {
+    editForm = (
+      <div style={{ marginTop: 5 }}>
+        <select value={edit.new_status ?? ""} onChange={e => setField("new_status", e.target.value)} style={{ ...SUGG_INPUT, cursor: "pointer" }}>
+          {SUGG_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o.replace("_", " ")}</option>)}
+        </select>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       border: `1px solid ${s.applied ? "#BFE3CE" : s.dismissed ? "#EFECE6" : "#FDDFC8"}`,
@@ -94,7 +143,8 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
           <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", color: s.applied ? "#1F8A5B" : "#E85A26" }}>
             {meta.label}{s.applied && " · aplicada"}{s.dismissed && " · descartada"}
           </div>
-          {detail && <div style={{ fontSize: 12.5, color: "#1A2329", marginTop: 3, lineHeight: 1.45 }}>{detail}</div>}
+          {!editing && detail && <div style={{ fontSize: 12.5, color: "#1A2329", marginTop: 3, lineHeight: 1.45 }}>{detail}</div>}
+          {editForm}
           <div style={{ fontSize: 11.5, color: "#6B7580", marginTop: 3, lineHeight: 1.45, fontStyle: "italic" }}>
             “{s.reason}”
           </div>
@@ -107,6 +157,16 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
         </div>
         {!done && (
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+            {editable && (
+              <button
+                onClick={() => setEditing(v => !v)}
+                disabled={busy}
+                title="Ajustar antes de aplicar"
+                style={{ padding: "5px 9px", borderRadius: 8, fontSize: 11, fontWeight: 600, color: editing ? "#E85A26" : "#6B7580", background: "#fff", border: `1px solid ${editing ? "#FDDFC8" : "#E6E7E5"}`, cursor: "pointer", fontFamily: FONT }}
+              >
+                {editing ? "Cancelar" : "Editar"}
+              </button>
+            )}
             <button
               onClick={() => act(() => dismissSuggestion(entryId, index))}
               disabled={busy}
@@ -115,7 +175,7 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
               Descartar
             </button>
             <button
-              onClick={() => act(() => applySuggestion(entryId, index))}
+              onClick={() => act(() => applySuggestion(entryId, index, editing ? edit : undefined))}
               disabled={busy}
               style={{
                 display: "inline-flex", alignItems: "center", gap: 5,

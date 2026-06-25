@@ -264,3 +264,22 @@ async def emit_task_deleted(task_id: int, obra_id: int, title: str, actor: dict 
     }
     await sio.emit("task_deleted", payload, room=f"obra_{obra_id}")
     logger.debug("task_deleted taskId=%d obraId=%d", task_id, obra_id)
+
+
+async def emit_bitacora_created(
+    *, obra_id: int, entry_id: int, summary: str | None,
+    reporter_name: str | None, actor_id: int | None, source: str,
+) -> None:
+    """Avisa a la sala de la obra que llegó/se procesó una nota de voz (toast para el jefe)."""
+    if not obra_id:
+        return
+    payload = {
+        "entryId": entry_id,
+        "obraId": obra_id,
+        "summary": summary,
+        "reporterName": reporter_name,
+        "actorId": actor_id,   # quién la creó (si fue staff por la web) — para no notificarse a sí mismo
+        "source": source,      # "whatsapp" | "web"
+    }
+    await sio.emit("bitacora_created", payload, room=f"obra_{obra_id}")
+    logger.debug("bitacora_created entryId=%d obraId=%d", entry_id, obra_id)

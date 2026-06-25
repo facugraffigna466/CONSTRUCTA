@@ -395,6 +395,21 @@ class BitacoraService:
                         payload={"entry_id": entry.id, "suggestions_count": len(entry.suggestions or [])},
                         triggered_by="system",
                     )
+                    # Aviso en tiempo real al jefe (toast): llegó una nota de voz.
+                    reporter = None
+                    if entry.responsible_id:
+                        reporter = (await self.session.execute(
+                            select(Responsible.full_name).where(Responsible.id == entry.responsible_id)
+                        )).scalar_one_or_none()
+                    from app.core.socket_manager import emit_bitacora_created
+                    await emit_bitacora_created(
+                        obra_id=entry.obra_id,
+                        entry_id=entry.id,
+                        summary=entry.summary,
+                        reporter_name=reporter,
+                        actor_id=entry.created_by,
+                        source=entry.source,
+                    )
         except UnprocessableError as exc:
             entry.status = "pendiente_analisis" if entry.transcript else entry.status
             entry.error = str(exc.detail) if hasattr(exc, "detail") else str(exc)
@@ -409,7 +424,8 @@ class BitacoraService:
     # ── Aplicar sugerencias ───────────────────────────────────────────────────
 
     async def apply_suggestion(
-        self, entry_id: int, index: int, manager_id: int, actor: dict | None = None
+        self, entry_id: int, index: int, manager_id: int, actor: dict | None = None,
+        edits: dict | None = None,
     ) -> BitacoraEntry:
         entry = await self.get_or_raise(entry_id)
         suggestions = list(entry.suggestions or [])
@@ -420,6 +436,12 @@ class BitacoraService:
             return entry
         if not entry.obra_id:
             raise UnprocessableError("Asigná la entrada a una obra antes de aplicar sugerencias.")
+
+        # El jefe puede ajustar la sugerencia antes de aplicarla (la IA propone, él decide).
+        if edits:
+            for k in ("new_start_date", "new_due_date", "new_status", "title", "responsible_name", "description"):
+                if k in edits:
+                    s[k] = edits[k]
 
         task_service = TaskService(self.session)
         stype = s.get("type")
@@ -491,6 +513,8 @@ class BitacoraService:
         suggestions[index] = s
         entry.suggestions = suggestions  # reasignar para que SQLAlchemy detecte el cambio
         await self.session.flush()
+        # Cierra el loop: avisa por WhatsApp al que mandó la nota que su reporte se aplicó.
+        await self._notify_reporter(entry, self._confirmation_text(s, (actor or {}).get("name")), manager_id)
         return entry
 
     async def dismiss_suggestion(self, entry_id: int, index: int) -> BitacoraEntry:
@@ -504,3 +528,52 @@ class BitacoraService:
         entry.suggestions = suggestions
         await self.session.flush()
         return entry
+
+    def _fmt_date(self, iso: str | None) -> str:
+        if not iso:
+            return ""
+        try:
+            return date.fromisoformat(iso).strftime("%d/%m/%Y")
+        except ValueError:
+            return iso
+
+    def _confirmation_text(self, s: dict, actor_name: str | None) -> str:
+        who = f"{actor_name} " if actor_name else ""
+        t = s.get("type")
+        if t == "reschedule_task":
+            ref = s.get("task_title") or f"tarea #{s.get('task_id')}"
+            partes = []
+            if s.get("new_start_date"):
+                partes.append(f"inicio {self._fmt_date(s['new_start_date'])}")
+            if s.get("new_due_date"):
+                partes.append(f"fin {self._fmt_date(s['new_due_date'])}")
+            extra = f": {' · '.join(partes)}" if partes else ""
+            return f"✅ {who}reprogramó «{ref}»{extra} a partir de tu nota de voz."
+        if t == "create_task":
+            return f"✅ {who}creó la tarea «{s.get('title') or 'nueva tarea'}» a partir de tu nota de voz."
+        if t == "update_status":
+            ref = s.get("task_title") or f"tarea #{s.get('task_id')}"
+            estado = (s.get("new_status") or "").replace("_", " ")
+            return f"✅ {who}marcó «{ref}» como {estado} a partir de tu nota de voz."
+        return f"✅ {who}registró tu nota en la bitácora de la obra. ¡Gracias!"
+
+    async def _notify_reporter(self, entry: BitacoraEntry, text: str, manager_id: int | None) -> None:
+        """Avisa por WhatsApp a quien mandó la nota (salvo que sea quien está aplicando).
+        Nunca rompe el flujo si el envío falla."""
+        from app.integrations.twilio.client import send_whatsapp_message
+        from app.models.user import User
+        number = None
+        if entry.responsible_id is not None:
+            number = (await self.session.execute(
+                select(Responsible.whatsapp_number).where(Responsible.id == entry.responsible_id)
+            )).scalar_one_or_none()
+        elif entry.created_by is not None and entry.created_by != manager_id:
+            number = (await self.session.execute(
+                select(User.whatsapp_number).where(User.id == entry.created_by)
+            )).scalar_one_or_none()
+        if not number:
+            return
+        try:
+            await send_whatsapp_message(number, text)
+        except Exception:
+            logger.exception("No se pudo notificar al emisor de la bitácora %s", entry.id)
