@@ -1424,3 +1424,24 @@ Detectado al probar: al aplicar sugerencias de fecha, el sistema **bloqueaba** c
 
 ### Validation
 `py_compile` + `import app.main` ✓ · `tsc -b` ✓ (las 3 ramas) · query de tenant scoping compilada a SQL correcto ✓ · test de la lógica de snap con calendario en memoria (finde/feriado → próximo día laboral; `inicio ≤ fin` preservado) ✓. Verificado e2e por WhatsApp: nota de voz → transcripción → análisis → sugerencias con Sí/No (faltaba crédito en OpenAI; resuelto). Pruebas de browser e2e del snap quedan para correr con el stack levantado.
+
+---
+
+## 2026-06-25 — Bitácora por obra + asignación garantizada de la nota de voz (PR #15)
+
+La bitácora pasó a ser estrictamente **un módulo de cada obra**, y se blindó el caso del audio de WhatsApp que queda sin obra (emisor con varias obras que no responde "¿para qué obra?").
+
+### A. Página fija a la obra
+- Se entra a la bitácora desde el menú de cada obra → la página queda **fija a esa obra**: se quitó el selector "Todas las obras" y se muestra el nombre de la obra como etiqueta. Carga y registra solo en esa obra.
+
+### B. Recordatorio automático (no se pierde el audio)
+- Nuevo job en el scheduler (`_job_remind_bitacora_obra`, cada 15 min) que llama a `MessageService.remind_pending_bitacora_obra()`.
+- Si una nota quedó `pendiente_obra` (sin obra), le recuerda al **emisor** por WhatsApp **cada 30 min** que elija obra, **en horario laboral** (ventana del responsable; staff 8–20), hasta un **tope de 48 h**. Migración **0037**: columna `reminded_at` para la cadencia.
+- Se amplió la ventana de match de `_pending_bitacora_obra` de 30 min a **7 días**: la respuesta tardía (tras los recordatorios) ahora **sí asigna** la obra (antes se perdía pasados 30 min).
+
+### C. Red de seguridad — sección "Sin asignar" (asignación manual del jefe)
+- Si el emisor nunca responde, la nota no queda huérfana: `GET /bitacora/unassigned` (scopeado por tenant vía `Responsible.tenant_id` o `User.tenant_id`) lista las notas sin obra del equipo, y la bitácora de cualquier obra las muestra arriba en una sección **"Sin asignar"** con selector de obra para que el **jefe** las asigne a mano.
+- Se endureció `get_scoped`: las notas de responsables sin obra (`created_by` nulo) ahora también se aíslan por tenant vía `Responsible.tenant_id`.
+
+### Validation
+`py_compile` + `import app.main` ✓ · `tsc -b` ✓ · queries de recordatorio (cap 48h + cadencia 30min) y de `unassigned` (scoping por tenant) compiladas a SQL correcto ✓ · rebase limpio sobre main. Pruebas e2e por WhatsApp (recordatorio a los 30 min) y de la sección "Sin asignar" quedan para correr con el stack levantado y la migración 0037 aplicada.
