@@ -1445,3 +1445,23 @@ La bitácora pasó a ser estrictamente **un módulo de cada obra**, y se blindó
 
 ### Validation
 `py_compile` + `import app.main` ✓ · `tsc -b` ✓ · queries de recordatorio (cap 48h + cadencia 30min) y de `unassigned` (scoping por tenant) compiladas a SQL correcto ✓ · rebase limpio sobre main. Pruebas e2e por WhatsApp (recordatorio a los 30 min) y de la sección "Sin asignar" quedan para correr con el stack levantado y la migración 0037 aplicada.
+
+---
+
+## 2026-06-25 — Bitácora: feedback al emisor, editar sugerencia y aviso en vivo (PR #17)
+
+Tres mejoras de uso real ("pensándolo como usuario") sobre el módulo de bitácora.
+
+### A. Confirmación de vuelta al que reportó (cierra el loop)
+- Al **aplicar** una sugerencia, el sistema le manda un WhatsApp a **quien mandó la nota** (responsable o staff, salvo que sea el propio jefe que aplica): *"✅ Pedro reprogramó «Estructura»: fin 25/07/2026 a partir de tu nota de voz."*. Mensaje específico por tipo (mover/crear/estado/nota). Si el envío falla, no rompe el flujo.
+- `bitacora_service`: helpers `_confirmation_text()` y `_notify_reporter()`. Se notifica solo al aplicar (positivo), no al descartar.
+
+### B. Editar la sugerencia antes de aplicar
+- La IA propone, el jefe ajusta: botón **Editar** en la tarjeta con inputs según el tipo (fechas para mover/crear, título + responsable para crear, estado para cambiar).
+- `POST /bitacora/{id}/suggestions/{idx}/apply` acepta un **body opcional** `BitacoraSuggestionEdit`; el servicio mergea los ajustes (`exclude_unset`) en la sugerencia antes de ejecutar y los persiste para reflejarlos en la tarjeta.
+
+### C. Aviso en tiempo real al jefe (toast)
+- Al procesarse una nota se emite `bitacora_created` a la sala `obra_{id}` (`socket_manager.emit_bitacora_created`). Como en `connect` el usuario se une a **todas** sus obras, el jefe ve el toast *"X mandó una nota de voz"* (con el resumen) esté donde esté en la app. Reusa el `ActivityToast`/`useActivityFeed` existentes; no se notifica a sí mismo si la cargó él desde la web (`actorId`).
+
+### Validation
+`py_compile` + `import app.main` ✓ · `emit_bitacora_created` / parámetro `edits` / schema presentes ✓ · `tsc -b` exit 0 ✓. Pruebas e2e en vivo (feedback por WhatsApp y toast en tiempo real) quedan pendientes de correr con el stack levantado.
