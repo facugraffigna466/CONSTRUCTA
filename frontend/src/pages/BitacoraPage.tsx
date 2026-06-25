@@ -390,6 +390,9 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"audio" | "texto">("audio");
   const [onlyPending, setOnlyPending] = useState(false);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"todas" | "reschedule_task" | "create_task" | "update_status" | "note">("todas");
+  const [dateFilter, setDateFilter] = useState<"todas" | "hoy" | "7" | "30">("todas");
 
   // Grabación con micrófono
   const [recording, setRecording] = useState(false);
@@ -497,9 +500,21 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   const pendingTotal = entries.reduce(
     (n, e) => n + (e.suggestions ?? []).filter(s => !s.applied && !s.dismissed).length, 0,
   );
+  const q = search.trim().toLowerCase();
+  const matchesSearch = (e: BitacoraEntry) =>
+    !q || [e.summary, e.transcript, e.responsible_name, ...(e.key_points ?? [])]
+      .some(t => (t ?? "").toLowerCase().includes(q));
+  const matchesType = (e: BitacoraEntry) =>
+    typeFilter === "todas" || (e.suggestions ?? []).some(s => s.type === typeFilter);
+  const matchesDate = (e: BitacoraEntry) => {
+    if (dateFilter === "todas") return true;
+    const created = new Date(e.created_at).getTime();
+    if (dateFilter === "hoy") { const d = new Date(); d.setHours(0, 0, 0, 0); return created >= d.getTime(); }
+    return created >= Date.now() - (dateFilter === "7" ? 7 : 30) * 86400000;
+  };
   const displayEntries = [...entries]
     .sort((a, b) => Number(hasPending(b)) - Number(hasPending(a)))
-    .filter(e => !onlyPending || hasPending(e));
+    .filter(e => (!onlyPending || hasPending(e)) && matchesSearch(e) && matchesType(e) && matchesDate(e));
 
   return (
     <div style={{ fontFamily: FONT, maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -652,6 +667,39 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
         )}
       </div>
 
+      {/* Búsqueda y filtros */}
+      {!loading && entries.length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar por texto o responsable…"
+            style={{ flex: "1 1 200px", minWidth: 0, padding: "8px 12px", fontSize: 12.5, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, outline: "none" }}
+          />
+          <select
+            value={typeFilter}
+            onChange={e => setTypeFilter(e.target.value as typeof typeFilter)}
+            style={{ padding: "8px 10px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
+          >
+            <option value="todas">Todo tipo</option>
+            <option value="reschedule_task">Mover fechas</option>
+            <option value="create_task">Crear tarea</option>
+            <option value="update_status">Cambiar estado</option>
+            <option value="note">Nota</option>
+          </select>
+          <select
+            value={dateFilter}
+            onChange={e => setDateFilter(e.target.value as typeof dateFilter)}
+            style={{ padding: "8px 10px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
+          >
+            <option value="todas">Cualquier fecha</option>
+            <option value="hoy">Hoy</option>
+            <option value="7">Últimos 7 días</option>
+            <option value="30">Últimos 30 días</option>
+          </select>
+        </div>
+      )}
+
       {/* Encabezado de sugerencias sin revisar (Sí/No pendiente) */}
       {!loading && entries.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -688,7 +736,7 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
         </div>
       ) : displayEntries.length === 0 ? (
         <p style={{ fontSize: 13, color: "#6B7580", textAlign: "center", padding: 24 }}>
-          No hay entradas con sugerencias pendientes.
+          No hay entradas que coincidan con la búsqueda o los filtros.
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

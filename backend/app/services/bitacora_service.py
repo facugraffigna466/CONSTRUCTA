@@ -165,6 +165,27 @@ class BitacoraService:
             )
         return list((await self.session.execute(q)).scalars().all())
 
+    async def list_for_task(
+        self, *, task_id: int, tenant_id: int | None = None, user_id: int | None = None
+    ) -> list[BitacoraEntry]:
+        """Notas de voz cuyas sugerencias aplicadas afectaron a esta tarea (la originaron
+        o la modificaron). Trazabilidad tarea → audio."""
+        obra_id = (await self.session.execute(
+            select(Task.obra_id).where(Task.id == task_id)
+        )).scalar_one_or_none()
+        if obra_id is None:
+            return []
+        entries = await self.list_entries(
+            tenant_id=tenant_id, user_id=user_id, obra_id=obra_id, limit=500
+        )
+        return [
+            e for e in entries
+            if any(
+                s.get("applied") and s.get("result_task_id") == task_id
+                for s in (e.suggestions or [])
+            )
+        ]
+
     async def pending_suggestions_count(
         self,
         *,

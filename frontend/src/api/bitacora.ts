@@ -48,6 +48,11 @@ export async function fetchBitacoraUnassigned(): Promise<BitacoraEntry[]> {
   return data;
 }
 
+export async function fetchTaskBitacora(taskId: number): Promise<BitacoraEntry[]> {
+  const { data } = await apiClient.get<BitacoraEntry[]>(`/tasks/${taskId}/bitacora`);
+  return data;
+}
+
 export async function fetchBitacoraPendingCount(obraId?: number): Promise<number> {
   const { data } = await apiClient.get<{ count: number }>("/bitacora/pending-count", {
     params: obraId ? { obra_id: obraId } : undefined,
