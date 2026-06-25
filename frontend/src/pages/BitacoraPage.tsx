@@ -5,9 +5,10 @@ import {
 } from "lucide-react";
 import {
   applySuggestion, assignObra, createAudioEntry, createTextEntry, deleteEntry,
-  dismissSuggestion, fetchBitacora, reprocessEntry, setTranscript,
+  dismissSuggestion, fetchBitacora, fetchBitacoraUnassigned, reprocessEntry, setTranscript,
   type BitacoraEntry, type BitacoraSuggestion,
 } from "../api/bitacora";
+import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
@@ -321,6 +322,8 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   // La bitácora es por obra: la página queda fija a la obra desde la que se entró.
   const obraId = obra?.id ?? null;
   const [entries, setEntries] = useState<BitacoraEntry[]>([]);
+  const [unassigned, setUnassigned] = useState<BitacoraEntry[]>([]);
+  const [obras, setObras] = useState<Obra[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -340,7 +343,14 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   const load = useCallback(async () => {
     if (obraId == null) { setLoading(false); return; }
     try {
-      setEntries(await fetchBitacora(obraId));
+      const [entriesData, unassignedData, obrasData] = await Promise.all([
+        fetchBitacora(obraId),
+        fetchBitacoraUnassigned(),
+        fetchObras(),
+      ]);
+      setEntries(entriesData);
+      setUnassigned(unassignedData);
+      setObras(obrasData);
     } catch { /* backend caído */ } finally {
       setLoading(false);
     }
@@ -352,6 +362,14 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
 
   function replaceEntry(updated: BitacoraEntry) {
     setEntries(prev => prev.map(e => (e.id === updated.id ? updated : e)));
+  }
+
+  // Al asignarle obra a una nota suelta, sale de "Sin asignar"; si quedó en esta obra, entra a la lista.
+  function onUnassignedUpdated(updated: BitacoraEntry) {
+    setUnassigned(prev => prev.filter(e => e.id !== updated.id));
+    if (updated.obra_id === obraId) {
+      setEntries(prev => [updated, ...prev.filter(e => e.id !== updated.id)]);
+    }
   }
 
   async function submitFile(file: File | Blob, filename?: string) {
@@ -440,6 +458,32 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
           </span>
         )}
       </div>
+
+      {/* Notas sin obra asignada (de cualquier obra del equipo) — asignación manual */}
+      {unassigned.length > 0 && (
+        <div style={{ background: "#FFF8F3", border: "1px solid #FDDFC8", borderRadius: 14, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <AlertTriangle style={{ width: 15, height: 15, color: "#C97D0E", flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 800, color: "#9A5D08" }}>
+              {unassigned.length} nota{unassigned.length === 1 ? "" : "s"} de voz sin asignar a una obra
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: 11.5, color: "#9A5D08", lineHeight: 1.5 }}>
+            Alguien mandó un audio por WhatsApp y todavía no eligió obra. Asignala vos para no perder el registro.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {unassigned.map(e => (
+              <EntryCard
+                key={e.id}
+                entry={e}
+                obras={obras}
+                onUpdated={onUnassignedUpdated}
+                onDeleted={id => setUnassigned(prev => prev.filter(x => x.id !== id))}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Creador de entradas */}
       <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, padding: 16 }}>

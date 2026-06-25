@@ -154,6 +154,15 @@ async def pending_count(
     return {"count": count}
 
 
+@router.get("/bitacora/unassigned", response_model=list[BitacoraEntryRead])
+async def list_unassigned(db: DbSession, current_user: CurrentUser):
+    """Notas de voz sin obra asignada del tenant — para asignación manual del jefe."""
+    entries = await BitacoraService(db).list_unassigned(
+        tenant_id=current_user.tenant_id, user_id=current_user.id
+    )
+    return await _to_read_bulk(entries, db)
+
+
 @router.post("/bitacora/{entry_id}/transcript", response_model=BitacoraEntryRead)
 async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser):
     if not data.text.strip():

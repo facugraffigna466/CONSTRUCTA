@@ -100,8 +100,17 @@ class BitacoraService:
         if tenant_id is None:
             return entry
         if entry.obra_id is None:
-            if entry.created_by is not None and entry.created_by != user_id:
-                raise NotFoundError("BitacoraEntry", entry_id)
+            # Entrada sin obra: aislar por creador (staff) o por responsable.
+            if entry.created_by is not None:
+                if entry.created_by != user_id:
+                    raise NotFoundError("BitacoraEntry", entry_id)
+                return entry
+            if entry.responsible_id is not None:
+                resp_tenant = (await self.session.execute(
+                    select(Responsible.tenant_id).where(Responsible.id == entry.responsible_id)
+                )).scalar_one_or_none()
+                if resp_tenant is not None and resp_tenant != tenant_id:
+                    raise NotFoundError("BitacoraEntry", entry_id)
             return entry
         obra_tenant = (await self.session.execute(
             select(Obra.tenant_id).where(Obra.id == entry.obra_id)
@@ -133,6 +142,27 @@ class BitacoraService:
                 )
             )
         q = q.limit(limit).offset(offset)
+        return list((await self.session.execute(q)).scalars().all())
+
+    async def list_unassigned(
+        self, *, tenant_id: int | None = None, user_id: int | None = None
+    ) -> list[BitacoraEntry]:
+        """Notas de voz pendientes de asignar obra (obra_id NULL), scopeadas por tenant
+        vía el responsable o el creador. Para que el jefe las asigne a mano si el emisor
+        nunca respondió por WhatsApp."""
+        from app.models.user import User
+
+        q = (
+            select(BitacoraEntry)
+            .where(BitacoraEntry.status == "pendiente_obra", BitacoraEntry.obra_id.is_(None))
+            .order_by(BitacoraEntry.created_at.desc())
+        )
+        if tenant_id is not None:
+            q = (
+                q.outerjoin(Responsible, BitacoraEntry.responsible_id == Responsible.id)
+                .outerjoin(User, BitacoraEntry.created_by == User.id)
+                .where(or_(Responsible.tenant_id == tenant_id, User.tenant_id == tenant_id))
+            )
         return list((await self.session.execute(q)).scalars().all())
 
     async def pending_suggestions_count(
