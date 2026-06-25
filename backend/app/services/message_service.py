@@ -450,17 +450,86 @@ class MessageService:
         return "\n".join(f"{i + 1}) {names.get(oid, f'Obra #{oid}')}" for i, oid in enumerate(obra_ids))
 
     async def _pending_bitacora_obra(self, sender, is_staff: bool):
-        """Nota de voz reciente esperando que elijan la obra (None si no hay)."""
+        """Nota de voz esperando que elijan la obra (None si no hay). Ventana amplia
+        (7 días) para que la respuesta siga asignando aunque el emisor conteste tarde,
+        tras recibir los recordatorios automáticos."""
         from datetime import timedelta
         from sqlalchemy import select
         from app.models.bitacora import BitacoraEntry
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
         cond = (BitacoraEntry.created_by == sender.id) if is_staff else (BitacoraEntry.responsible_id == sender.id)
         return (await self.db.execute(
             select(BitacoraEntry)
             .where(BitacoraEntry.status == "pendiente_obra", cond, BitacoraEntry.created_at >= cutoff)
             .order_by(BitacoraEntry.created_at.desc()).limit(1)
         )).scalars().first()
+
+    async def remind_pending_bitacora_obra(self) -> int:
+        """Recordatorio automático: cada 30 min le avisa a quien mandó una nota de voz
+        que todavía no asignó a una obra, hasta que responda. Respeta el horario laboral
+        y se rinde a las 48 h (la nota queda guardada igual, sin perder trazabilidad).
+        Devuelve cuántos recordatorios envió. Lo dispara el scheduler."""
+        from datetime import timedelta
+        from sqlalchemy import func, select
+        from app.models.bitacora import BitacoraEntry
+        from app.models.responsible import Responsible
+        from app.models.user import User
+
+        now = datetime.now(timezone.utc)
+        cap = now - timedelta(hours=48)          # tope: no recordar pasadas 48 h
+        due_before = now - timedelta(minutes=30)  # cadencia: cada 30 min
+
+        entries = (await self.db.execute(
+            select(BitacoraEntry).where(
+                BitacoraEntry.status == "pendiente_obra",
+                BitacoraEntry.obra_id.is_(None),
+                BitacoraEntry.created_at >= cap,
+                func.coalesce(BitacoraEntry.reminded_at, BitacoraEntry.created_at) <= due_before,
+            )
+        )).scalars().all()
+
+        sent = 0
+        for entry in entries:
+            # Resolver al emisor (responsable o staff) y respetar su horario.
+            if entry.responsible_id is not None:
+                sender = (await self.db.execute(
+                    select(Responsible).where(Responsible.id == entry.responsible_id)
+                )).scalar_one_or_none()
+                is_staff = False
+                if sender is None:
+                    continue
+                cfg = await self.settings_repo.get_for_responsible(sender.id)
+                if not (cfg.chatbot_enabled and _within_send_window(cfg.send_hour_from, cfg.send_hour_to)):
+                    continue
+            elif entry.created_by is not None:
+                sender = (await self.db.execute(
+                    select(User).where(User.id == entry.created_by)
+                )).scalar_one_or_none()
+                is_staff = True
+                if sender is None or not _within_send_window(8, 20):  # franja por defecto del staff
+                    continue
+            else:
+                continue
+
+            number = getattr(sender, "whatsapp_number", None)
+            obra_ids = await self._sender_obra_ids(sender, is_staff)
+            if not number or not obra_ids:
+                continue
+
+            msg = (
+                "🎤 Tenés una nota de voz sin asignar a una obra. ¿Para qué obra es?\n"
+                + await self._obra_options(obra_ids)
+                + "\n\nRespondé con el número."
+            )
+            try:
+                await send_whatsapp_message(number, msg)
+                entry.reminded_at = now
+                sent += 1
+            except Exception:
+                logger.exception("No se pudo enviar recordatorio de bitácora %s", entry.id)
+
+        await self.db.flush()
+        return sent
 
     async def _handle_obra_selection(self, sender, is_staff: bool, body: str) -> str:
         import re
