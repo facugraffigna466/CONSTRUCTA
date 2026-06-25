@@ -1481,3 +1481,16 @@ Dos mejoras de trazabilidad y usabilidad sobre el módulo de bitácora.
 
 ### Validation
 `py_compile` + `import app.main` ✓ · `list_for_task` presente ✓ · `tsc -b` exit 0 ✓. Prueba e2e en vivo (sección "Origen" en una tarea con audio, filtros con volumen real) queda pendiente con el stack levantado.
+
+---
+
+## 2026-06-25 — Fix: crear tarea desde sugerencia con responsable (PR #21)
+
+Detectado en la **prueba e2e en vivo** (audio real de obra). Al aplicar una sugerencia de tipo `create_task` que mencionaba un responsable ("Equipo de Pereira"), el `Aplicar` fallaba con *"No se pudo aplicar la sugerencia."*.
+
+**Causa:** `Responsible` dejó de tener `obra_id` cuando se pasó al equipo global por tenant (Etapa 1.4), pero el matcheo del responsable en `apply_suggestion` (rama `create_task`) seguía filtrando por `Responsible.obra_id == entry.obra_id` → `AttributeError` que tumbaba todo el apply. Bug latente: solo se disparaba cuando la sugerencia traía `responsible_name` (las de estado/fecha/nota no lo tocan, por eso funcionaban).
+
+**Fix:** se matchea el responsable por **nombre dentro del tenant de la obra** (`Responsible.tenant_id`, que sí existe) y activo; si no hay match, la tarea se crea **sin responsable** (deja de ser un error). Única referencia rota en el código (verificado con grep).
+
+### Validation
+`py_compile` + `import app.main` ✓ · query de matcheo (sin `obra_id`) compilada a SQL correcto ✓. La prueba en vivo que destapó el bug confirmó, además, que el resto del pipeline interpreta bien: el audio matcheó "loza del segundo piso" → tarea «Losa 2» y «Estructura» por id, y generó las 4 acciones (estado/fecha/crear/nota) correctamente.
