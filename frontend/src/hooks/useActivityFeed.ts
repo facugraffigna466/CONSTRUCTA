@@ -76,14 +76,22 @@ export function useActivityFeed(currentUserId?: number): [ActivityEvent[], Activ
       push(makeEvent(p.actor.id, p.actor.name, "eliminó la tarea", p.title));
     }
 
+    function handleBitacora(p: { reporterName?: string | null; summary?: string | null; actorId?: number | null }) {
+      // No avisarse a sí mismo si la nota la cargó este usuario desde la web.
+      if (p.actorId && currentUserIdRef.current && p.actorId === currentUserIdRef.current) return;
+      push(makeEvent(0, p.reporterName || "Bitácora", "mandó una nota de voz", "", p.summary ?? undefined));
+    }
+
     socket.on("task_created", handleCreated);
     socket.on("task_updated", handleUpdated);
     socket.on("task_deleted", handleDeleted);
+    socket.on("bitacora_created", handleBitacora);
 
     return () => {
       socket.off("task_created", handleCreated);
       socket.off("task_updated", handleUpdated);
       socket.off("task_deleted", handleDeleted);
+      socket.off("bitacora_created", handleBitacora);
     };
   }, []);
 

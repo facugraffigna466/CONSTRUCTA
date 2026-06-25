@@ -46,5 +46,15 @@ class BitacoraTextCreate(BaseModel):
     text: str
 
 
+class BitacoraSuggestionEdit(BaseModel):
+    """Ajustes opcionales del jefe a una sugerencia antes de aplicarla."""
+    new_start_date: str | None = None
+    new_due_date: str | None = None
+    new_status: str | None = None
+    title: str | None = None
+    responsible_name: str | None = None
+    description: str | None = None
+
+
 class BitacoraAssignObra(BaseModel):
     obra_id: int

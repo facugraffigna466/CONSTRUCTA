@@ -85,8 +85,21 @@ export async function assignObra(entryId: number, obraId: number): Promise<Bitac
   return data;
 }
 
-export async function applySuggestion(entryId: number, index: number): Promise<BitacoraEntry> {
-  const { data } = await apiClient.post<BitacoraEntry>(`/bitacora/${entryId}/suggestions/${index}/apply`);
+export interface SuggestionEdit {
+  new_start_date?: string | null;
+  new_due_date?: string | null;
+  new_status?: string | null;
+  title?: string | null;
+  responsible_name?: string | null;
+}
+
+export async function applySuggestion(
+  entryId: number, index: number, edits?: SuggestionEdit,
+): Promise<BitacoraEntry> {
+  const { data } = await apiClient.post<BitacoraEntry>(
+    `/bitacora/${entryId}/suggestions/${index}/apply`,
+    edits ?? undefined,
+  );
   return data;
 }
 

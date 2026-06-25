@@ -21,7 +21,12 @@ from app.core.deps import CurrentUser, DbSession
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
 from app.models.responsible import Responsible
-from app.schemas.bitacora import BitacoraAssignObra, BitacoraEntryRead, BitacoraTextCreate
+from app.schemas.bitacora import (
+    BitacoraAssignObra,
+    BitacoraEntryRead,
+    BitacoraSuggestionEdit,
+    BitacoraTextCreate,
+)
 from app.services.bitacora_service import BitacoraService
 from app.services.obra_service import ObraService
 
@@ -207,7 +212,10 @@ async def assign_obra(entry_id: int, data: BitacoraAssignObra, db: DbSession, cu
 
 
 @router.post("/bitacora/{entry_id}/suggestions/{index}/apply", response_model=BitacoraEntryRead)
-async def apply_suggestion(entry_id: int, index: int, db: DbSession, current_user: CurrentUser):
+async def apply_suggestion(
+    entry_id: int, index: int, db: DbSession, current_user: CurrentUser,
+    edits: BitacoraSuggestionEdit | None = None,
+):
     actor = {
         "id": current_user.id,
         "name": current_user.full_name or current_user.email,
@@ -217,7 +225,10 @@ async def apply_suggestion(entry_id: int, index: int, db: DbSession, current_use
     service = BitacoraService(db)
     # 404 si la entrada es de otro tenant
     await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
-    entry = await service.apply_suggestion(entry_id, index, current_user.id, actor=actor)
+    entry = await service.apply_suggestion(
+        entry_id, index, current_user.id, actor=actor,
+        edits=edits.model_dump(exclude_unset=True) if edits else None,
+    )
     return await _to_read(entry, db)
 
 
