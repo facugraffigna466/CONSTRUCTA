@@ -168,6 +168,15 @@ async def list_unassigned(db: DbSession, current_user: CurrentUser):
     return await _to_read_bulk(entries, db)
 
 
+@router.get("/tasks/{task_id}/bitacora", response_model=list[BitacoraEntryRead])
+async def list_for_task(task_id: int, db: DbSession, current_user: CurrentUser):
+    """Notas de voz que originaron o modificaron esta tarea (trazabilidad tarea → audio)."""
+    entries = await BitacoraService(db).list_for_task(
+        task_id=task_id, tenant_id=current_user.tenant_id, user_id=current_user.id
+    )
+    return await _to_read_bulk(entries, db)
+
+
 @router.post("/bitacora/{entry_id}/transcript", response_model=BitacoraEntryRead)
 async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser):
     if not data.text.strip():

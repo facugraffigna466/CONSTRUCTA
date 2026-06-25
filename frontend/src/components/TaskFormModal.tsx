@@ -4,6 +4,7 @@ import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
 import type { CascadeAffectedTask } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { TaskMaterialsSection, type DraftMaterial } from "./TaskMaterialsSection";
+import { TaskBitacoraOrigin } from "./TaskBitacoraOrigin";
 import { createMaterial } from "../api/taskMaterials";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
 import type { DependencyType, Responsible, Task } from "../types";
@@ -747,6 +748,9 @@ export function TaskFormModal({
             {mode === "edit" && task
               ? <TaskMaterialsSection taskId={task.id} />
               : <TaskMaterialsSection draft={draftMaterials} onDraftChange={setDraftMaterials} />}
+
+            {/* Origen: notas de voz que originaron/modificaron esta tarea */}
+            {mode === "edit" && task && <TaskBitacoraOrigin taskId={task.id} />}
 
             {/* API error */}
             {apiError && (
