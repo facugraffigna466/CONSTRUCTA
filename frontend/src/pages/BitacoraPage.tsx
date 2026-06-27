@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle, Calendar, CheckCircle2, ChevronDown, ClipboardList, FileText,
-  Loader2, Mic, MicOff, Plus, RefreshCw, Sparkles, Square, Trash2, Upload, X,
+  Loader2, Mic, MicOff, Plus, RefreshCw, Search, Sparkles, Square, Trash2, Upload, X,
 } from "lucide-react";
 import {
   applySuggestion, assignObra, createAudioEntry, createTextEntry, deleteEntry,
@@ -43,6 +43,7 @@ function fmtDate(d: string | null): string {
 
 const SUGG_STATUS_OPTIONS = ["pendiente", "en_progreso", "bloqueada", "completada", "cancelada"];
 const SUGG_INPUT: React.CSSProperties = { fontSize: 12, padding: "4px 7px", borderRadius: 7, border: "1px solid #E6E7E5", fontFamily: FONT, outline: "none" };
+const FILTER_PILL: React.CSSProperties = { padding: "5px 9px", fontSize: 12, fontWeight: 600, borderRadius: 8, border: "1px solid #ECE7DD", background: "#F7F5F1", color: "#5B6770", fontFamily: FONT, cursor: "pointer", outline: "none", flexShrink: 0 };
 
 function SuggestionCard({ s, index, entryId, onUpdated }: {
   s: BitacoraSuggestion; index: number; entryId: number;
@@ -118,6 +119,40 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
         <select value={edit.new_status ?? ""} onChange={e => setField("new_status", e.target.value)} style={{ ...SUGG_INPUT, cursor: "pointer" }}>
           {SUGG_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o.replace("_", " ")}</option>)}
         </select>
+      </div>
+    );
+  }
+
+  // Aplicada o descartada → colapsada a una sola línea, no ocupa espacio.
+  if (done) {
+    let short = "";
+    if (s.type === "reschedule_task") short = `«${s.task_title ?? `Tarea #${s.task_id}`}»`;
+    else if (s.type === "create_task") short = `«${s.title ?? ""}»`;
+    else if (s.type === "update_status") short = `«${s.task_title ?? `Tarea #${s.task_id}`}» → ${s.new_status?.replace("_", " ")}`;
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 7,
+        border: `1px solid ${s.applied ? "#D7EDE0" : "#ECEAE4"}`,
+        background: s.applied ? "#F4FBF7" : "#FAFAF9",
+        borderRadius: 9, padding: "5px 10px",
+        opacity: s.dismissed ? 0.65 : 1,
+      }}>
+        {s.applied
+          ? <CheckCircle2 style={{ width: 12, height: 12, color: "#1F8A5B", flexShrink: 0 }} />
+          : <X style={{ width: 12, height: 12, color: "#9AA0A6", flexShrink: 0 }} />}
+        <span style={{ fontSize: 11, fontWeight: 700, color: s.applied ? "#1F8A5B" : "#8A9099", whiteSpace: "nowrap" }}>
+          {meta.label} · {s.applied ? "aplicada" : "descartada"}
+        </span>
+        {short && (
+          <span style={{ fontSize: 11, color: "#7D8189", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+            {short}
+          </span>
+        )}
+        {s.result_note && (
+          <span title={s.result_note} style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex" }}>
+            <Calendar style={{ width: 11, height: 11, color: "#2A62C9" }} />
+          </span>
+        )}
       </div>
     );
   }
@@ -669,17 +704,18 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
 
       {/* Búsqueda y filtros */}
       {!loading && entries.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #ECE7DD", borderRadius: 12, padding: "5px 7px 5px 12px", flexWrap: "wrap" }}>
+          <Search style={{ width: 14, height: 14, color: "#A7ABB0", flexShrink: 0 }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por texto o responsable…"
-            style={{ flex: "1 1 200px", minWidth: 0, padding: "8px 12px", fontSize: 12.5, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, outline: "none" }}
+            style={{ flex: "1 1 150px", minWidth: 0, padding: "5px 0", fontSize: 12.5, border: "none", outline: "none", background: "transparent", fontFamily: FONT, color: "#1A2329" }}
           />
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value as typeof typeFilter)}
-            style={{ padding: "8px 10px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
+            style={FILTER_PILL}
           >
             <option value="todas">Todo tipo</option>
             <option value="reschedule_task">Mover fechas</option>
@@ -690,7 +726,7 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
           <select
             value={dateFilter}
             onChange={e => setDateFilter(e.target.value as typeof dateFilter)}
-            style={{ padding: "8px 10px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
+            style={FILTER_PILL}
           >
             <option value="todas">Cualquier fecha</option>
             <option value="hoy">Hoy</option>
