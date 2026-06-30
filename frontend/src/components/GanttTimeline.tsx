@@ -8,15 +8,17 @@ import { fetchBaseline, type BaselineEntry } from "../api/baseline";
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
-const ROW_H      = 60;   // px per task row
+const ROW_H      = 48;   // px per task row (compacto)
 const TASK_COL_W = 280;  // px for the fixed left name column
-const BAR_H      = 34;   // px bar height
+const BAR_H      = 28;   // px bar height
 
 const _now      = new Date();
 const TODAY_STR = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-${String(_now.getDate()).padStart(2,"0")}`;
 const TODAY_MS  = new Date(TODAY_STR).getTime();
 const DAY_MS    = 86_400_000;
 const CLICK_THRESHOLD_PX = 5;
+const ZOOM_MIN  = 0.35;  // pinch-out máximo (vista de obra completa)
+const ZOOM_MAX  = 3;     // pinch-in máximo (detalle)
 const DND_TYPE  = "application/x-constructa-task";
 
 const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
@@ -53,6 +55,31 @@ function buildLevelMap(tasks: Task[]): Map<number, number> {
   }
   tasks.forEach(t => level(t.id));
   return memo;
+}
+
+/** Reordena una lista plana para que cada subtarea quede justo debajo de su tarea
+ *  padre (árbol WBS), respetando el orden relativo dentro de cada nivel. */
+function groupChildrenUnderParents(ordered: Task[]): Task[] {
+  const byId = new Map(ordered.map(t => [t.id, t]));
+  const childrenOf = new Map<number, Task[]>();
+  const roots: Task[] = [];
+  for (const t of ordered) {
+    const pid = t.parent_task_id;
+    if (pid != null && byId.has(pid)) {
+      const arr = childrenOf.get(pid) ?? [];
+      arr.push(t);
+      childrenOf.set(pid, arr);
+    } else {
+      roots.push(t); // sin padre (o padre no visible) → nivel raíz
+    }
+  }
+  const out: Task[] = [];
+  const visit = (t: Task) => {
+    out.push(t);
+    for (const c of childrenOf.get(t.id) ?? []) visit(c);
+  };
+  roots.forEach(visit);
+  return out;
 }
 
 function addDays(dateStr: string, days: number): string {
@@ -158,11 +185,15 @@ export function GanttTimeline({
   const [showSettings, setShowSettings] = useState(false);
 
   function patchViewOptions(patch: Partial<GanttViewOptions>) {
+    if (patch.view) setZoom(1); // cambiar de preset (semana/mes/trim) resetea el zoom fino
     setViewOptions(prev => ({ ...prev, ...patch }));
   }
 
   const view = viewOptions.view;
-  const dayW = view === "semana" ? 90 : view === "mes" ? 45 : 22;
+  // Zoom continuo (pinch del trackpad / Ctrl+rueda) que multiplica el ancho de día.
+  const [zoom, setZoom] = useState(1);
+  const baseDayW = view === "semana" ? 90 : view === "mes" ? 45 : 22;
+  const dayW = baseDayW * zoom;
   const dayWRef = useRef(dayW);
   dayWRef.current = dayW;
 
@@ -239,6 +270,32 @@ export function GanttTimeline({
 
   useEffect(() => { onEditRef.current = onEditTask; }, [onEditTask]);
 
+  // ── Pinch-to-zoom (trackpad) / Ctrl+rueda sobre el cronograma ────────────────
+  // El trackpad reporta el pellizco como un evento `wheel` con ctrlKey=true.
+  // Multiplicamos el ancho de día (dayW) y anclamos el zoom al punto bajo el cursor.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    function onWheel(e: WheelEvent) {
+      if (!e.ctrlKey) return;        // scroll/pan normal sigue intacto; sólo actuamos en pinch
+      e.preventDefault();
+      const rect = el!.getBoundingClientRect();
+      const cursorViewport = e.clientX - rect.left;       // px del cursor dentro del área visible
+      setZoom(prev => {
+        const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev * Math.pow(0.99, e.deltaY)));
+        if (next === prev) return prev;
+        const ratio = next / prev;
+        const newScrollLeft = (cursorViewport + el!.scrollLeft) * ratio - cursorViewport;
+        requestAnimationFrame(() => {
+          if (scrollRef.current) scrollRef.current.scrollLeft = Math.max(0, newScrollLeft);
+        });
+        return next;
+      });
+    }
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   // ── Critical path fetch ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!viewOptions.highlightCritical || !obraId) {
@@ -274,12 +331,17 @@ export function GanttTimeline({
     ? tasks
     : tasks.filter(t => t.start_date || t.due_date);
 
+  // Nombres por id para mostrar "depende de …" en la lista (incluye tareas ocultas)
+  const titleById = new Map(tasks.map(t => [t.id, t.title]));
+
   // ── Ordered visible (for row reorder) ───────────────────────────────────────
   const visibleById = new Map(visible.map(t => [t.id, t]));
-  const orderedVisible: Task[] = [
+  const flatOrdered: Task[] = [
     ...rowOrder.filter(id => visibleById.has(id)).map(id => visibleById.get(id)!),
     ...visible.filter(t => !rowOrder.includes(t.id)),
   ];
+  // Agrupar el árbol: cada subtarea queda justo debajo de su tarea padre.
+  const orderedVisible: Task[] = groupChildrenUnderParents(flatOrdered);
   orderedVisRef.current = orderedVisible;
 
   const levelMap = buildLevelMap(tasks);
@@ -900,6 +962,14 @@ export function GanttTimeline({
                 const isHov = hoveredRowId === task.id;
                 const resp  = task.responsible_id ? responsibles.find(r => r.id === task.responsible_id) : null;
                 const taskLevel = levelMap.get(task.id) ?? 0;
+                const depIds = task.dependency_links?.length
+                  ? task.dependency_links.map(l => l.depends_on_id)
+                  : (task.dependency_ids ?? []);
+                // No mostrar "depende de" si la predecesora es la propia tarea padre
+                // (esa relación ya la expresa la jerarquía de subtareas → sería redundante).
+                const depNames = depIds
+                  .filter(id => id !== task.parent_task_id)
+                  .map(id => titleById.get(id)).filter(Boolean) as string[];
                 const isDraggingThis = rowDrag?.taskId === task.id;
                 return (
                   <div
@@ -975,20 +1045,36 @@ export function GanttTimeline({
                         {taskLevel > 0 && <span style={{ color: "#ADAAA4", marginRight: 4, fontSize: 11 }}>└</span>}
                         {task.title}
                       </div>
-                      {resp && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3 }}>
-                          <div style={{
-                            width: 14, height: 14, borderRadius: 99, flexShrink: 0,
-                            background: avatarColor(resp.full_name),
-                            color: "#fff", fontSize: 8, fontWeight: 700,
-                            display: "flex", alignItems: "center", justifyContent: "center",
-                            fontFamily: "'Plus Jakarta Sans',sans-serif",
-                          }}>
-                            {getInitials(resp.full_name)[0]}
-                          </div>
-                          <span style={{ fontSize: 11, color: "#94928D", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {resp.full_name}
-                          </span>
+                      {(resp || depNames.length > 0) && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, minWidth: 0 }}>
+                          {resp && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                              <div style={{
+                                width: 14, height: 14, borderRadius: 99, flexShrink: 0,
+                                background: avatarColor(resp.full_name),
+                                color: "#fff", fontSize: 8, fontWeight: 700,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                fontFamily: "'Plus Jakarta Sans',sans-serif",
+                              }}>
+                                {getInitials(resp.full_name)[0]}
+                              </div>
+                              <span style={{ fontSize: 11, color: "#94928D", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {resp.full_name}
+                              </span>
+                            </div>
+                          )}
+                          {depNames.length > 0 && (
+                            <span
+                              title={`Depende de ${depNames.join(", ")}`}
+                              style={{ display: "inline-flex", alignItems: "center", gap: 3, flexShrink: 0, maxWidth: 150, padding: "1px 7px 1px 5px", borderRadius: 99, background: "#ECF1FA", color: "#3D6FB5", fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden" }}
+                            >
+                              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                                <path d="M6.8 9.2a2.4 2.4 0 0 0 3.4 0l1.8-1.8a2.4 2.4 0 1 0-3.4-3.4l-.9.9" stroke="#3D6FB5" strokeWidth="1.5" strokeLinecap="round"/>
+                                <path d="M9.2 6.8a2.4 2.4 0 0 0-3.4 0L4 8.6a2.4 2.4 0 1 0 3.4 3.4l.9-.9" stroke="#3D6FB5" strokeWidth="1.5" strokeLinecap="round"/>
+                              </svg>
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{depNames.join(", ")}</span>
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1474,7 +1560,7 @@ export function GanttTimeline({
 
                       const y_A = rowA * ROW_H + ROW_H / 2;
                       const y_B = rowB * ROW_H + ROW_H / 2;
-                      const color = violated ? "#D03A3A" : "#7A8FA8";
+                      const color = violated ? "#D03A3A" : "#3D6FB5";
 
                       // Rounded-corner path (r = 6) like ClickUp
                       const r = 6;
@@ -1492,7 +1578,7 @@ export function GanttTimeline({
                         pathD = `M ${x_A} ${y_A} H ${midX - r} q ${r} 0 ${r} ${dy} V ${y_B - dy} q 0 ${dy} ${-r} ${dy} H ${x_B}`;
                       }
 
-                      const arrowPoints = `${x_B + 6},${y_B} ${x_B},${y_B - 4} ${x_B},${y_B + 4}`;
+                      const arrowPoints = `${x_B + 7},${y_B} ${x_B - 1},${y_B - 5} ${x_B - 1},${y_B + 5}`;
                       const labelX = x_A + (x_B - x_A) / 2;
                       const labelY = (y_A + y_B) / 2;
 
@@ -1513,11 +1599,17 @@ export function GanttTimeline({
                     }}>
                       {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A, x_B, y_B }) => (
                         <g key={id}>
+                          {/* Halo blanco: separa la línea de la grilla y las barras para que resalte */}
+                          <path
+                            d={pathD} stroke="#fff" strokeWidth={5} fill="none" strokeOpacity={0.9}
+                            strokeLinecap="round" strokeLinejoin="round"
+                            style={{ pointerEvents: "none" }}
+                          />
                           {/* Connection dot at predecessor */}
-                          <circle cx={x_A} cy={y_A} r={3.5} fill={color} style={{ pointerEvents: "none" }} />
+                          <circle cx={x_A} cy={y_A} r={4} fill={color} stroke="#fff" strokeWidth={1.5} style={{ pointerEvents: "none" }} />
                           {/* Path */}
                           <path
-                            d={pathD} stroke={color} strokeWidth={1.8} fill="none"
+                            d={pathD} stroke={color} strokeWidth={2.4} fill="none"
                             strokeDasharray={violated ? "5 3" : undefined}
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
@@ -1525,7 +1617,7 @@ export function GanttTimeline({
                           {/* Arrowhead at successor */}
                           <polygon points={arrowPoints} fill={color} style={{ pointerEvents: "none" }} />
                           {/* Connection dot at successor */}
-                          <circle cx={x_B} cy={y_B} r={3} fill="#fff" stroke={color} strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+                          <circle cx={x_B} cy={y_B} r={3.5} fill="#fff" stroke={color} strokeWidth={1.8} style={{ pointerEvents: "none" }} />
                           {/* Dep type label (non-FS) */}
                           {depType !== "FS" && (
                             <>
