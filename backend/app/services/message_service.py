@@ -88,6 +88,74 @@ class MessageService:
         media_url: str | None = None
         task_id = None
 
+        # ── 4a. Proveedor enviando PDF de cotización ───────────────────────────
+        # detected_type devuelve UNKNOWN para application/pdf y otros docs
+        _is_document = (
+            payload.MediaUrl0
+            and payload.detected_type == MessageType.UNKNOWN
+            and (payload.MediaContentType0 or "").lower() in (
+                "application/pdf", "application/vnd.openxmlformats-officedocument"
+                ".spreadsheetml.sheet", "application/vnd.ms-excel",
+            )
+        )
+        if _is_document:
+            # Caso 1: proveedor formal (número no registrado como responsable/staff)
+            if sender is None:
+                supplier = await self._find_supplier_by_phone(payload.from_number)
+                if supplier:
+                    reply = await self._handle_supplier_pdf(
+                        supplier=supplier,
+                        media_url=payload.MediaUrl0,
+                        content_type=payload.MediaContentType0,
+                    )
+                    await self.msg_repo.update_fields(
+                        inbound.id,
+                        processing_status=MessageProcessingStatus.PROCESSED,
+                    )
+                    await send_whatsapp_message(payload.from_number, reply)
+                    await self._save_message(
+                        MessageCreateInternal(
+                            direction=MessageDirection.OUTBOUND,
+                            message_type=MessageType.TEXT,
+                            from_number=payload.to_number,
+                            to_number=payload.from_number,
+                            body=reply,
+                            processing_status=MessageProcessingStatus.PROCESSED,
+                        )
+                    )
+                    return inbound
+            # Caso 2: contratista registrado (responsable/staff con solicitud enviada a su número)
+            else:
+                from app.services.solicitud_service import SolicitudService
+                solicitud = await SolicitudService(self.db).get_pending_for_phone(payload.from_number)
+                if solicitud:
+                    sender_name = (
+                        responsible.full_name if responsible else
+                        (staff.full_name if staff else "Contratista")
+                    )
+                    reply = await self._handle_contratista_pdf(
+                        sender_name=sender_name,
+                        solicitud=solicitud,
+                        media_url=payload.MediaUrl0,
+                        content_type=payload.MediaContentType0,
+                    )
+                    await self.msg_repo.update_fields(
+                        inbound.id,
+                        processing_status=MessageProcessingStatus.PROCESSED,
+                    )
+                    await send_whatsapp_message(payload.from_number, reply)
+                    await self._save_message(
+                        MessageCreateInternal(
+                            direction=MessageDirection.OUTBOUND,
+                            message_type=MessageType.TEXT,
+                            from_number=payload.to_number,
+                            to_number=payload.from_number,
+                            body=reply,
+                            processing_status=MessageProcessingStatus.PROCESSED,
+                        )
+                    )
+                    return inbound
+
         # ── 4. Ruteo ───────────────────────────────────────────────────────────
         if sender is None:
             reply = (
@@ -548,6 +616,82 @@ class MessageService:
         else:
             await self.db.flush()
         return self._bitacora_reply(entry)
+
+    async def _find_supplier_by_phone(self, phone: str):
+        from sqlalchemy import select
+        from app.models.supplier import Supplier
+        # Normalize: strip whatsapp: prefix if present
+        normalized = phone.replace("whatsapp:", "").strip()
+        return (await self.db.execute(
+            select(Supplier).where(Supplier.phone == normalized)
+        )).scalar_one_or_none()
+
+    async def _handle_supplier_pdf(
+        self,
+        supplier,
+        media_url: str,
+        content_type: str | None,
+    ) -> str:
+        from app.services.solicitud_service import SolicitudService
+        svc = SolicitudService(self.db)
+        solicitud = await svc.get_pending_for_supplier(supplier.id)
+        if not solicitud:
+            return (
+                f"Hola {supplier.name}, recibimos tu archivo, pero no tenemos ninguna "
+                "solicitud de cotización pendiente para tu empresa en este momento."
+            )
+        try:
+            budget = await svc.receive_supplier_pdf(
+                supplier_id=supplier.id,
+                supplier_name=supplier.name,
+                solicitud=solicitud,
+                media_url=media_url,
+                media_content_type=content_type,
+            )
+            total_txt = f" Total detectado: ${float(budget.total):,.0f}." if budget.total else ""
+            return (
+                f"Gracias {supplier.name}, recibimos tu cotización para la solicitud "
+                f"{solicitud.ref_code}.{total_txt} "
+                "La estamos procesando y te avisamos si necesitamos algo más."
+            )
+        except Exception as exc:
+            logger.error("Error procesando PDF de proveedor %s: %s", supplier.name, exc)
+            return (
+                f"Gracias {supplier.name}, recibimos tu archivo para la solicitud "
+                f"{solicitud.ref_code}, pero hubo un problema al procesarlo. "
+                "El equipo lo revisará manualmente."
+            )
+
+    async def _handle_contratista_pdf(
+        self,
+        sender_name: str,
+        solicitud,
+        media_url: str,
+        content_type: str | None,
+    ) -> str:
+        from app.services.solicitud_service import SolicitudService
+        svc = SolicitudService(self.db)
+        try:
+            budget = await svc.receive_supplier_pdf(
+                supplier_id=None,
+                supplier_name=sender_name,
+                solicitud=solicitud,
+                media_url=media_url,
+                media_content_type=content_type,
+            )
+            total_txt = f" Total detectado: ${float(budget.total):,.0f}." if budget.total else ""
+            return (
+                f"Gracias {sender_name}, recibimos tu cotización para la solicitud "
+                f"{solicitud.ref_code}.{total_txt} "
+                "La estamos revisando y te avisamos cuando tengamos una respuesta."
+            )
+        except Exception as exc:
+            logger.error("Error procesando PDF de contratista %s: %s", sender_name, exc)
+            return (
+                f"Gracias {sender_name}, recibimos tu archivo para la solicitud "
+                f"{solicitud.ref_code}, pero hubo un problema al procesarlo. "
+                "El equipo lo revisará manualmente."
+            )
 
     async def _save_message(self, data: MessageCreateInternal) -> Message:
         msg = Message(**data.model_dump())

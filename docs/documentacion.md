@@ -1494,3 +1494,102 @@ Detectado en la **prueba e2e en vivo** (audio real de obra). Al aplicar una suge
 
 ### Validation
 `py_compile` + `import app.main` ✓ · query de matcheo (sin `obra_id`) compilada a SQL correcto ✓. La prueba en vivo que destapó el bug confirmó, además, que el resto del pipeline interpreta bien: el audio matcheó "loza del segundo piso" → tarea «Losa 2» y «Estructura» por id, y generó las 4 acciones (estado/fecha/crear/nota) correctamente.
+
+---
+
+## 2026-06-26 — Módulo Compras: Solicitudes de Cotización (rama `feature/compras-cotizaciones`)
+
+Implementación completa del flujo de solicitudes de cotización dentro del módulo Compras: desde la selección de materiales hasta la confirmación del proveedor con generación de orden de compra, pasando por el envío por WhatsApp, la recepción automática de PDFs de proveedores y el análisis comparativo con IA.
+
+### A. Migración 0038 — nuevas tablas
+
+- `solicitudes_cotizacion`: entidad central del flujo (estados: borrador → enviada → respondida → confirmada), con `ref_code` único por obra (COT-01, COT-02…), `notes` y `pdf_url`.
+- `solicitud_materiales`: M2M entre solicitudes y `task_materials`.
+- `solicitud_suppliers`: relación solicitud ↔ proveedor con estado propio (enviada / respondida) y `sent_at`.
+- `budgets`: nuevas columnas `solicitud_id` (FK, para vincular la respuesta del proveedor) y `ai_analysis` (TEXT, JSON del análisis comparativo).
+
+### B. Modelos y schemas
+
+- `app/models/solicitud_cotizacion.py`: modelos `SolicitudCotizacion` y `SolicitudSupplier`; tabla de asociación `solicitud_materiales` definida con `Table()` de SQLAlchemy.
+- `app/models/budget.py`: agregadas las dos columnas nuevas.
+- `app/schemas/solicitud_cotizacion.py`: schemas de lectura completos con anidado de respuestas y análisis IA (`SolicitudCotizacionRead`, `RespuestaCotizacionRead`, `AnalisisComparativoRead`, etc.) y schemas de escritura (`SolicitudCotizacionCreate`, `ConfirmarProveedorRequest`).
+- `app/models/__init__.py`: exportación de los nuevos modelos para que Alembic los detecte.
+
+### C. SolicitudService — flujo completo
+
+`app/services/solicitud_service.py` cubre cinco operaciones:
+
+1. **`create()`**: valida materiales y proveedores, genera código de referencia secuencial, construye el PDF de solicitud con reportlab (fallback a texto si no está disponible), envía el mensaje + PDF a cada proveedor por WhatsApp, registra `SolicitudSupplier` por cada uno y loguea en el historial.
+
+2. **`receive_supplier_pdf()`**: descarga el PDF desde la URL de Twilio (autenticado si hay credenciales), delega la extracción en `BudgetService.create()` (que ya maneja PDF→Claude→estructura), vincula el `Budget` resultante a la solicitud, marca al proveedor como "respondida" y dispara `_run_ai_analysis()` cuando hay 2+ respuestas.
+
+3. **`_run_ai_analysis()`**: arma un prompt con los datos estructurados de cada presupuesto y llama a Claude con `output_config` JSON Schema (`_ANALISIS_SCHEMA`). El esquema fuerza: `resumen`, `comparacion_items` (ítem por ítem con precios de cada proveedor y diferencia), `donde_ganas`, `donde_pierdes`, `condiciones_pago`, `plazos`, `riesgos`, `recomendacion` y `supplier_recomendado_id`. El JSON resultante se guarda en `Budget.ai_analysis` de la respuesta más reciente.
+
+4. **`confirmar()`**: crea `PurchaseOrder` con los materiales de la solicitud, pone los materiales en estado "pedido" y marca la solicitud como "confirmada".
+
+5. **`get_pending_for_supplier()`**: lookup para routing de WhatsApp — busca la solicitud más reciente en estado "enviada" o "respondida" para un proveedor dado.
+
+### D. Router y endpoints
+
+`app/api/routes/solicitudes.py` expone tres endpoints (registrados en `main.py`):
+
+- `GET /obras/{obra_id}/solicitudes-cotizacion` → `list_for_obra()`
+- `POST /obras/{obra_id}/solicitudes-cotizacion` → `create()`
+- `POST /solicitudes-cotizacion/{id}/confirmar` → `confirmar()`
+
+### E. Routing WhatsApp de PDFs de proveedores
+
+`app/services/message_service.py` — nueva sección "4a" antes del ruteo existente: cuando llega un webhook con `NumMedia=1` y `MediaContentType0=application/pdf` (o Excel) de un número **no registrado** como responsable ni staff, se busca al proveedor por teléfono en la tabla `suppliers`. Si hay match y hay una solicitud pendiente, se llama a `receive_supplier_pdf()` y se responde con acuse de recibo por WhatsApp.
+
+Corrección detectada durante el desarrollo: `TwilioInboundPayload.detected_type` devuelve `UNKNOWN` para PDFs (no existe `DOCUMENT` en el enum `MessageType`). El routing filtra por `MediaContentType0` directamente en lugar de depender del `detected_type`.
+
+### F. Frontend
+
+- `ComprasTab.tsx`: rediseño completo de la navegación con tres módulos numerados (01 Materiales / 02 Cotizaciones / 03 Pedidos), pills de estado con indicador de punto de color, y navegación automática post-modal (crear solicitud → va a Cotizaciones; confirmar → va a Pedidos).
+- `purchaseOrders.ts`: `fetchSolicitudes()` eliminó el mock estático y ahora llama a `GET /obras/{id}/solicitudes-cotizacion`.
+
+### Validation
+
+`alembic upgrade head` aplicó 0038 sin errores ✓ · `python -c "from app.main import fastapi_app"` importa sin errores ✓ · 3 endpoints registrados verificados con `curl /openapi.json` ✓ · `tsc --noEmit` exit 0 ✓ · `ast.parse` de todos los archivos nuevos/modificados ✓ · `curl /api/v1/obras/1/solicitudes-cotizacion` sin token → 403 (llega al guard) ✓.
+
+---
+
+## Sesión 2026-06-26 — Módulo Compras: mejoras al panel de cotizaciones
+
+### Cambios realizados
+
+#### Backend
+
+**`app/schemas/solicitud_cotizacion.py`**
+- `RespuestaCotizacionRead`: nuevos campos `rubro`, `proveedor_nombre`, `fecha`, `iva_pct`, `iva_monto`, `incluye_flete`, `inconsistencias` (datos extraídos del PDF)
+- `SolicitudCotizacionRead`: campo `contratista_phone: str | None`
+- `AnalisisComparativoRead.supplier_recomendado_id`: cambiado a `int | None` (soporta contratistas sin supplier_id)
+- Nuevo schema `ConfirmarContratistaRequest` con `supplier_name` y `supplier_phone`
+
+**`app/services/solicitud_service.py`**
+- `_to_read()`: populate los nuevos campos desde `b.data` (rubro, proveedor, fecha, iva, flete, inconsistencias) y agrega `contratista_phone=sol.contratista_phone`
+- `_ANALISIS_SCHEMA`: `supplier_recomendado_id` ahora acepta null (para contratistas)
+- Nuevo método `confirmar_contratista()`: auto-crea o reutiliza un `Supplier` existente desde nombre+teléfono del contratista, luego llama a `confirmar()`
+
+**`app/api/routes/solicitudes.py`**
+- Nuevo endpoint `POST /solicitudes-cotizacion/{id}/confirmar-contratista`
+
+#### Frontend
+
+**`types/index.ts`**
+- `RespuestaCotizacion`: agregados `rubro`, `proveedor_nombre`, `fecha`, `iva_pct`, `iva_monto`, `incluye_flete`, `inconsistencias: BudgetInconsistency[] | null`
+- `SolicitudCotizacion`: agregado `contratista_phone: string | null`
+- `AnalisisComparativo.supplier_recomendado_id`: `number | null`
+
+**`api/purchaseOrders.ts`**
+- Nueva función `confirmarContratistaProveedor(solicitudId, supplierName, supplierPhone)`
+
+**`components/ComprasTab.tsx`**
+- Nuevo componente `ConfirmarBtn` que maneja la bifurcación supplier formal vs contratista
+- `AnalisisPanel` — vista de 1 cotización: muestra tabla completa de ítems con columnas Descripción/Cant./Unidad/P.unit./Subtotal, metadatos del PDF (rubro, fecha, validez, flete, IVA), inconsistencias detectadas, y condiciones de pago/entrega
+- `AnalisisPanel` — vista multi cotización: usa `deduped` en lugar de `respuestas`, keys correctas para contratistas (no usa `supplier_id` como key), manejo de `recomendadoId == null`, cards de proveedores con flete incluido, resumen de IA mostrado, secciones de condiciones pago y plazos
+- `SolicitudCard` header: muestra nombre del proveedor desde `respuestas` si no hay `suppliers` formales; fallback a "Contratista directo" si hay `contratista_phone`; acepta nueva prop `onConfirmarCont`
+- `handleConfirmarContratista()` en el componente principal
+
+### Validation
+`python -c "from app.schemas.solicitud_cotizacion import *; from app.services.solicitud_service import SolicitudService"` → OK ✓ · 4 endpoints en router ✓ · `tsc --noEmit` exit 0 ✓.

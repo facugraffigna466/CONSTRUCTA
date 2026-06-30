@@ -37,6 +37,13 @@ class Budget(Base):
     # procesado | error
     status: Mapped[str] = mapped_column(String(20), default="procesado", nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Vinculación con solicitud de cotización (respuesta de proveedor vía WA)
+    solicitud_id: Mapped[int | None] = mapped_column(
+        ForeignKey("solicitudes_cotizacion.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    ai_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

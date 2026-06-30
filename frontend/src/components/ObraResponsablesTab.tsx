@@ -299,6 +299,179 @@ function RemoveConfirm({ member, onConfirm, onClose }: {
   );
 }
 
+// ── MemberCard ────────────────────────────────────────────────────────────────
+
+function MemberCard({ m, isAdmin, onEdit, onRemove }: {
+  m: ObraTeamMember;
+  isAdmin: boolean;
+  onEdit: (m: ObraTeamMember) => void;
+  onRemove: (m: ObraTeamMember) => void;
+}) {
+  const color = avatarColor(m.full_name);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #ECEEED", borderRadius: 11, padding: "10px 12px", opacity: m.is_active ? 1 : 0.5 }}>
+      <div style={{ width: 34, height: 34, borderRadius: 99, background: color, color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        {getInitials(m.full_name)}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.full_name}</span>
+          {m.role && <span style={{ fontSize: 10.5, color: "#5B6770", background: "#F0F1EF", border: "1px solid #E6E7E5", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>}
+          {m.plan_disciplines === null
+            ? <span style={{ fontSize: 10.5, color: "#1F8A5B", background: "#E8F7EF", border: "1px solid #B3E0CA", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Todos los planos</span>
+            : m.plan_disciplines.length === 0
+              ? <span style={{ fontSize: 10.5, color: "#9B4D00", background: "#FFF0E5", border: "1px solid #FFD0A8", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin acceso a planos</span>
+              : <span title={m.plan_disciplines.join(", ")} style={{ fontSize: 10.5, color: "#2A6FDB", background: "#EBF3FE", border: "1px solid #BDD6F7", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.plan_disciplines.length} disciplina{m.plan_disciplines.length !== 1 ? "s" : ""}</span>
+          }
+          {!m.is_active && <span style={{ fontSize: 10.5, color: "#D03A3A", background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inactivo</span>}
+        </div>
+        <span style={{ fontSize: 11, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
+      </div>
+      {isAdmin && (
+        <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+          <button onClick={() => onEdit(m)} title="Editar"
+            style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#EAF1FB"; e.currentTarget.style.color = "#2A6FDB"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
+            <Pencil style={{ width: 12, height: 12 }} />
+          </button>
+          <button onClick={() => onRemove(m)} title="Quitar"
+            style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
+            onMouseEnter={e => { e.currentTarget.style.background = "#FCE5E5"; e.currentTarget.style.color = "#D03A3A"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
+            <Trash2 style={{ width: 12, height: 12 }} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Column ────────────────────────────────────────────────────────────────────
+
+function Column({ type, list, total, search, onSearch, isAdmin, isAddingHere, onOpenForm, onCloseForm, nameInput, onNameChange, phoneInput, onPhoneChange, roleInput, onRoleChange, selectedExisting, onSelectExisting, available, formError, onAdd, saving, onEditMember, onRemoveMember }: {
+  type: "equipo" | "contratista";
+  list: ObraTeamMember[];
+  total: number;
+  search: string;
+  onSearch: (v: string) => void;
+  isAdmin: boolean;
+  isAddingHere: boolean;
+  onOpenForm: () => void;
+  onCloseForm: () => void;
+  nameInput: string;
+  onNameChange: (v: string) => void;
+  phoneInput: string;
+  onPhoneChange: (v: string) => void;
+  roleInput: string;
+  onRoleChange: (v: string) => void;
+  selectedExisting: Responsible | null;
+  onSelectExisting: (r: Responsible) => void;
+  available: Responsible[];
+  formError: string | null;
+  onAdd: () => void;
+  saving: boolean;
+  onEditMember: (m: ObraTeamMember) => void;
+  onRemoveMember: (m: ObraTeamMember) => void;
+}) {
+  const isEquipo = type === "equipo";
+  const label = isEquipo ? "Equipo" : "Contratistas";
+  const placeholder = isEquipo ? "Buscar por nombre o teléfono..." : "Buscar contratista...";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", background: "#F9FAF8", border: "1px solid #ECEEED", borderRadius: 14, overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 12px", borderBottom: "1px solid #ECEEED", background: "#fff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{label}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7580", background: "#F0F1EF", border: "1px solid #E6E7E5", borderRadius: 99, padding: "1px 8px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{total}</span>
+        </div>
+        {isAdmin && !isAddingHere && (
+          <button onClick={onOpenForm}
+            style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: "0 3px 8px -3px rgba(255,107,53,0.4)" }}>
+            <UserPlus style={{ width: 11, height: 11 }} /> Agregar
+          </button>
+        )}
+        {isAdmin && isAddingHere && (
+          <button onClick={onCloseForm} style={{ fontSize: 12, color: "#6B7580", background: "none", border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cancelar</button>
+        )}
+      </div>
+
+      {/* Inline add form */}
+      {isAddingHere && (
+        <div style={{ padding: "12px 14px", borderBottom: "1px solid #ECEEED", background: "#FAFBF9" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Nombre</label>
+              <AutocompleteInput value={nameInput} onChange={v => { onNameChange(v); }} onSelect={onSelectExisting} suggestions={available} placeholder="Juan Pérez" />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>WhatsApp</label>
+                <AutocompleteInput value={phoneInput} onChange={v => { onPhoneChange(v); }} onSelect={onSelectExisting} suggestions={available} placeholder="+5491112345678" />
+              </div>
+              <div>
+                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Rol <span style={{ fontWeight: 400 }}>(opcional)</span></label>
+                <input style={{ ...BASE, fontSize: 12 }} placeholder={isEquipo ? "Capataz..." : "Electricista..."} value={roleInput} onChange={e => onRoleChange(e.target.value)} onKeyDown={e => { if (e.key === "Enter") onAdd(); }} />
+              </div>
+            </div>
+            {selectedExisting && (
+              <div style={{ fontSize: 11.5, color: "#2A6FDB", background: "#EBF3FE", borderRadius: 7, padding: "5px 10px", border: "1px solid #BDD6F7", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                Del directorio — {selectedExisting.full_name}
+              </div>
+            )}
+            {formError && (
+              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#D03A3A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <AlertTriangle style={{ width: 11, height: 11 }} />{formError}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={onAdd} disabled={saving}
+                style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                {saving ? "Agregando..." : `Agregar a ${label}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Search */}
+      <div style={{ padding: "10px 14px", borderBottom: "1px solid #ECEEED" }}>
+        <div style={{ position: "relative" }}>
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#A0A8B0" }}>
+            <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M8.5 8.5L11 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+          </svg>
+          <input
+            style={{ ...BASE, paddingLeft: 30, fontSize: 12.5, background: "#fff" }}
+            placeholder={placeholder}
+            value={search}
+            onChange={e => onSearch(e.target.value)}
+          />
+          {search && (
+            <button onClick={() => onSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#A0A8B0", padding: 2, display: "flex" }}>
+              <svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* List */}
+      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6, minHeight: 80 }}>
+        {list.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <p style={{ margin: 0, fontSize: 12.5, color: "#A0A8B0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {search ? "Sin resultados para esa búsqueda." : isEquipo ? "Sin miembros del equipo todavía." : "Sin contratistas asignados."}
+            </p>
+          </div>
+        ) : (
+          list.map(m => <MemberCard key={m.responsible_id} m={m} isAdmin={isAdmin} onEdit={onEditMember} onRemove={onRemoveMember} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface Props { obraId: number; onTeamChanged?: () => void; }
@@ -384,158 +557,31 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
 
   if (loading) return <p style={{ padding: 24, fontSize: 13, color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cargando...</p>;
 
-  function MemberCard({ m }: { m: ObraTeamMember }) {
-    const color = avatarColor(m.full_name);
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#fff", border: "1px solid #ECEEED", borderRadius: 11, padding: "10px 12px", opacity: m.is_active ? 1 : 0.5 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 99, background: color, color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-          {getInitials(m.full_name)}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.full_name}</span>
-            {m.role && <span style={{ fontSize: 10.5, color: "#5B6770", background: "#F0F1EF", border: "1px solid #E6E7E5", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>}
-            {m.plan_disciplines === null
-              ? <span style={{ fontSize: 10.5, color: "#1F8A5B", background: "#E8F7EF", border: "1px solid #B3E0CA", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Todos los planos</span>
-              : m.plan_disciplines.length === 0
-                ? <span style={{ fontSize: 10.5, color: "#9B4D00", background: "#FFF0E5", border: "1px solid #FFD0A8", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin acceso a planos</span>
-                : <span title={m.plan_disciplines.join(", ")} style={{ fontSize: 10.5, color: "#2A6FDB", background: "#EBF3FE", border: "1px solid #BDD6F7", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.plan_disciplines.length} disciplina{m.plan_disciplines.length !== 1 ? "s" : ""}</span>
-            }
-            {!m.is_active && <span style={{ fontSize: 10.5, color: "#D03A3A", background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inactivo</span>}
-          </div>
-          <span style={{ fontSize: 11, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
-        </div>
-        {isAdmin && (
-          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-            <button onClick={() => setEditingMember(m)} title="Editar"
-              style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#EAF1FB"; e.currentTarget.style.color = "#2A6FDB"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
-              <Pencil style={{ width: 12, height: 12 }} />
-            </button>
-            <button onClick={() => setRemovingMember(m)} title="Quitar"
-              style={{ width: 28, height: 28, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#8E97A0" }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#FCE5E5"; e.currentTarget.style.color = "#D03A3A"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}>
-              <Trash2 style={{ width: 12, height: 12 }} />
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function Column({ type, list, total, search, onSearch }: {
-    type: "equipo" | "contratista";
-    list: ObraTeamMember[];
-    total: number;
-    search: string;
-    onSearch: (v: string) => void;
-  }) {
-    const isEquipo = type === "equipo";
-    const label = isEquipo ? "Equipo" : "Contratistas";
-    const placeholder = isEquipo ? "Buscar por nombre o teléfono..." : "Buscar contratista...";
-    const isAddingHere = addingTo === type;
-
-    return (
-      <div style={{ display: "flex", flexDirection: "column", background: "#F9FAF8", border: "1px solid #ECEEED", borderRadius: 14, overflow: "hidden" }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px 12px", borderBottom: "1px solid #ECEEED", background: "#fff" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{label}</span>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#6B7580", background: "#F0F1EF", border: "1px solid #E6E7E5", borderRadius: 99, padding: "1px 8px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{total}</span>
-          </div>
-          {isAdmin && !isAddingHere && (
-            <button onClick={() => openForm(type)}
-              style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 12px", fontSize: 12, fontWeight: 600, borderRadius: 8, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif", boxShadow: "0 3px 8px -3px rgba(255,107,53,0.4)" }}>
-              <UserPlus style={{ width: 11, height: 11 }} /> Agregar
-            </button>
-          )}
-          {isAdmin && isAddingHere && (
-            <button onClick={closeForm} style={{ fontSize: 12, color: "#6B7580", background: "none", border: "none", cursor: "pointer", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Cancelar</button>
-          )}
-        </div>
-
-        {/* Inline add form */}
-        {isAddingHere && (
-          <div style={{ padding: "12px 14px", borderBottom: "1px solid #ECEEED", background: "#FAFBF9" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div>
-                <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Nombre</label>
-                <AutocompleteInput value={nameInput} onChange={v => { setNameInput(v); setSelectedExisting(null); }} onSelect={handleSelectExisting} suggestions={available} placeholder="Juan Pérez" />
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                <div>
-                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>WhatsApp</label>
-                  <AutocompleteInput value={phoneInput} onChange={v => { setPhoneInput(v); setSelectedExisting(null); }} onSelect={handleSelectExisting} suggestions={available} placeholder="+5491112345678" />
-                </div>
-                <div>
-                  <label style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580", display: "block", marginBottom: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Rol <span style={{ fontWeight: 400 }}>(opcional)</span></label>
-                  <input style={{ ...BASE, fontSize: 12 }} placeholder={isEquipo ? "Capataz..." : "Electricista..."} value={roleInput} onChange={e => setRoleInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleAdd(); }} />
-                </div>
-              </div>
-              {selectedExisting && (
-                <div style={{ fontSize: 11.5, color: "#2A6FDB", background: "#EBF3FE", borderRadius: 7, padding: "5px 10px", border: "1px solid #BDD6F7", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Del directorio — {selectedExisting.full_name}
-                </div>
-              )}
-              {formError && (
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#D03A3A", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  <AlertTriangle style={{ width: 11, height: 11 }} />{formError}
-                </div>
-              )}
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button onClick={handleAdd} disabled={saving}
-                  style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  {saving ? "Agregando..." : `Agregar a ${label}`}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Search */}
-        <div style={{ padding: "10px 14px", borderBottom: "1px solid #ECEEED" }}>
-          <div style={{ position: "relative" }}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#A0A8B0" }}>
-              <circle cx="5.5" cy="5.5" r="4" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M8.5 8.5L11 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            <input
-              style={{ ...BASE, paddingLeft: 30, fontSize: 12.5, background: "#fff" }}
-              placeholder={placeholder}
-              value={search}
-              onChange={e => onSearch(e.target.value)}
-            />
-            {search && (
-              <button onClick={() => onSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#A0A8B0", padding: 2, display: "flex" }}>
-                <svg width="11" height="11" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* List */}
-        <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6, minHeight: 80 }}>
-          {list.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <p style={{ margin: 0, fontSize: 12.5, color: "#A0A8B0", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {search ? "Sin resultados para esa búsqueda." : isEquipo ? "Sin miembros del equipo todavía." : "Sin contratistas asignados."}
-              </p>
-            </div>
-          ) : (
-            list.map(m => <MemberCard key={m.responsible_id} m={m} />)
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ padding: "0 0 24px" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <Column type="equipo" list={equipoList} total={equipoTotal} search={searchEquipo} onSearch={setSearchEquipo} />
-        <Column type="contratista" list={contratistaList} total={contratistaTotal} search={searchContratista} onSearch={setSearchContratista} />
+        <Column
+          type="equipo" list={equipoList} total={equipoTotal} search={searchEquipo} onSearch={setSearchEquipo}
+          isAdmin={isAdmin} isAddingHere={addingTo === "equipo"}
+          onOpenForm={() => openForm("equipo")} onCloseForm={closeForm}
+          nameInput={nameInput} onNameChange={v => { setNameInput(v); setSelectedExisting(null); }}
+          phoneInput={phoneInput} onPhoneChange={v => { setPhoneInput(v); setSelectedExisting(null); }}
+          roleInput={roleInput} onRoleChange={setRoleInput}
+          selectedExisting={selectedExisting} onSelectExisting={handleSelectExisting}
+          available={available} formError={formError} onAdd={handleAdd} saving={saving}
+          onEditMember={setEditingMember} onRemoveMember={setRemovingMember}
+        />
+        <Column
+          type="contratista" list={contratistaList} total={contratistaTotal} search={searchContratista} onSearch={setSearchContratista}
+          isAdmin={isAdmin} isAddingHere={addingTo === "contratista"}
+          onOpenForm={() => openForm("contratista")} onCloseForm={closeForm}
+          nameInput={nameInput} onNameChange={v => { setNameInput(v); setSelectedExisting(null); }}
+          phoneInput={phoneInput} onPhoneChange={v => { setPhoneInput(v); setSelectedExisting(null); }}
+          roleInput={roleInput} onRoleChange={setRoleInput}
+          selectedExisting={selectedExisting} onSelectExisting={handleSelectExisting}
+          available={available} formError={formError} onAdd={handleAdd} saving={saving}
+          onEditMember={setEditingMember} onRemoveMember={setRemovingMember}
+        />
       </div>
 
       {editingMember && (
