@@ -135,12 +135,12 @@ Desarrollar una plataforma de gestión de obras de construcción que conecte la 
 
 | Objetivo específico | Evidencia de cumplimiento |
 |---|---|
-| 1. Gestión integral de obras | Módulos de obras, tareas, dependencias M2M, subtareas y calendario laboral implementados; migraciones de base de datos hasta la 0037. |
+| 1. Gestión integral de obras | Módulos de obras, tareas, dependencias M2M, subtareas y calendario laboral implementados; migraciones de base de datos hasta la 0038. |
 | 2. Gantt + CPM + baseline + cascada | Componente de cronograma con flechas de dependencia, toggle de ruta crítica y línea base; endpoint de ruta crítica; reprogramación en cascada con vista previa. |
 | 3. Planilla de baja fricción | Vista de planilla con selección de rangos, relleno por arrastre con encadenado de fechas, copiar/pegar y deshacer; importación de Excel/CSV/MS Project. |
 | 4. Asistente de WhatsApp | Webhook de mensajería; identificación de responsables y de staff por número; máquina de conversación para reporte de estado. |
 | 5. Bitácora de obra con IA | Cadena audio → transcripción (`gpt-4o-mini-transcribe`) → análisis con modelo de lenguaje (Claude Haiku 4.5, salida estructurada) → resumen, puntos clave y sugerencias aplicables. |
-| 6. Presupuestos con IA | Carga de PDF/imagen/Excel/texto, extracción estructurada, comparación con recomendación e inconsistencias. |
+| 6. Presupuestos con IA | Carga de PDF/imagen/Excel/texto, extracción estructurada, comparación con recomendación e inconsistencias. Módulo de solicitudes de cotización: generación de PDF de solicitud, envío a proveedores por WhatsApp, recepción automática de respuestas PDF desde WhatsApp, análisis comparativo con IA (salida estructurada) y confirmación de proveedor con generación de orden de compra. |
 | 7. Planos versionados | Carga con versionado por obra/disciplina; consulta y envío por WhatsApp de la última versión vigente. |
 | 8. Alertas automáticas | Servicio de evaluación de riesgos por obra (vencidas, bloqueadas, sin responsable, alto porcentaje de vencimiento); seis tipos de alerta; emisión en tiempo real por Socket.IO y traza en el historial. |
 | 9. Multi-inquilino y planes | Aislamiento por *tenant* en obras, responsables, alertas y usuarios; planes con límites y respuesta HTTP 402 al superarlos. |
@@ -250,7 +250,7 @@ CONSTRUCTA adopta una **arquitectura cliente–servidor de tres capas**, despleg
 
 - **Capa de presentación:** aplicación de página única (React + TypeScript), servida estáticamente y comunicada con el servidor por HTTP/JSON y por *websockets* (Socket.IO).
 - **Capa de servicios (backend):** API REST construida con FastAPI, organizada en *routers* (endpoints), *services* (lógica de negocio), *repositories* (acceso a datos) y *schemas* (validación). El servidor expone, además, un *endpoint* de *webhook* que recibe los mensajes entrantes de WhatsApp.
-- **Capa de datos:** base de datos relacional PostgreSQL, con esquema versionado mediante migraciones (Alembic, hasta la versión 0037).
+- **Capa de datos:** base de datos relacional PostgreSQL, con esquema versionado mediante migraciones (Alembic, hasta la versión 0038).
 - **Integraciones externas:** API de WhatsApp (Twilio), modelos de IA (Anthropic Claude y reconocimiento de voz), y correo transaccional (Brevo).
 
 El aislamiento entre empresas se resuelve a nivel de aplicación con un identificador de inquilino (*tenant*) que filtra las consultas de obras, responsables, alertas, usuarios y bitácora.
@@ -265,7 +265,7 @@ El sistema opera bajo dos flujos característicos:
 
 #### Diseño de datos
 
-El modelo de datos, versionado en treinta y siete migraciones (0001 a 0037), se organiza en torno a la entidad **obra** como agregado central y se compone de las siguientes entidades principales:
+El modelo de datos, versionado en treinta y ocho migraciones (0001 a 0038), se organiza en torno a la entidad **obra** como agregado central y se compone de las siguientes entidades principales:
 
 - **Identidad y organización:** `tenants` (empresas, con su `plan`), `users` (usuarios con rol y número de WhatsApp), `settings`.
 - **Obra y planificación:** `obras` (con datos del comitente), `tasks` (con auto-referencia `parent_task_id` para subtareas y una tabla intermedia de dependencias que registra el tipo —FS/SS/FF/SF— y el desfase), `baselines` (líneas base de tareas), `calendar` (calendario laboral).
@@ -286,7 +286,7 @@ El aislamiento entre empresas se materializa con la columna `tenant_id` en las e
 
 ### Implementación
 
-**Enfoque de desarrollo.** La construcción se abordó de forma **incremental**, con una rama de control de versiones (Git) por cada etapa del plan, integrada al tronco principal tras su verificación. Cada cambio en el modelo de datos se materializó en una **migración** versionada (treinta y siete en total, 0001 a 0037), de modo que el esquema de la base pudiera evolucionar de manera reproducible. La cronología completa del desarrollo, con sus decisiones y validaciones, se documenta en `docs/documentacion.md`.
+**Enfoque de desarrollo.** La construcción se abordó de forma **incremental**, con una rama de control de versiones (Git) por cada etapa del plan, integrada al tronco principal tras su verificación. Cada cambio en el modelo de datos se materializó en una **migración** versionada (treinta y ocho en total, 0001 a 0038), de modo que el esquema de la base pudiera evolucionar de manera reproducible. La cronología completa del desarrollo, con sus decisiones y validaciones, se documenta en `docs/documentacion.md`.
 
 **Magnitud de la implementación.** El backend expone alrededor de veintiséis grupos de *endpoints* (autenticación, obras, tareas, dependencias, ruta crítica, línea base, calendario, alertas, notificaciones, presencia, responsables, equipo de obra, bitácora, presupuestos, planos, proveedores, materiales, órdenes de compra, importación, exportación, *webhooks*, administración, entre otros), apoyados en torno a veintiún entidades de datos y diecisiete servicios de negocio. El frontend se organiza en una docena de pantallas y unos treinta y cinco componentes reutilizables.
 
@@ -301,7 +301,7 @@ A continuación se describen los módulos que componen la solución:
 - **Módulo de bitácora de obra con IA:** convierte una nota de voz en información estructurada mediante una cadena de procesamiento: el audio se transcribe con un modelo de reconocimiento del habla (`gpt-4o-mini-transcribe`) y el texto resultante se analiza con un modelo de lenguaje (Claude Haiku 4.5) configurado con **salida estructurada (JSON Schema)**. El análisis produce un resumen de dos a cuatro oraciones, una lista de puntos clave y un conjunto de **sugerencias aplicables** sobre el plan —reprogramar una tarea, crear una tarea, cambiar un estado o dejar una nota—, cada una con una cita del audio que la justifica. Si el audio no contiene nada accionable, no se fuerzan sugerencias. El modelo recibe el **calendario laboral** de la obra para proponer fechas en días hábiles, y las sugerencias se revisan y aplican (Sí/No) desde la aplicación —un módulo propio de cada obra— donde un indicador por obra señala las que quedan pendientes. Para no perder ninguna nota, si una nota de voz llega sin obra (un emisor con varias obras que no indicó cuál), el sistema le **recuerda automáticamente al emisor cada 30 minutos** —en horario laboral, hasta 48 horas— que la asigne; y si aun así no responde, la nota queda visible en una sección **"Sin asignar"** para que el jefe de obra la asigne manualmente, garantizando la trazabilidad. Antes de aplicar una sugerencia, el jefe puede **editarla** (ajustar fechas, título, responsable o estado): la IA propone y él decide. Cuando una sugerencia se aplica, el sistema **le confirma por WhatsApp a quien envió la nota** qué se hizo, cerrando el círculo del reporte; y la llegada de una nota nueva se anuncia al instante con una **notificación en tiempo real** (Socket.IO) al equipo de la obra. La trazabilidad es navegable en ambos sentidos: desde una tarea se accede a las **notas de voz que la originaron o modificaron**, con el audio reproducible y la cita que lo justifica. El historial de notas se explora con **búsqueda y filtros** (por texto o responsable, por tipo de acción y por fecha).
 - **Módulo de presupuestos con IA:** acepta presupuestos de proveedores en múltiples formatos (PDF, imagen, Excel o texto) y, con el mismo modelo de lenguaje, extrae sus datos a una estructura validada (proveedor, fecha, rubro, moneda, ítems con cantidad/unidad/precio/subtotal, IVA, total, flete, plazo de entrega, condiciones de pago y validez). Detecta **inconsistencias** (por ejemplo, totales que no cierran o faltantes de precios) con su severidad, y **compara** varios presupuestos calculando el promedio, el más económico y el desvío porcentual de cada uno.
 - **Módulo de planos:** repositorio de documentación con **versionado** por obra y disciplina; marca la última versión vigente y permite su consulta y envío por WhatsApp, evitando que en el campo se trabaje sobre planos desactualizados.
-- **Módulo de materiales, presupuesto y compras:** cómputo de materiales por tarea, presupuesto por obra (estimado frente a real) y generación de **órdenes de compra** a proveedores, con su envío y el seguimiento de la recepción.
+- **Módulo de materiales, presupuesto y compras:** cómputo de materiales por tarea (con unidad, precio unitario y estado de aprovisionamiento), presupuesto por obra (estimado frente a real) y un flujo de **solicitudes de cotización**: desde la obra se seleccionan los materiales pendientes y los proveedores a consultar; el sistema genera un PDF de solicitud y lo envía a cada proveedor por WhatsApp. Cuando el proveedor responde con su presupuesto en PDF —también por WhatsApp—, el sistema lo detecta, lo descarga y delega en el módulo de presupuestos la extracción estructurada con IA. Con dos o más respuestas, se dispara automáticamente un **análisis comparativo** (Claude con salida estructurada JSON Schema) que compara los presupuestos ítem por ítem, identifica ventajas y riesgos de cada proveedor y emite una recomendación fundamentada. Al confirmar el proveedor elegido, se genera la **orden de compra** y los materiales pasan al estado "pedido".
 
 ### Pruebas
 
@@ -324,6 +324,7 @@ A modo ilustrativo, se presentan algunos casos de prueba representativos (el con
 | Comparación de presupuestos | Cargar dos o más presupuestos de proveedores | Se extraen los datos, se marcan inconsistencias y se indica el más económico con su desvío. |
 | Límite de plan | Crear una obra por encima del límite del plan | La API responde HTTP 402 y el frontend ofrece la mejora de plan. |
 | Aislamiento multi-inquilino | Consultar datos con un usuario de otra empresa | No se exponen obras ni datos ajenos al *tenant*. |
+| Solicitud de cotización | Crear una solicitud, simular respuestas PDF de dos proveedores por WhatsApp y confirmar el proveedor recomendado | La IA extrae los datos de cada PDF, genera el análisis comparativo y la orden de compra queda asociada a la solicitud. |
 
 > **[COMPLETAR]** Si la cátedra exige pruebas unitarias automatizadas con cobertura, dejar constancia del estado actual y, en su caso, del plan para incorporarlas (por ejemplo, *pytest* en el backend y *Vitest*/*Playwright* en el frontend).
 
@@ -388,7 +389,7 @@ A modo de referencia verificada durante las pruebas, el costo de procesar una no
 
 ## Conclusión
 
-El proyecto CONSTRUCTA permitió construir una plataforma funcional que aborda la desconexión entre la planificación y la ejecución en obra. Se cumplieron los objetivos específicos planteados: la gestión integral de obras y tareas, la visualización del cronograma con ruta crítica y línea base, la carga de baja fricción, el asistente de WhatsApp con identificación de emisores, la bitácora de obra asistida por IA, la gestión de presupuestos con lectura y comparación automática, el repositorio de planos consultable por WhatsApp, el sistema de alertas y el aislamiento multi-inquilino con planes.
+El proyecto CONSTRUCTA permitió construir una plataforma funcional que aborda la desconexión entre la planificación y la ejecución en obra. Se cumplieron los objetivos específicos planteados: la gestión integral de obras y tareas, la visualización del cronograma con ruta crítica y línea base, la carga de baja fricción, el asistente de WhatsApp con identificación de emisores, la bitácora de obra asistida por IA, la gestión de presupuestos con lectura y comparación automática, el flujo de solicitudes de cotización a proveedores con análisis comparativo asistido por IA, el repositorio de planos consultable por WhatsApp, el sistema de alertas y el aislamiento multi-inquilino con planes.
 
 Entre los principales aprendizajes del desarrollo se destacan: la importancia de **minimizar la fricción de adopción** como criterio de diseño rector; el valor de los modelos de lenguaje con **salida estructurada** para convertir lenguaje natural (mensajes y notas de voz) en datos accionables de forma confiable; y la necesidad de **verificar en condiciones reales** —ejecutando la aplicación y los flujos de integración— para detectar problemas que las verificaciones de compilación no revelan.
 

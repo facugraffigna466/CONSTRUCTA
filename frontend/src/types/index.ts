@@ -294,3 +294,105 @@ export interface PlanUsage {
   users_limit: number | null;
   tasks_per_obra_limit: number | null;
 }
+
+// ─── Solicitudes de cotización ────────────────────────────────────────────────
+
+export interface SolicitudCotizacion {
+  id: number;
+  obra_id: number;
+  ref_code: string;
+  status: "borrador" | "enviada" | "respondida" | "confirmada";
+  notes: string | null;
+  pdf_url: string | null;
+  contratista_phone: string | null;
+  created_at: string;
+  sent_at: string | null;
+  material_ids: number[];
+  suppliers: SolicitudSupplier[];
+  respuestas: RespuestaCotizacion[];
+  analisis_ia: AnalisisComparativo | null;
+}
+
+export interface SolicitudSupplier {
+  supplier_id: number;
+  supplier_name: string;
+  supplier_phone: string | null;
+  status: "enviada" | "respondida";
+  sent_at: string | null;
+}
+
+export interface RespuestaCotizacion {
+  id: number;
+  solicitud_id: number;
+  supplier_id: number | null;
+  supplier_name: string;
+  total: number | null;
+  currency: string;
+  plazo_entrega: string | null;
+  condiciones_pago: string | null;
+  validez: string | null;
+  rubro: string | null;
+  proveedor_nombre: string | null;
+  fecha: string | null;
+  iva_pct: number | null;
+  iva_monto: number | null;
+  incluye_flete: boolean | null;
+  inconsistencias: BudgetInconsistency[] | null;
+  items: RespuestaItem[];
+  created_at: string;
+}
+
+export interface RespuestaItem {
+  nombre: string;
+  cantidad: number | null;
+  unidad: string | null;
+  precio_unitario: number | null;
+  subtotal: number | null;
+}
+
+export interface AnalisisComparativo {
+  resumen: string;
+  comparacion_items: ComparacionItem[];
+  donde_ganas: string[];
+  donde_pierdes: string[];
+  condiciones_pago: string;
+  plazos: string;
+  riesgos: string[];
+  recomendacion: string;
+  supplier_recomendado_id: number | null;  // null when contratista recommended or no clear winner
+}
+
+export interface ComparacionItem {
+  nombre: string;
+  precios: { supplier_id: number; supplier_name: string; precio_unitario: number | null; subtotal: number | null }[];
+  mas_barato_id: number | null;
+  diferencia: number | null;
+}
+
+// ─── Análisis histórico de compras (on-demand IA) ─────────────────────────────
+
+export interface EstadisticaProveedor {
+  nombre: string;
+  cotizaciones_respondidas: number;
+  precio_promedio: number | null;
+  precio_min: number | null;
+  precio_max: number | null;
+  tendencia: string; // "competitivo" | "caro" | "variable" | "sin_datos"
+  fortaleza: string;
+}
+
+export interface MaterialCritico {
+  nombre: string;
+  proveedor_mas_barato: string | null;
+  diferencia_pct: number | null;
+  veces_cotizado: number;
+}
+
+export interface AnalisisHistoricoCompras {
+  proveedor_recomendado: string | null;
+  motivo: string;
+  por_proveedor: EstadisticaProveedor[];
+  materiales_criticos: MaterialCritico[];
+  alertas: string[];
+  ahorro_potencial: number | null;
+}

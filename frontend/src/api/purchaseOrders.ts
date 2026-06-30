@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { AnalisisHistoricoCompras, SolicitudCotizacion } from "../types";
 
 // ── Presupuesto ───────────────────────────────────────────────────────────────
 
@@ -96,5 +97,62 @@ export async function sendPurchaseOrder(orderId: number, channel: "whatsapp" | "
 
 export async function receivePurchaseOrder(orderId: number): Promise<PurchaseOrder> {
   const { data } = await apiClient.post<PurchaseOrder>(`/purchase-orders/${orderId}/receive`);
+  return data;
+}
+
+// ── Solicitudes de cotización ─────────────────────────────────────────────────
+
+export interface CreateSolicitudPayload {
+  material_ids: number[];
+  supplier_ids: number[];
+  notes?: string | null;
+  contratista_phones?: string[];
+}
+
+export async function fetchSolicitudes(obraId: number): Promise<SolicitudCotizacion[]> {
+  const { data } = await apiClient.get<SolicitudCotizacion[]>(
+    `/obras/${obraId}/solicitudes-cotizacion`,
+  );
+  return data;
+}
+
+export async function createSolicitud(
+  obraId: number,
+  payload: CreateSolicitudPayload,
+): Promise<SolicitudCotizacion> {
+  const { data } = await apiClient.post<SolicitudCotizacion>(
+    `/obras/${obraId}/solicitudes-cotizacion`, payload,
+  );
+  return data;
+}
+
+export async function confirmarProveedor(
+  solicitudId: number,
+  supplierId: number,
+): Promise<PurchaseOrder> {
+  const { data } = await apiClient.post<PurchaseOrder>(
+    `/solicitudes-cotizacion/${solicitudId}/confirmar`, { supplier_id: supplierId },
+  );
+  return data;
+}
+
+export async function confirmarContratistaProveedor(
+  solicitudId: number,
+  supplierName: string,
+  supplierPhone: string | null,
+): Promise<PurchaseOrder> {
+  const { data } = await apiClient.post<PurchaseOrder>(
+    `/solicitudes-cotizacion/${solicitudId}/confirmar-contratista`,
+    { supplier_name: supplierName, supplier_phone: supplierPhone },
+  );
+  return data;
+}
+
+export async function deleteSolicitud(solicitudId: number): Promise<void> {
+  await apiClient.delete(`/solicitudes-cotizacion/${solicitudId}`);
+}
+
+export async function fetchAnalisisCompras(obraId: number): Promise<AnalisisHistoricoCompras> {
+  const { data } = await apiClient.post<AnalisisHistoricoCompras>(`/obras/${obraId}/analisis-compras`);
   return data;
 }
