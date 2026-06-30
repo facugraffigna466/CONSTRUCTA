@@ -69,6 +69,7 @@ interface ResumenTabProps {
   onViewTareas: () => void;
   onViewHistorial?: () => void;
   onEditTask: (task: Task) => void;
+  onDeleteTask?: (task: Task) => void;
   onTaskRescheduled: () => void;
   onStatusChange?: (task: Task, newStatus: TaskStatus) => void;
 }
@@ -88,6 +89,7 @@ export function ResumenTab({
   onViewTareas,
   onViewHistorial,
   onEditTask,
+  onDeleteTask,
   onTaskRescheduled,
   onStatusChange,
 }: ResumenTabProps) {
@@ -288,6 +290,7 @@ export function ResumenTab({
           obraExpectedEndDate={obraExpectedEndDate}
           onSaved={onTaskRescheduled}
           onEditTask={onEditTask}
+          onDeleteTask={onDeleteTask}
           onStatusChange={onStatusChange}
           tasksWithoutDates={tasksWithoutDates.length}
           obraId={obraId}

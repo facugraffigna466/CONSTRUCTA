@@ -1593,3 +1593,33 @@ Corrección detectada durante el desarrollo: `TwilioInboundPayload.detected_type
 
 ### Validation
 `python -c "from app.schemas.solicitud_cotizacion import *; from app.services.solicitud_service import SolicitudService"` → OK ✓ · 4 endpoints en router ✓ · `tsc --noEmit` exit 0 ✓.
+
+---
+
+## 2026-06-30 — Bitácora: entradas y sugerencias colapsables (PR #24)
+
+Rediseño de la `BitacoraPage` siguiendo *progressive disclosure*: las notas resueltas ocupan poco y las accionables saltan a la vista.
+
+- **Entradas colapsables** (`motion.div` con `layout` + `AnimatePresence`): cada nota se pliega/despliega; las que **necesitan atención** (sugerencias pendientes) arrancan expandidas, el resto colapsadas.
+- **Sugerencias aplicadas/descartadas plegadas**: las ya resueltas se muestran en una línea compacta en vez de la tarjeta completa con inputs de edición.
+- **Filtros mínimos**: se eliminaron los dropdowns de tipo y fecha (ruidosos); queda solo la **búsqueda** por texto/responsable, combinada con el "solo pendientes".
+
+### Validation
+`tsc -b` exit 0 ✓. Revisión visual en vivo (HMR) sobre la página de bitácora de una obra.
+
+---
+
+## 2026-06-30 — Gantt: dependencias visibles, agrupamiento WBS, pinch-zoom y borrar (PR #25)
+
+Tanda de mejoras de visualización del cronograma (solo capa visual/orden; **no se tocó la lógica del drag**).
+
+- **Agrupamiento WBS**: nuevo `groupChildrenUnderParents()` reordena las filas en árbol para que cada subtarea quede **justo debajo de su tarea padre** (antes caían sueltas según `order_index`). Respeta colapsos y el reorder por drag.
+- **Dependencias legibles**: flechas más marcadas (azul `#3D6FB5` + halo blanco, cabeza/punto más grandes) y un **chip "depende de …"** en la columna de tareas. El chip se **omite cuando la predecesora es la propia tarea padre** (relación redundante con la jerarquía).
+- **Filas compactas**: `ROW_H 48` / `BAR_H 28` → entra más obra de un vistazo.
+- **Pinch-to-zoom**: listener nativo de `wheel` con `ctrlKey` (así reporta el *trackpad* el pellizco; también Ctrl+rueda) que multiplica `dayW` de forma continua, **anclado al cursor** (ajusta `scrollLeft` por ratio en `requestAnimationFrame`). Límites `0.35×`–`3×`; cambiar de preset (semana/mes/trim) resetea el zoom fino. Como toda la matemática del Gantt deriva de `dayW`, el drag/resize/flechas escalan coherentes.
+- **Botón eliminar en hover**: la prop `onDeleteTask` (ya existente en `GanttTimeline`) se cablea desde `ObraDetailPage` → `ResumenTab`, gateada por `can("tarea.delete")` (solo admin); reusa el modal `TaskDeleteConfirm`.
+
+Archivos: `GanttTimeline.tsx`, `ResumenTab.tsx`, `ObraDetailPage.tsx`.
+
+### Validation
+`tsc -b` exit 0 ✓. Verificación manual de drag/resize tras zoom, agrupamiento de subtareas, pinch anclado al cursor y borrado por hover (queda como checklist del PR).

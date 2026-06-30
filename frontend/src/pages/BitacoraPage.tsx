@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, Calendar, CheckCircle2, ChevronDown, ClipboardList, FileText,
-  Loader2, Mic, MicOff, Plus, RefreshCw, Sparkles, Square, Trash2, Upload, X,
+  Loader2, Mic, MicOff, Plus, RefreshCw, Search, Sparkles, Square, Trash2, Upload, X,
 } from "lucide-react";
 import {
   applySuggestion, assignObra, createAudioEntry, createTextEntry, deleteEntry,
@@ -122,6 +123,40 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
     );
   }
 
+  // Aplicada o descartada → colapsada a una sola línea, no ocupa espacio.
+  if (done) {
+    let short = "";
+    if (s.type === "reschedule_task") short = `«${s.task_title ?? `Tarea #${s.task_id}`}»`;
+    else if (s.type === "create_task") short = `«${s.title ?? ""}»`;
+    else if (s.type === "update_status") short = `«${s.task_title ?? `Tarea #${s.task_id}`}» → ${s.new_status?.replace("_", " ")}`;
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 7,
+        border: `1px solid ${s.applied ? "#D7EDE0" : "#ECEAE4"}`,
+        background: s.applied ? "#F4FBF7" : "#FAFAF9",
+        borderRadius: 9, padding: "5px 10px",
+        opacity: s.dismissed ? 0.65 : 1,
+      }}>
+        {s.applied
+          ? <CheckCircle2 style={{ width: 12, height: 12, color: "#1F8A5B", flexShrink: 0 }} />
+          : <X style={{ width: 12, height: 12, color: "#9AA0A6", flexShrink: 0 }} />}
+        <span style={{ fontSize: 11, fontWeight: 700, color: s.applied ? "#1F8A5B" : "#8A9099", whiteSpace: "nowrap" }}>
+          {meta.label} · {s.applied ? "aplicada" : "descartada"}
+        </span>
+        {short && (
+          <span style={{ fontSize: 11, color: "#7D8189", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+            {short}
+          </span>
+        )}
+        {s.result_note && (
+          <span title={s.result_note} style={{ marginLeft: "auto", flexShrink: 0, display: "inline-flex" }}>
+            <Calendar style={{ width: 11, height: 11, color: "#2A62C9" }} />
+          </span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{
       border: `1px solid ${s.applied ? "#BFE3CE" : s.dismissed ? "#EFECE6" : "#FDDFC8"}`,
@@ -206,6 +241,11 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
   const [busy, setBusy] = useState(false);
   const st = STATUS_META[entry.status] ?? STATUS_META.error;
   const pendingSuggestions = (entry.suggestions ?? []).filter(s => !s.applied && !s.dismissed).length;
+  // Colapsada por defecto si ya está resuelta; abierta si necesita acción del jefe.
+  const needsAttention =
+    pendingSuggestions > 0 || !entry.obra_id ||
+    entry.status === "pendiente_transcripcion" || entry.status === "pendiente_analisis" || entry.status === "error";
+  const [expanded, setExpanded] = useState(needsAttention);
 
   async function run(fn: () => Promise<BitacoraEntry>) {
     setBusy(true);
@@ -213,9 +253,9 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
   }
 
   return (
-    <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden", fontFamily: FONT }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", borderBottom: "1px solid #F4F1EB" }}>
+    <motion.div layout style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, overflow: "hidden", fontFamily: FONT }}>
+      {/* Header — click para expandir/colapsar */}
+      <div onClick={() => setExpanded(v => !v)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer", borderBottom: expanded ? "1px solid #F4F1EB" : "none" }}>
         <div style={{
           width: 30, height: 30, borderRadius: 9, flexShrink: 0,
           background: entry.source === "whatsapp" ? "#E4F3EC" : "#EBF3FF",
@@ -228,7 +268,9 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
             {entry.source === "whatsapp" ? `Audio de WhatsApp${entry.responsible_name ? ` · ${entry.responsible_name}` : ""}` : "Entrada desde la app"}
             {entry.obra_name && <span style={{ fontWeight: 400, color: "#6B7580" }}> · {entry.obra_name}</span>}
           </div>
-          <div style={{ fontSize: 10.5, color: "#7D7973", marginTop: 1 }}>{fmtDateTime(entry.created_at)}</div>
+          {!expanded && entry.summary
+            ? <div style={{ fontSize: 11.5, color: "#6B7580", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entry.summary}</div>
+            : <div style={{ fontSize: 10.5, color: "#7D7973", marginTop: 1 }}>{fmtDateTime(entry.created_at)}</div>}
         </div>
         <span style={{ padding: "3px 9px", borderRadius: 99, fontSize: 10.5, fontWeight: 700, background: st.bg, color: st.color, whiteSpace: "nowrap" }}>
           {st.label}
@@ -238,10 +280,11 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
             {pendingSuggestions}
           </span>
         )}
+        <ChevronDown style={{ width: 15, height: 15, color: "#9AA0A6", flexShrink: 0, transition: "transform 0.2s", transform: expanded ? "none" : "rotate(-90deg)" }} />
         <button
-          onClick={async () => { if (confirm("¿Eliminar esta entrada de la bitácora?")) { await deleteEntry(entry.id); onDeleted(entry.id); } }}
+          onClick={async (e) => { e.stopPropagation(); if (confirm("¿Eliminar esta entrada de la bitácora?")) { await deleteEntry(entry.id); onDeleted(entry.id); } }}
           title="Eliminar"
-          style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", color: "#C4C0B8", display: "flex", alignItems: "center", justifyContent: "center" }}
+          style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", color: "#C4C0B8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
           onMouseEnter={e => { e.currentTarget.style.color = "#D03A3A"; }}
           onMouseLeave={e => { e.currentTarget.style.color = "#C4C0B8"; }}
         >
@@ -249,7 +292,17 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
         </button>
       </div>
 
-      <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: "easeInOut" }}
+            style={{ overflow: "hidden" }}
+          >
+            <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
         {/* Audio player */}
         {entry.audio_path && (
           <audio controls src={`${BACKEND_URL}${entry.audio_path}`} style={{ width: "100%", height: 36 }} />
@@ -371,8 +424,11 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
             {entry.transcript}
           </p>
         )}
-      </div>
-    </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -391,8 +447,6 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   const [mode, setMode] = useState<"audio" | "texto">("audio");
   const [onlyPending, setOnlyPending] = useState(false);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"todas" | "reschedule_task" | "create_task" | "update_status" | "note">("todas");
-  const [dateFilter, setDateFilter] = useState<"todas" | "hoy" | "7" | "30">("todas");
 
   // Grabación con micrófono
   const [recording, setRecording] = useState(false);
@@ -504,17 +558,9 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   const matchesSearch = (e: BitacoraEntry) =>
     !q || [e.summary, e.transcript, e.responsible_name, ...(e.key_points ?? [])]
       .some(t => (t ?? "").toLowerCase().includes(q));
-  const matchesType = (e: BitacoraEntry) =>
-    typeFilter === "todas" || (e.suggestions ?? []).some(s => s.type === typeFilter);
-  const matchesDate = (e: BitacoraEntry) => {
-    if (dateFilter === "todas") return true;
-    const created = new Date(e.created_at).getTime();
-    if (dateFilter === "hoy") { const d = new Date(); d.setHours(0, 0, 0, 0); return created >= d.getTime(); }
-    return created >= Date.now() - (dateFilter === "7" ? 7 : 30) * 86400000;
-  };
   const displayEntries = [...entries]
     .sort((a, b) => Number(hasPending(b)) - Number(hasPending(a)))
-    .filter(e => (!onlyPending || hasPending(e)) && matchesSearch(e) && matchesType(e) && matchesDate(e));
+    .filter(e => (!onlyPending || hasPending(e)) && matchesSearch(e));
 
   return (
     <div style={{ fontFamily: FONT, maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -669,34 +715,14 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
 
       {/* Búsqueda y filtros */}
       {!loading && entries.length > 0 && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #ECE7DD", borderRadius: 12, padding: "5px 7px 5px 12px", flexWrap: "wrap" }}>
+          <Search style={{ width: 14, height: 14, color: "#A7ABB0", flexShrink: 0 }} />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Buscar por texto o responsable…"
-            style={{ flex: "1 1 200px", minWidth: 0, padding: "8px 12px", fontSize: 12.5, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, outline: "none" }}
+            style={{ flex: "1 1 150px", minWidth: 0, padding: "5px 0", fontSize: 12.5, border: "none", outline: "none", background: "transparent", fontFamily: FONT, color: "#1A2329" }}
           />
-          <select
-            value={typeFilter}
-            onChange={e => setTypeFilter(e.target.value as typeof typeFilter)}
-            style={{ padding: "8px 10px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
-          >
-            <option value="todas">Todo tipo</option>
-            <option value="reschedule_task">Mover fechas</option>
-            <option value="create_task">Crear tarea</option>
-            <option value="update_status">Cambiar estado</option>
-            <option value="note">Nota</option>
-          </select>
-          <select
-            value={dateFilter}
-            onChange={e => setDateFilter(e.target.value as typeof dateFilter)}
-            style={{ padding: "8px 10px", fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: "1px solid #E6E7E5", fontFamily: FONT, cursor: "pointer", background: "#fff", color: "#1A2329" }}
-          >
-            <option value="todas">Cualquier fecha</option>
-            <option value="hoy">Hoy</option>
-            <option value="7">Últimos 7 días</option>
-            <option value="30">Últimos 30 días</option>
-          </select>
         </div>
       )}
 
