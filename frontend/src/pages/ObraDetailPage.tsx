@@ -277,6 +277,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             onViewTareas={() => onTabChange("tareas")}
             onViewHistorial={() => onTabChange("historial")}
             onEditTask={(t: Task) => setTaskToEdit(t)}
+            onDeleteTask={can("tarea.delete") ? (t: Task) => setTaskToDelete(t) : undefined}
             onTaskRescheduled={() => loadData(true)}
             onStatusChange={handleStatusChange}
           />
