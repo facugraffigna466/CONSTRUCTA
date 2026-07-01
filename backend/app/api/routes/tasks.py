@@ -12,6 +12,7 @@ from app.schemas.task import (
     TaskCreate,
     TaskDueSoonRead,
     TaskRead,
+    TaskReorder,
     TaskStatusUpdate,
     TaskUpdate,
 )
@@ -57,6 +58,14 @@ async def list_tasks_for_obra(obra_id: int, db: DbSession, user_id: CurrentUserI
     tasks = await TaskService(db).list_by_obra(obra_id, user_id)
     await AlertService(db).evaluate_task_risks_for_obra(obra_id)
     return [TaskRead.model_validate(t) for t in tasks]
+
+
+@router.post("/obra/{obra_id}/reorder", status_code=status.HTTP_204_NO_CONTENT)
+async def reorder_tasks(
+    obra_id: int, data: TaskReorder, db: DbSession, user_id: CurrentUserId
+):
+    """Reordena las tareas de la obra (lista de IDs). Permite insertar en cualquier posición."""
+    await TaskService(db).reorder(obra_id, data.task_ids, user_id)
 
 
 @router.get("/due-soon", response_model=list[TaskDueSoonRead])

@@ -483,9 +483,22 @@ class TaskService:
         await self._get_obra_and_assert_access(obra_id, manager_id)
         tasks = await self.repo.list_by_obra(obra_id)
         links_by_task = await self.repo.get_all_dependency_links_by_obra(obra_id)
+        materials_by_task = await self.repo.materials_summary_by_obra(obra_id)
         for task in tasks:
             task._dep_links = links_by_task.get(task.id, [])
+            task._materials_summary = materials_by_task.get(task.id)
         return tasks
+
+    async def reorder(self, obra_id: int, task_ids: list[int], manager_id: int) -> None:
+        """Reasigna order_index según el orden de IDs dado. Permite insertar una
+        tarea en cualquier posición sin dejar huecos (el commit lo hace get_db)."""
+        await self._get_obra_and_assert_access(obra_id, manager_id)
+        tasks = await self.repo.list_by_obra(obra_id)
+        by_id = {t.id: t for t in tasks}
+        for idx, tid in enumerate(task_ids):
+            task = by_id.get(tid)
+            if task is not None:
+                task.order_index = idx
 
     async def _responsible_label(self, rid: object) -> str:
         if rid is None:

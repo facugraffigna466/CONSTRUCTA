@@ -84,6 +84,9 @@ export interface Task {
   estimated_progress: number;
   created_at: string;
   updated_at: string;
+  materials_count?: number;
+  materials_cost?: number;
+  materials_pending?: number;
 }
 
 export interface HistorialEvento {
