@@ -1623,3 +1623,24 @@ Archivos: `GanttTimeline.tsx`, `ResumenTab.tsx`, `ObraDetailPage.tsx`.
 
 ### Validation
 `tsc -b` exit 0 ✓. Verificación manual de drag/resize tras zoom, agrupamiento de subtareas, pinch anclado al cursor y borrado por hover (queda como checklist del PR).
+
+---
+
+## 2026-07-01 — Planilla tipo Google Sheets (feature/planilla-sheets)
+
+Reescritura profunda de la vista **planilla** (`TaskSheetView`) para que se comporte como una hoja de cálculo real, más un rollup de materiales en el backend.
+
+### Frontend (`TaskSheetView.tsx`)
+- **Zoom continuo**: pinch del *trackpad* / `Ctrl+rueda` (listener `wheel` nativo con `ctrlKey`) que aplica CSS `zoom` sobre el lienzo, **anclado al cursor** (ajusta `scrollLeft/Top` por ratio). Persistido por obra; límites `0.5×`–`2×`.
+- **Grilla completa estilo Sheets**: columnas de ancho fijo (Tarea dejó de ser `1fr`) y un lienzo que se **extiende más allá de los datos** (celdas vacías abajo/derecha) para poder scrollear como en Sheets. Las líneas vacías se dibujan con gradientes CSS alineados a las columnas; el alto de fila/header se **mide del DOM** (÷ zoom) para que la grilla vacía alinee exacto. Un `ResizeObserver` extiende el lienzo para llenar siempre la pantalla a cualquier zoom.
+- **Escribir directo**: se quitó el botón "Agregar fila". Clic en una celda vacía (o en la fila fantasma) abre una fila nueva con el cursor en el título vacío. Barra de estado inferior fija con totales + control de zoom + menú "Columnas".
+- **Insertar en cualquier posición**: clic derecho en una fila → *insertar arriba/abajo* (crea y reordena para que caiga en ese lugar, sin huecos) o *eliminar*. El botón de eliminar por hover pasó a la primera columna (`#`).
+- **Mostrar/ocultar columnas**: menú "Columnas" (persistido por obra). Colapso vía `cellStyle`/`gridTemplateColumns` sin tocar el modelo de selección por índice (por eso no se hace *reorder*, que lo rompería).
+- **3 columnas nuevas** (apagadas por defecto): **Hito** (toggle por clic), **Depende de** y **Costo/Materiales** (resumen read-only; clic abre el modal de la tarea vía nueva prop `onOpenTask`).
+
+### Backend
+- **Reorder**: `POST /tasks/obra/{id}/reorder` (schema `TaskReorder`, `TaskService.reorder`) reasigna `order_index` según la lista de IDs → permite insertar en cualquier posición y persiste el orden en la base.
+- **Rollup de materiales**: `TaskRepository.materials_summary_by_obra` (una query agregada) + campos `materials_count/cost/pending` en `TaskRead`, para la columna Costo.
+
+### Validation
+`tsc -b` exit 0 ✓ · backend `py_compile` + `import app.main` ✓. Rebase limpio sobre `main` actualizado (integró PR #26 docs y #27 compras; merge de 3 vías sin conflictos). De paso se quitó el componente muerto `NuevaSolicitudModal` (PR #27) que rompía `tsc`. Pruebas e2e (zoom, insertar, columnas, costo con materiales reales) quedan como checklist del PR.
