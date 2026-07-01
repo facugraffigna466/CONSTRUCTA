@@ -38,6 +38,11 @@ class TaskCreate(BaseModel):
         return self
 
 
+class TaskReorder(BaseModel):
+    """Orden completo de las tareas de una obra (IDs en el orden deseado)."""
+    task_ids: list[int]
+
+
 class TaskUpdate(BaseModel):
     title: str | None = Field(None, min_length=2, max_length=255)
     description: str | None = None
@@ -81,6 +86,10 @@ class TaskRead(BaseModel):
     estimated_progress: int = 0
     created_at: datetime
     updated_at: datetime
+    # Resumen de materiales (rollup para la planilla): ítems, costo estimado y pendientes.
+    materials_count: int = 0
+    materials_cost: float = 0
+    materials_pending: int = 0
     # Aviso transitorio (no persistido): si al crear/editar se corrió una fecha al
     # día laboral más cercano, acá viaja el detalle para mostrarlo en la UI.
     date_adjustment: str | None = None
@@ -92,6 +101,11 @@ class TaskRead(BaseModel):
         instance = super().model_validate(obj, **kwargs)
         if hasattr(obj, "_date_adjustment"):
             instance.date_adjustment = obj._date_adjustment
+        if getattr(obj, "_materials_summary", None):
+            s = obj._materials_summary
+            instance.materials_count = int(s.get("count", 0))
+            instance.materials_cost = float(s.get("cost", 0))
+            instance.materials_pending = int(s.get("pending", 0))
         if hasattr(obj, "_dep_links"):
             links = obj._dep_links or []
             instance.dependency_ids = [l["depends_on_id"] for l in links]

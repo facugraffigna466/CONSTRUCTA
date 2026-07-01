@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { Clock, RefreshCw, CheckCircle2, AlertOctagon, XCircle } from "lucide-react";
-import { bulkCreateTasks, createTask, deleteTask, updateTask, updateTaskStatus } from "../api/tasks";
+import { bulkCreateTasks, createTask, deleteTask, reorderTasks, updateTask, updateTaskStatus } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
@@ -33,9 +33,29 @@ const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "cancelada",   label: "Cancelada" },
 ];
 
-const COLS = ["#", "Tarea", "Responsable", "Inicio", "Duración", "Fin", "% Avance", "Estado"] as const;
-const COL_WIDTHS = ["44px", "1fr", "170px", "118px", "88px", "118px", "108px", "130px"];
+const COLS = ["#", "Tarea", "Responsable", "Inicio", "Duración", "Fin", "% Avance", "Estado", "Hito", "Depende de", "Costo"] as const;
+// Anchos FIJOS (como Google Sheets — ninguna columna se estira). Tarea era "1fr".
+// Las últimas 3 (Hito, Depende de, Costo) son read-only y vienen ocultas por defecto.
+const COL_WIDTHS = ["44px", "340px", "170px", "118px", "88px", "118px", "108px", "130px", "70px", "190px", "148px"];
 const LAST_COL = COLS.length - 1;
+
+// Geometría de la "hoja completa" estilo Sheets
+const ROW_PX = 39;          // alto de fila de datos (celda 38 + borde 1)
+const HEADER_PX = 33;       // alto del header (32 + borde 1)
+const EMPTY_COL_PX = 120;   // ancho de las columnas vacías a la derecha
+const GRID_LINE = "#E8EAEC"; // color de las líneas de la grilla vacía
+
+const SHEET_ZOOM_MIN = 0.5;   // alejar (más celdas a la vista)
+const SHEET_ZOOM_MAX = 2;     // acercar (detalle)
+
+function zoomBtnStyle(disabled: boolean): React.CSSProperties {
+  return {
+    width: 26, height: 26, border: "none", background: "none", borderRadius: 6,
+    cursor: disabled ? "default" : "pointer", fontSize: 16, fontWeight: 600,
+    color: disabled ? "#C2C8CD" : "#3E4A52", lineHeight: 1,
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+  };
+}
 
 const CELL_BORDER = "1px solid #E2E4E2";
 const HEADER_BORDER = "1px solid #D5D9D5";
@@ -229,6 +249,7 @@ interface Props {
   onTaskSaved: (task: Task) => void;
   onTaskDeleted?: (taskId: number) => void;
   onBulkImported?: () => void;
+  onOpenTask?: (task: Task) => void;
 }
 
 // ─── ResponsableCombobox ──────────────────────────────────────────────────────
@@ -357,7 +378,7 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
-  ({ tasks, responsibles, obraId, onTaskSaved, onTaskDeleted, onBulkImported }, ref) => {
+  ({ tasks, responsibles, obraId, onTaskSaved, onTaskDeleted, onBulkImported, onOpenTask }, ref) => {
     const activeResponsibles = responsibles.filter((r) => r.is_active);
 
     function makeEdit(task: Task, field: Field): EditState {
@@ -396,26 +417,99 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
     // ── Anchos de columna (resize manual, persistido por obra) ───────────────
     const [colWidths, setColWidths] = useState<string[]>(() => {
+      // Saneo: cualquier "1fr" guardado de la versión anterior pasa al ancho fijo de Tarea.
+      const sanitize = (arr: string[]) => arr.map((w, i) => (w === "1fr" ? COL_WIDTHS[i] : w));
       try {
         const saved = localStorage.getItem(`sheet_colw_${obraId}`);
         const parsed = saved ? JSON.parse(saved) : null;
-        return Array.isArray(parsed) && parsed.length === COL_WIDTHS.length ? parsed : [...COL_WIDTHS];
+        return Array.isArray(parsed) && parsed.length === COL_WIDTHS.length ? sanitize(parsed) : [...COL_WIDTHS];
       } catch { return [...COL_WIDTHS]; }
     });
     const colResizeRef = useRef<{ idx: number; startX: number; startW: number } | null>(null);
 
+    // ── Zoom de la planilla (tipo Excel: escala toda la grilla) ──────────────
+    const zoomKey = `sheet_zoom_${obraId}`;
+    const [zoom, setZoom] = useState<number>(() => {
+      try {
+        const v = parseFloat(localStorage.getItem(zoomKey) || "");
+        return v >= SHEET_ZOOM_MIN && v <= SHEET_ZOOM_MAX ? v : 1;
+      } catch { return 1; }
+    });
+    const zoomRef = useRef(zoom);
+    zoomRef.current = zoom;
+    const setZoomClamped = (z: number) =>
+      setZoom(Math.min(SHEET_ZOOM_MAX, Math.max(SHEET_ZOOM_MIN, Math.round(z * 100) / 100)));
+
+    // Tamaño visible del scrollport → para extender la grilla y que siempre llene la pantalla.
+    const [vp, setVp] = useState({ w: 0, h: 0 });
+    useEffect(() => {
+      const el = containerRef.current;
+      if (!el || typeof ResizeObserver === "undefined") return;
+      const ro = new ResizeObserver(() => {
+        setVp({ w: el.clientWidth, h: el.clientHeight });
+      });
+      ro.observe(el);
+      setVp({ w: el.clientWidth, h: el.clientHeight });
+      return () => ro.disconnect();
+    }, []);
+
+    // Alto REAL de header y fila (medido del DOM, /zoom) para que las líneas de la
+    // grilla vacía alineen exacto con las celdas de datos (no depende de bordes/box-sizing).
+    const [rowH, setRowH] = useState(ROW_PX);
+    const [headerH, setHeaderH] = useState(HEADER_PX);
+    useEffect(() => {
+      const c = containerRef.current;
+      if (!c) return;
+      const z = zoomRef.current || 1;
+      const hEl = c.querySelector<HTMLElement>("[data-sheet-header]");
+      const rEl = c.querySelector<HTMLElement>("[data-task-row]");
+      if (hEl) { const h = hEl.getBoundingClientRect().height / z; if (h > 0) setHeaderH(h); }
+      if (rEl) { const r = rEl.getBoundingClientRect().height / z; if (r > 0) setRowH(r); }
+    }, [tasks.length, zoom]);
+
+    useEffect(() => {
+      try { localStorage.setItem(zoomKey, String(zoom)); } catch { /* ignore */ }
+    }, [zoom, zoomKey]);
+
+    // Pinch del trackpad / Ctrl+rueda → zoom continuo, anclado al cursor.
+    useEffect(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      function onWheel(e: WheelEvent) {
+        if (!e.ctrlKey) return;       // el scroll/pan normal sigue intacto
+        e.preventDefault();
+        const rect = el!.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        const prev = zoomRef.current;
+        const next = Math.min(SHEET_ZOOM_MAX, Math.max(SHEET_ZOOM_MIN, Math.round(prev * Math.pow(0.99, e.deltaY) * 100) / 100));
+        if (next === prev) return;
+        const ratio = next / prev;
+        const newLeft = (cx + el!.scrollLeft) * ratio - cx;
+        const newTop  = (cy + el!.scrollTop) * ratio - cy;
+        setZoom(next);
+        requestAnimationFrame(() => {
+          const c = containerRef.current;
+          if (c) { c.scrollLeft = Math.max(0, newLeft); c.scrollTop = Math.max(0, newTop); }
+        });
+      }
+      el.addEventListener("wheel", onWheel, { passive: false });
+      return () => el.removeEventListener("wheel", onWheel);
+    }, []);
+
     function startColResize(e: React.MouseEvent, idx: number) {
       e.preventDefault();
       e.stopPropagation();
+      const z = zoomRef.current || 1;
       const headerCell = (e.currentTarget as HTMLElement).parentElement;
       const startW = headerCell
-        ? headerCell.getBoundingClientRect().width
+        ? headerCell.getBoundingClientRect().width / z
         : parseInt(colWidths[idx], 10) || 100;
       colResizeRef.current = { idx, startX: e.clientX, startW };
       function onMove(ev: MouseEvent) {
         const cur = colResizeRef.current;
         if (!cur) return;
-        const w = Math.max(56, Math.round(cur.startW + (ev.clientX - cur.startX)));
+        const w = Math.max(56, Math.round(cur.startW + (ev.clientX - cur.startX) / z));
         setColWidths(prev => prev.map((p, i) => (i === cur.idx ? `${w}px` : p)));
       }
       function onUp() {
@@ -438,6 +532,25 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     const [planLimit, setPlanLimit] = useState<PlanLimitInfo | null>(null);
     const [hoveredRow, setHoveredRow] = useState<number | null>(null);
     const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; rowIdx: number } | null>(null);
+    const [pendingEditId, setPendingEditId] = useState<number | null>(null);
+
+    // Columnas ocultas (índices en COLS). # y Tarea (0,1) siempre visibles.
+    const [hiddenCols, setHiddenCols] = useState<Set<number>>(() => {
+      try {
+        const s = localStorage.getItem(`sheet_hidden_v2_${obraId}`);
+        return s ? new Set<number>(JSON.parse(s)) : new Set<number>([8, 9, 10]);
+      } catch { return new Set<number>([8, 9, 10]); }
+    });
+    const [showColMenu, setShowColMenu] = useState(false);
+    function toggleCol(i: number) {
+      setHiddenCols(prev => {
+        const next = new Set(prev);
+        if (next.has(i)) next.delete(i); else next.add(i);
+        try { localStorage.setItem(`sheet_hidden_v2_${obraId}`, JSON.stringify([...next])); } catch { /* ignore */ }
+        return next;
+      });
+    }
 
     // Focus the right input whenever activeField changes (for non-select fields)
     useEffect(() => {
@@ -590,6 +703,47 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       }
     }
 
+    // Insertar una tarea en una posición del orden (clic derecho → arriba/abajo).
+    // Crea la tarea y reordena para que caiga justo en ese lugar, sin huecos.
+    async function insertTaskAt(displayPos: number) {
+      setCtxMenu(null);
+      try {
+        const saved = await createTask({ obra_id: obraId, title: "Nueva tarea" });
+        const order = tasks.map(t => t.id);
+        order.splice(Math.max(0, Math.min(displayPos, order.length)), 0, saved.id);
+        await reorderTasks(obraId, order);
+        // Recarga completa (sin append optimista) para que el orden nuevo se refleje bien.
+        if (onBulkImported) onBulkImported(); else onTaskSaved(saved);
+        setPendingEditId(saved.id);  // al recargar, abrimos su título para editar
+      } catch (err) {
+        const limitInfo = getPlanLimitError(err);
+        if (limitInfo) setPlanLimit(limitInfo);
+      }
+    }
+
+    // Al recargar tras insertar, abrir la tarea nueva en edición con el título VACÍO
+    // y el cursor puesto, para escribir directo (sin tener que borrar el placeholder).
+    useEffect(() => {
+      if (pendingEditId == null) return;
+      const idx = tasks.findIndex(t => t.id === pendingEditId);
+      if (idx < 0) return;
+      beginEdit(idx, 0); // gc 0 = título (gc 1 sería Responsable)
+      setEditing(s => s ? { ...s, title: "" } : s);
+      setPendingEditId(null);
+    }, [tasks, pendingEditId]);
+
+    // Cerrar el menú contextual al hacer clic afuera o scrollear.
+    useEffect(() => {
+      if (!ctxMenu) return;
+      const close = () => setCtxMenu(null);
+      window.addEventListener("mousedown", close);
+      window.addEventListener("scroll", close, true);
+      return () => {
+        window.removeEventListener("mousedown", close);
+        window.removeEventListener("scroll", close, true);
+      };
+    }, [ctxMenu]);
+
     const saveEdit = useCallback(
       async (state: EditState, andNewRow = false, nextEdit?: { taskId: number; field: Field }) => {
         if (!state.title.trim()) {
@@ -704,33 +858,39 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
 
     // ─── style helpers ───────────────────────────────────────────────────────
 
-    const cellStyle = (colIdx: number, extra?: React.CSSProperties): React.CSSProperties => ({
-      padding: "0 10px",
-      height: 38,
-      display: "flex",
-      alignItems: "center",
-      fontSize: 13,
-      color: "#1A2329",
-      borderBottom: CELL_BORDER,
-      borderRight: colIdx < LAST_COL ? CELL_BORDER : "none",
-      overflow: "hidden",
-      ...extra,
-    });
+    const cellStyle = (colIdx: number, extra?: React.CSSProperties): React.CSSProperties => {
+      if (hiddenCols.has(colIdx)) return { width: 0, minWidth: 0, padding: 0, border: "none", overflow: "hidden" };
+      return {
+        padding: "0 10px",
+        height: 38,
+        display: "flex",
+        alignItems: "center",
+        fontSize: 13,
+        color: "#1A2329",
+        borderBottom: CELL_BORDER,
+        borderRight: colIdx < LAST_COL ? CELL_BORDER : "none",
+        overflow: "hidden",
+        ...extra,
+      };
+    };
 
-    const headerCellStyle = (colIdx: number): React.CSSProperties => ({
-      padding: "0 10px",
-      height: 32,
-      display: "flex",
-      alignItems: "center",
-      fontSize: 10.5,
-      fontWeight: 700,
-      color: "#6B7580",
-      textTransform: "uppercase",
-      letterSpacing: "0.065em",
-      borderBottom: HEADER_BORDER,
-      borderRight: colIdx < LAST_COL ? HEADER_BORDER : "none",
-      whiteSpace: "nowrap",
-    });
+    const headerCellStyle = (colIdx: number): React.CSSProperties => {
+      if (hiddenCols.has(colIdx)) return { width: 0, minWidth: 0, padding: 0, border: "none", overflow: "hidden" };
+      return {
+        padding: "0 10px",
+        height: 32,
+        display: "flex",
+        alignItems: "center",
+        fontSize: 10.5,
+        fontWeight: 700,
+        color: "#6B7580",
+        textTransform: "uppercase",
+        letterSpacing: "0.065em",
+        borderBottom: HEADER_BORDER,
+        borderRight: colIdx < LAST_COL ? HEADER_BORDER : "none",
+        whiteSpace: "nowrap",
+      };
+    };
 
     const inputStyle: React.CSSProperties = {
       width: "100%",
@@ -742,9 +902,21 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       fontFamily: "'Plus Jakarta Sans', sans-serif",
     };
 
+    // Ancho de cada columna en px y ancho natural de la tabla de datos (NW).
+    const colPx = colWidths.map((w, i) => hiddenCols.has(i) ? 0 : (parseInt(w, 10) || 100));
+    const NW = colPx.reduce((a, b) => a + b, 0);
+    const colBoundaries = colPx.reduce<number[]>((acc, w) => {
+      acc.push((acc[acc.length - 1] ?? 0) + w);
+      return acc;
+    }, []); // bordes derechos acumulados (incluye NW al final)
+
+    const titleById = new Map(tasks.map(t => [t.id, t.title]));
+    const fmtMoney = (n: number) => "$" + Math.round(n).toLocaleString("es-AR");
+
     const rowBase: React.CSSProperties = {
       display: "grid",
-      gridTemplateColumns: colWidths.join(" "),
+      gridTemplateColumns: colWidths.map((w, i) => hiddenCols.has(i) ? "0px" : w).join(" "),
+      width: NW,
     };
 
     // ─── per-cell helpers ─────────────────────────────────────────────────────
@@ -1043,32 +1215,77 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
       );
     }
 
+    // ─── Lienzo "hoja completa" estilo Sheets ──────────────────────────────────
+    // La grilla se extiende más allá de los datos para poder scrollear hacia abajo
+    // y a la derecha entrando en celdas vacías, y siempre llena la pantalla.
+    const hasRows = tasks.length > 0;
+    const dataH = headerH + tasks.length * rowH; // alto exacto de los datos (header + filas)
+    const canvasW = Math.max(NW, Math.ceil((vp.w || NW) / zoom)) + EMPTY_COL_PX * 6;
+    const canvasH = Math.max(dataH, Math.ceil((vp.h || dataH) / zoom)) + rowH * 12;
+
+    // Líneas verticales alineadas a TUS columnas (layerA) + columnas vacías a la derecha (layerB);
+    // líneas horizontales cada fila (layerC). Las filas de datos son opacas y tapan la grilla donde hay datos.
+    const aStops: string[] = [];
+    let prevB = 0;
+    for (const b of colBoundaries) {
+      aStops.push(`transparent ${prevB}px`, `transparent ${b - 1}px`, `${GRID_LINE} ${b - 1}px`, `${GRID_LINE} ${b}px`);
+      prevB = b;
+    }
+    const layerA = `linear-gradient(to right, ${aStops.join(", ")}, transparent ${prevB}px)`;
+    const layerB = `repeating-linear-gradient(to right, ${GRID_LINE} 0, ${GRID_LINE} 1px, transparent 1px, transparent ${EMPTY_COL_PX}px)`;
+    const layerC = `repeating-linear-gradient(to bottom, ${GRID_LINE} 0, ${GRID_LINE} 1px, transparent 1px, transparent ${rowH}px)`;
+
+    const innerStyle: React.CSSProperties = hasRows
+      ? {
+          position: "relative",
+          width: canvasW,
+          minHeight: canvasH,
+          zoom,
+          backgroundImage: `${layerA}, ${layerB}, ${layerC}`,
+          backgroundRepeat: "no-repeat, no-repeat, no-repeat",
+          backgroundPosition: `0 0, ${NW}px 0, 0 ${headerH}px`,
+          backgroundSize: `${NW}px 100%, ${Math.max(0, canvasW - NW)}px 100%, 100% 100%`,
+        }
+      : { minWidth: 760, zoom };
+
     // ─── render ──────────────────────────────────────────────────────────────
 
     return (
+      <div style={{
+        position: "relative",
+        display: "flex", flexDirection: "column",
+        height: "calc(100vh - 210px)",
+        border: "1px solid #D5D9D5", borderRadius: 14, overflow: "hidden",
+        background: "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif",
+      }}>
       <div
         ref={containerRef}
         tabIndex={-1}
         onKeyDown={gridKeyDown}
         style={{
-          background: "#fff",
-          border: "1px solid #D5D9D5",
-          borderRadius: 14,
-          // Scrollport propio: el header sticky ahora sí se pega al scrollear
-          maxHeight: "calc(100vh - 210px)",
+          // Scrollport de la grilla — el header sticky se pega arriba; la barra de estado queda fija abajo
+          flex: 1, minHeight: 0,
           overflow: "auto",
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
           outline: "none",
         }}
       >
-        <div style={{ minWidth: 760 }}>
+        <div
+          style={innerStyle}
+          onClick={(e) => {
+            // Clic en el área vacía de la grilla (no en una celda con datos) → empezar a escribir
+            if (e.target !== e.currentTarget) return;
+            if (isNewRow || pastePreview || tasks.length === 0) return;
+            if (editing && editing.taskId !== null) saveEdit(editing);
+            startNewRow();
+          }}
+        >
         {/* ── Header row — sticky al scroll vertical ── */}
-        <div style={{ ...rowBase, background: "#F0F2F0", position: "sticky", top: 0, zIndex: 5 }}>
+        <div data-sheet-header style={{ ...rowBase, background: "#F0F2F0", position: "sticky", top: 0, zIndex: 5 }}>
           {COLS.map((col, i) => (
             <div key={col} style={{ ...headerCellStyle(i), position: "relative" }}>
               {col}
-              {/* Handle de resize — arrastrá el borde derecho */}
-              {i >= 2 && (
+              {/* Handle de resize — arrastrá el borde derecho (Tarea incluida, no la columna #) */}
+              {i >= 1 && (
                 <div
                   onMouseDown={e => startColResize(e, i)}
                   title="Arrastrá para ajustar el ancho"
@@ -1152,33 +1369,31 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
               data-task-row={task.id}
               onMouseEnter={() => setHoveredRow(task.id)}
               onMouseLeave={() => setHoveredRow(prev => (prev === task.id ? null : prev))}
+              onContextMenu={(e) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, rowIdx: idx }); }}
               style={{ ...rowBase, background: idx % 2 === 0 ? "#fff" : "#F8F9F8", position: "relative" }}
             >
-              {/* Eliminar fila — visible al hover */}
-              {hoveredRow === task.id && !isEditing && onTaskDeleted && (
-                <button
-                  type="button"
-                  aria-label={`Eliminar tarea ${task.title}`}
-                  title="Eliminar tarea"
-                  disabled={deletingId === task.id}
-                  onClick={e => { e.stopPropagation(); handleDeleteRow(task); }}
-                  style={{
-                    position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
-                    width: 26, height: 26, borderRadius: 7, border: "1px solid #F0B0B0",
-                    background: "#fff", cursor: "pointer", zIndex: 4,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-                  }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-                    <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.3a1 1 0 001 .95h4.6a1 1 0 001-.95L12 4M6.6 7v4.5M9.4 7v4.5" stroke="#D03A3A" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              )}
-
-              {/* # */}
+              {/* # — número; al pasar el mouse muestra el botón de eliminar en esta columna */}
               <div style={cellStyle(0, { color: "#9BA3AB", fontSize: 11.5, fontWeight: 600, justifyContent: "center", cursor: "default" })}>
-                {idx + 1}
+                {hoveredRow === task.id && !isEditing && onTaskDeleted ? (
+                  <button
+                    type="button"
+                    aria-label={`Eliminar tarea ${task.title}`}
+                    title="Eliminar tarea"
+                    disabled={deletingId === task.id}
+                    onClick={e => { e.stopPropagation(); handleDeleteRow(task); }}
+                    style={{
+                      width: 24, height: 24, borderRadius: 6, border: "1px solid #F0B0B0",
+                      background: "#fff", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M2.5 4h11M6.5 4V2.5h3V4M4 4l.7 9.3a1 1 0 001 .95h4.6a1 1 0 001-.95L12 4M6.6 7v4.5M9.4 7v4.5" stroke="#D03A3A" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                ) : (
+                  idx + 1
+                )}
               </div>
 
               {/* Tarea */}
@@ -1401,6 +1616,49 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
                 )}
                 {fillHandle(idx, 6)}
               </div>
+
+              {/* Hito — clic para marcar/desmarcar */}
+              <div
+                style={cellStyle(8, { justifyContent: "center", fontSize: 14, cursor: "pointer" })}
+                title={task.is_milestone ? "Quitar hito" : "Marcar como hito"}
+                onClick={async () => {
+                  if (hiddenCols.has(8)) return;
+                  try { onTaskSaved(await updateTask(task.id, { is_milestone: !task.is_milestone })); } catch { /* noop */ }
+                }}
+              >
+                <span style={{ color: task.is_milestone ? "#FF6B35" : "#D5D9D5" }}>◆</span>
+              </div>
+
+              {/* Depende de — clic abre el modal de la tarea (editar dependencias) */}
+              <div
+                style={cellStyle(9, { color: "#4B5A66", fontSize: 12, cursor: onOpenTask ? "pointer" : "default" })}
+                onClick={() => { if (!hiddenCols.has(9)) onOpenTask?.(task); }}
+                title="Editar dependencias en la tarea"
+              >
+                {(() => {
+                  const deps = task.dependency_links.map(l => titleById.get(l.depends_on_id)).filter(Boolean) as string[];
+                  return deps.length
+                    ? <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={deps.join(", ")}>{deps.join(", ")}</span>
+                    : <span style={{ color: "#C4C9C6" }}>—</span>;
+                })()}
+              </div>
+
+              {/* Costo / Materiales — clic abre el modal (editar materiales) */}
+              <div
+                style={cellStyle(10, { justifyContent: "flex-end", gap: 7, fontVariantNumeric: "tabular-nums", fontSize: 12, cursor: onOpenTask ? "pointer" : "default" })}
+                onClick={() => { if (!hiddenCols.has(10)) onOpenTask?.(task); }}
+                title="Editar materiales en la tarea"
+              >
+                {(task.materials_count ?? 0) > 0 ? (
+                  <>
+                    {(task.materials_pending ?? 0) > 0 && (
+                      <span title={`${task.materials_pending} sin recibir`} style={{ width: 7, height: 7, borderRadius: 99, background: "#E8892B", flexShrink: 0 }} />
+                    )}
+                    <span style={{ color: "#1A2329", fontWeight: 600 }}>{fmtMoney(task.materials_cost ?? 0)}</span>
+                    <span style={{ color: "#9BA3AB" }}>· {task.materials_count} ít.</span>
+                  </>
+                ) : <span style={{ color: "#C4C9C6" }}>—</span>}
+              </div>
             </div>
           );
         })}
@@ -1484,6 +1742,27 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           </>
         )}
 
+        {/* ── Fila fantasma: clic + escribir para agregar (sin botón, estilo Sheets) ── */}
+        {!isNewRow && tasks.length > 0 && !pastePreview && (
+          <div
+            style={{ ...rowBase, background: "#fff", cursor: "text" }}
+            onClick={() => { if (editing && editing.taskId !== null) saveEdit(editing); startNewRow(); }}
+            title="Escribí para agregar una tarea"
+          >
+            <div style={cellStyle(0, { color: "#C4C9C6", fontSize: 11.5, fontWeight: 600, justifyContent: "center" })}>{tasks.length + 1}</div>
+            <div style={cellStyle(1, { color: "#B9C0C6", fontStyle: "italic" })}>Escribí una tarea…</div>
+            <div style={cellStyle(2)} />
+            <div style={cellStyle(3)} />
+            <div style={cellStyle(4)} />
+            <div style={cellStyle(5)} />
+            <div style={cellStyle(6)} />
+            <div style={cellStyle(7)} />
+            <div style={cellStyle(8)} />
+            <div style={cellStyle(9)} />
+            <div style={cellStyle(10)} />
+          </div>
+        )}
+
         {/* ── Paste preview ── */}
         {pastePreview && (
           <div style={{ borderTop: "2px solid #FF6B35" }}>
@@ -1530,7 +1809,16 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
           </div>
         )}
 
-        {/* ── Totals footer ── */}
+        {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
+        </div>
+      </div>
+
+      {/* ── Barra de estado inferior (estilo Sheets): totales · agregar fila · zoom ── */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+        padding: "6px 12px", borderTop: HEADER_BORDER, background: "#F6F7F6",
+        fontSize: 11.5, color: "#5B6770", flexShrink: 0,
+      }}>
         {tasks.length > 0 && (() => {
           const withDates  = tasks.filter(t => t.start_date && t.due_date);
           const totalDays  = withDates.reduce((acc, t) => acc + diffDays(t.start_date!, t.due_date!) + 1, 0);
@@ -1539,52 +1827,95 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
             ? Math.round(measurable.reduce((a, t) => a + (t.estimated_progress ?? 0), 0) / measurable.length)
             : 0;
           return (
-            <div style={{
-              display: "flex", alignItems: "center", gap: 18,
-              padding: "8px 12px", background: "#F6F7F6",
-              borderTop: HEADER_BORDER, borderBottom: CELL_BORDER,
-              fontSize: 11.5, color: "#5B6770",
-            }}>
-              <span style={{ fontWeight: 700, color: "#3E4A52" }}>
-                Σ {tasks.length} tarea{tasks.length !== 1 ? "s" : ""}
-              </span>
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                <strong style={{ color: "#3E4A52" }}>{totalDays}</strong> días planificados
-              </span>
+            <>
+              <span style={{ fontWeight: 700, color: "#3E4A52" }}>Σ {tasks.length} tarea{tasks.length !== 1 ? "s" : ""}</span>
+              <span style={{ fontVariantNumeric: "tabular-nums" }}><strong style={{ color: "#3E4A52" }}>{totalDays}</strong> días planificados</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
                 Avance promedio
                 <span style={{ width: 64, height: 4, borderRadius: 99, background: "#E2E4E2", overflow: "hidden", display: "inline-block" }}>
-                  <span style={{
-                    display: "block", height: "100%", borderRadius: 99,
-                    width: `${avg}%`,
-                    background: avg === 100 ? "#1F8A5B" : "#FF6B35",
-                  }} />
+                  <span style={{ display: "block", height: "100%", borderRadius: 99, width: `${avg}%`, background: avg === 100 ? "#1F8A5B" : "#FF6B35" }} />
                 </span>
                 <strong style={{ color: "#3E4A52", fontVariantNumeric: "tabular-nums" }}>{avg}%</strong>
               </span>
-            </div>
+            </>
           );
         })()}
 
-        {/* ── Add row button ── */}
-        {!isNewRow && (
-          <button
-            onClick={startNewRow}
-            style={{ width: "100%", padding: "9px 12px", background: "transparent", border: "none", display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 600, color: "#6B7580", cursor: "pointer", textAlign: "left", transition: "background 0.1s, color 0.1s" }}
-            onMouseEnter={e => { e.currentTarget.style.background = "#F8F9F8"; e.currentTarget.style.color = "#FF6B35"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}
-          >
-            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
-            Agregar fila
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "#6B7580", fontWeight: 500 }}>
-              Tip: copiá filas en Excel y pegalas acá (Ctrl+V)
-            </span>
-          </button>
-        )}
+        <span style={{ color: "#9BA3AB" }}>Hacé clic en una celda vacía y escribí para agregar</span>
 
-        {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
+        {/* Grupo derecho: columnas + zoom */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
+          {/* Mostrar/ocultar columnas */}
+          <button
+            onClick={() => setShowColMenu(v => !v)}
+            title="Mostrar u ocultar columnas"
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 7, background: "#fff", border: "1px solid #E2E4E2", fontSize: 12, fontWeight: 600, color: "#5B6770", cursor: "pointer" }}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6.2 2.5v11M10 2.5v11"/></svg>
+            Columnas
+          </button>
+          {showColMenu && (
+            <>
+              <div onMouseDown={() => setShowColMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+              <div style={{ position: "absolute", bottom: "calc(100% + 6px)", right: 0, zIndex: 41, background: "#fff", border: "1px solid #E2E4E2", borderRadius: 10, boxShadow: "0 8px 24px rgba(20,30,40,0.16)", padding: 6, minWidth: 190 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#94928D", textTransform: "uppercase", letterSpacing: "0.06em", padding: "4px 8px" }}>Columnas visibles</div>
+                {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(i => (
+                  <label key={i} style={{ display: "flex", alignItems: "center", gap: 9, padding: "6px 8px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "#1A2329" }} onMouseEnter={e => (e.currentTarget.style.background = "#F2F4F2")} onMouseLeave={e => (e.currentTarget.style.background = "none")}>
+                    <input type="checkbox" checked={!hiddenCols.has(i)} onChange={() => toggleCol(i)} style={{ accentColor: "#FF6B35" }} />
+                    {COLS[i]}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+          {/* Control de zoom */}
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <button onClick={() => setZoomClamped(zoom - 0.1)} title="Alejar" disabled={zoom <= SHEET_ZOOM_MIN} style={zoomBtnStyle(zoom <= SHEET_ZOOM_MIN)}>−</button>
+            <button onClick={() => setZoomClamped(1)} title="Restablecer zoom (100%)" style={{ minWidth: 46, height: 24, border: "none", background: "none", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "#3E4A52", fontVariantNumeric: "tabular-nums" }}>{Math.round(zoom * 100)}%</button>
+            <button onClick={() => setZoomClamped(zoom + 0.1)} title="Acercar" disabled={zoom >= SHEET_ZOOM_MAX} style={zoomBtnStyle(zoom >= SHEET_ZOOM_MAX)}>+</button>
+          </div>
         </div>
       </div>
+
+      {/* ── Menú contextual (clic derecho en una fila): insertar arriba/abajo ── */}
+      {ctxMenu && (
+        <div
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: "fixed", top: ctxMenu.y, left: ctxMenu.x, zIndex: 50,
+            background: "#fff", border: "1px solid #E2E4E2", borderRadius: 9,
+            boxShadow: "0 8px 24px rgba(20,30,40,0.16)", padding: 4, minWidth: 184,
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          }}
+        >
+          {[
+            { label: "Insertar tarea arriba", run: () => insertTaskAt(ctxMenu.rowIdx) },
+            { label: "Insertar tarea abajo", run: () => insertTaskAt(ctxMenu.rowIdx + 1) },
+          ].map((item) => (
+            <button
+              key={item.label}
+              onClick={item.run}
+              style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 10px", borderRadius: 6, border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1A2329", textAlign: "left" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "#F2F4F2")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+            >
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+              {item.label}
+            </button>
+          ))}
+          <div style={{ height: 1, background: "#EEF0EE", margin: "4px 6px" }} />
+          <button
+            onClick={() => { const t = tasks[ctxMenu.rowIdx]; setCtxMenu(null); if (t) handleDeleteRow(t); }}
+            style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "7px 10px", borderRadius: 6, border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626", textAlign: "left" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#FEE2E2")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,4 14,4"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M6 7v5M10 7v5"/><path d="M3 4l1 9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-9"/></svg>
+            Eliminar tarea
+          </button>
+        </div>
+      )}
+    </div>
     );
   }
 );

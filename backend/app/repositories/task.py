@@ -1,8 +1,9 @@
 from datetime import date, datetime
-from sqlalchemy import cast, DateTime as SADateTime, delete, func, literal, select, Time as SATime, update
+from sqlalchemy import case, cast, DateTime as SADateTime, delete, func, literal, select, Time as SATime, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.obra import Obra
 from app.models.task import Task, TaskStatus, task_dependencies_table
+from app.models.task_material import TaskMaterial
 from app.repositories.base import BaseRepository
 
 
@@ -166,6 +167,29 @@ class TaskRepository(BaseRepository[Task]):
                 {"depends_on_id": dep_id, "dependency_type": dep_type, "lag_days": lag}
             )
         return links_by_task
+
+    async def materials_summary_by_obra(self, obra_id: int) -> dict[int, dict]:
+        """Resumen de materiales por tarea: cantidad de ítems, costo estimado total
+        (Σ cantidad×precio) y cuántos aún no fueron recibidos. Una sola query."""
+        result = await self.session.execute(
+            select(
+                TaskMaterial.task_id,
+                func.count(TaskMaterial.id),
+                func.coalesce(func.sum(TaskMaterial.quantity * TaskMaterial.unit_price), 0),
+                func.coalesce(func.sum(case((TaskMaterial.status != "recibido", 1), else_=0)), 0),
+            )
+            .join(Task, Task.id == TaskMaterial.task_id)
+            .where(Task.obra_id == obra_id)
+            .group_by(TaskMaterial.task_id)
+        )
+        out: dict[int, dict] = {}
+        for task_id, count, cost, pending in result.fetchall():
+            out[task_id] = {
+                "count": int(count or 0),
+                "cost": float(cost or 0),
+                "pending": int(pending or 0),
+            }
+        return out
 
     async def set_dependencies(self, task_id: int, links: list[dict]) -> None:
         """Replace the full dependency set for task_id (each link has depends_on_id, dependency_type, lag_days)."""
