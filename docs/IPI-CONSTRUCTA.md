@@ -199,7 +199,7 @@ La propuesta de solución consiste en una plataforma web —CONSTRUCTA— compue
 
 #### Requerimientos funcionales (qué entra)
 
-- **Gestión de obras:** alta mediante asistente de cuatro pasos (datos, responsables, tareas, confirmación), edición, estados (planificada, en progreso, pausada, completada, cancelada) y datos del comitente.
+- **Gestión de obras:** alta mediante asistente de cuatro pasos (datos, responsables, tareas, confirmación), edición y datos del comitente. El **estado de la obra** (planificada, en progreso, pausada, completada, cancelada) sigue un modelo **híbrido**: transiciona de forma **automática** según el avance de las tareas (pasa a *en progreso* cuando alguna tarea arranca y a *completada* cuando todas se terminan), mientras que las decisiones que no pueden inferirse —*pausar* y *reactivar*— se realizan de forma **manual**; los estados terminales no se modifican a mano.
 - **Gestión de tareas:** creación, edición, eliminación lógica; fechas de inicio y fin; porcentaje de avance; hitos; subtareas (WBS); dependencias entre tareas en sus cuatro tipos (Fin–Inicio, Inicio–Inicio, Fin–Fin, Inicio–Fin) con desfase (*lag*).
 - **Visualización del cronograma:** diagrama de Gantt con flechas de dependencia, ruta crítica, línea base y reprogramación automática en cascada con vista previa.
 - **Planilla de tareas:** edición tipo hoja de cálculo con selección de celdas y rangos, relleno por arrastre (con encadenado de fechas), copiar/pegar de bloques, deshacer e importación desde Excel, CSV y MS Project.
