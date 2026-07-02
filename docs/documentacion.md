@@ -1644,3 +1644,29 @@ Reescritura profunda de la vista **planilla** (`TaskSheetView`) para que se comp
 
 ### Validation
 `tsc -b` exit 0 ✓ · backend `py_compile` + `import app.main` ✓. Rebase limpio sobre `main` actualizado (integró PR #26 docs y #27 compras; merge de 3 vías sin conflictos). De paso se quitó el componente muerto `NuevaSolicitudModal` (PR #27) que rompía `tsc`. Pruebas e2e (zoom, insertar, columnas, costo con materiales reales) quedan como checklist del PR.
+
+---
+
+## 2026-07-02 — Estado de obra: automático + manual (feature/obra-estado-auto)
+
+Antes el estado de la obra arrancaba en `planificada` y **nunca cambiaba** (no había transición automática ni UI para cambiarlo): todas quedaban planificadas y las pestañas Activas/Completadas siempre en 0.
+
+### Automático (backend)
+`TaskService.recompute_obra_status(obra_id, allow_complete=True)` derivado de las tareas, enganchado en **create / update / apply_status_update / delete** de tareas:
+- `planificada → en_progreso` cuando alguna tarea arranca (en progreso/bloqueada/completada o avance > 0%).
+- `en_progreso → completada` cuando todas las tareas (no canceladas) están al 100%.
+
+### La regla: no se pisan
+`pausada`, `cancelada` y `completada` son **pegajosos** — el automático nunca los toca (guard al inicio de la función). El auto solo maneja el tramo `planificada ↔ en_progreso → completada`.
+
+### Manual (frontend)
+La **pastilla de estado** de cada card (`PortfolioPage`) es clickeable (menú por `createPortal` para no ser recortado por el `overflow:hidden` del hero) y ofrece acciones contextuales: Pausar / Reactivar. Los estados **terminales** (completada/cancelada) no se cambian a mano: solo se pueden **Eliminar** (borrado real vía `deleteObra` → `DELETE /obras/{id}`, cascada a tareas/equipo). `completada` se alcanza solo de forma automática (se quitó "Marcar completada" manual) y `Cancelar` se reemplazó por Eliminar.
+
+### Reactivar/reabrir al toque
+`ObraService.update`, tras un cambio manual de `status`, llama a `recompute_obra_status(allow_complete=False)` y re-lee la obra: reactivar recalcula el estado real al instante, pero **no re-completa** en el mismo acto (para que reabrir no rebote a completada) y devuelve la obra ya recalculada.
+
+### Fix incluido
+Los clics del menú (portal) burbujeaban por el árbol de React hasta el `onClick` de la card y navegaban al resumen (además de tapar el borrado): se agregó `stopPropagation` al backdrop y al panel del portal.
+
+### Validation
+`tsc -b` exit 0 ✓ · backend `py_compile` + `import app.main` ✓. Pruebas e2e (auto al mover tareas, pausar/reactivar, eliminar, terminal solo-eliminar) quedan como checklist del PR.

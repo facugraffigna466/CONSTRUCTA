@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { PlusIcon, MapPinIcon } from "@heroicons/react/24/outline";
 import { GooeyInput } from "@/components/ui/gooey-input";
-import { fetchObras } from "../api/obras";
+import { fetchObras, updateObraStatus, deleteObra } from "../api/obras";
 import { fetchMembers, type ApiUser } from "../api/users";
 import { userAvatarColor } from "../context/UserContext";
 import { Spinner } from "../components/Spinner";
@@ -36,6 +37,21 @@ const PROGRESS_COLOR: Record<ObraStatus, string> = {
   cancelada:   "#B0B4B0",
 };
 
+// Acciones MANUALES de estado, según el estado actual. planificada↔en_progreso→
+// completada las maneja el automático; pausada/cancelada/completada son decisiones
+// manuales que el automático nunca pisa.
+// `completada` se alcanza SOLO de forma automática (todas las tareas al 100%).
+// Manual = pausar/reactivar. Estados TERMINALES (completada/cancelada) no se
+// cambian a mano: como mucho se eliminan. Para sacar una obra que no va más se
+// usa "Eliminar" (borrado real).
+const STATUS_ACTIONS: Record<ObraStatus, { to: ObraStatus; label: string }[]> = {
+  planificada: [{ to: "pausada", label: "Pausar" }],
+  en_progreso: [{ to: "pausada", label: "Pausar" }],
+  pausada:     [{ to: "en_progreso", label: "Reactivar" }],
+  completada:  [],
+  cancelada:   [],
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function daysRemaining(endDate: string | null): number | null {
@@ -53,8 +69,9 @@ function getInitials(name: string): string {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
 }
 
-function ObraCard({ obra, onSelect, isPinned, onTogglePin, members }: { obra: Obra; onSelect: () => void; isPinned: boolean; onTogglePin: () => void; members: Map<number, ApiUser> }) {
+function ObraCard({ obra, onSelect, isPinned, onTogglePin, members, onStatusChange, onDelete }: { obra: Obra; onSelect: () => void; isPinned: boolean; onTogglePin: () => void; members: Map<number, ApiUser>; onStatusChange: (status: ObraStatus) => void; onDelete: () => void }) {
   const [imgError, setImgError] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const pill      = STATUS_PILL[obra.status];
   const pct       = obra.total_tasks === 0 ? 0 : Math.round((obra.completed_tasks / obra.total_tasks) * 100);
   const barColor  = PROGRESS_COLOR[obra.status];
@@ -147,19 +164,29 @@ function ObraCard({ obra, onSelect, isPinned, onTogglePin, members }: { obra: Ob
           <MapPinIcon style={{ width: 12, height: 12 }} />
         </button>
 
-        {/* Status pill */}
-        <div style={{
-          position: "absolute", top: 14, right: 14,
-          display: "inline-flex", alignItems: "center", gap: 6,
-          padding: "4px 10px 4px 9px", borderRadius: 99,
-          fontSize: 11, fontWeight: 600,
-          background: "rgba(255,255,255,0.92)",
-          color: pill.textColor,
-          backdropFilter: "blur(4px)",
-        }}>
+        {/* Status pill → click para cambiar estado */}
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenuPos(m => (m ? null : { top: r.bottom + 6, right: window.innerWidth - r.right }));
+          }}
+          title="Cambiar estado de la obra"
+          style={{
+            position: "absolute", top: 14, right: 14,
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "4px 8px 4px 9px", borderRadius: 99,
+            fontSize: 11, fontWeight: 600,
+            background: "rgba(255,255,255,0.92)",
+            color: pill.textColor,
+            backdropFilter: "blur(4px)",
+            border: "none", cursor: "pointer",
+          }}
+        >
           <span style={{ width: 6, height: 6, borderRadius: 99, background: pill.dot, boxShadow: `0 0 0 3px ${pill.dot}30`, flexShrink: 0 }} />
           {pill.label}
-        </div>
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" style={{ marginLeft: 1, opacity: 0.55 }}><path d="M3 4.5L6 7.5l3-3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
       </div>
 
       {/* Body */}
@@ -219,7 +246,7 @@ function ObraCard({ obra, onSelect, isPinned, onTogglePin, members }: { obra: Ob
           ) : null}
         </div>
 
-        {/* Menu dots */}
+        {/* Menu dots (placeholder) */}
         <button
           onClick={e => e.stopPropagation()}
           style={{ width: 26, height: 26, borderRadius: 7, display: "inline-flex", alignItems: "center", justifyContent: "center", color: "#6B7580", background: "none", border: "none", cursor: "pointer" }}
@@ -233,6 +260,43 @@ function ObraCard({ obra, onSelect, isPinned, onTogglePin, members }: { obra: Ob
           </svg>
         </button>
       </div>
+
+      {/* Menú de estado (portal, para no ser recortado por el overflow del hero/card) */}
+      {menuPos && createPortal(
+        <>
+          <div onClick={e => { e.stopPropagation(); setMenuPos(null); }} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+          <div onClick={e => e.stopPropagation()} style={{ position: "fixed", top: menuPos.top, right: menuPos.right, zIndex: 41, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10, boxShadow: "0 10px 28px rgba(20,30,40,0.18)", padding: 5, minWidth: 190 }}>
+            {STATUS_ACTIONS[obra.status].length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#94928D", textTransform: "uppercase", letterSpacing: "0.06em", padding: "4px 8px" }}>Cambiar estado</div>
+                {STATUS_ACTIONS[obra.status].map(a => (
+                  <button
+                    key={a.to}
+                    onClick={() => { setMenuPos(null); onStatusChange(a.to); }}
+                    style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "7px 9px", borderRadius: 6, border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#1A2329", textAlign: "left" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "#F2F4F2")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                  >
+                    <span style={{ width: 8, height: 8, borderRadius: 99, background: STATUS_PILL[a.to].dot, flexShrink: 0 }} />
+                    {a.label}
+                  </button>
+                ))}
+                <div style={{ height: 1, background: "#EEF0EE", margin: "4px 6px" }} />
+              </>
+            )}
+            <button
+              onClick={() => { setMenuPos(null); onDelete(); }}
+              style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "7px 9px", borderRadius: 6, border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#DC2626", textAlign: "left" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#FEE2E2")}
+              onMouseLeave={e => (e.currentTarget.style.background = "none")}
+            >
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="2,4 14,4"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M6 7v5M10 7v5"/><path d="M3 4l1 9a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1l1-9"/></svg>
+              Eliminar obra
+            </button>
+          </div>
+        </>,
+        document.body
+      )}
     </article>
   );
 }
@@ -524,6 +588,21 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                       isPinned={pinnedIds.has(obra.id)}
                       onTogglePin={() => onTogglePin(obra)}
                       members={members}
+                      onStatusChange={async (status) => {
+                        try {
+                          const updated = await updateObraStatus(obra.id, status);
+                          setObras(prev => prev.map(o => o.id === obra.id ? updated : o));
+                        } catch { loadData(true); }
+                      }}
+                      onDelete={async () => {
+                        if (!confirm(`¿Eliminar la obra «${obra.name}»?\n\nSe borran también todas sus tareas y el equipo asignado. Esta acción no se puede deshacer.`)) return;
+                        try {
+                          await deleteObra(obra.id);
+                          setObras(prev => prev.filter(o => o.id !== obra.id));
+                        } catch {
+                          alert("No se pudo eliminar la obra. Puede tener datos asociados (alertas, bitácora o presupuestos) que impiden el borrado.");
+                        }
+                      }}
                     />
                   ))}
 

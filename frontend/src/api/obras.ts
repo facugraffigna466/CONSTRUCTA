@@ -1,4 +1,4 @@
-import type { Obra } from "../types";
+import type { Obra, ObraStatus } from "../types";
 import { apiClient } from "./client";
 
 export async function fetchObras(): Promise<Obra[]> {
@@ -26,4 +26,15 @@ export interface ObraCreatePayload {
 export async function createObra(payload: ObraCreatePayload): Promise<Obra> {
   const { data } = await apiClient.post<Obra>("/obras", payload);
   return data;
+}
+
+/** Cambio manual de estado de la obra (pausar/reactivar/reabrir). */
+export async function updateObraStatus(obraId: number, status: ObraStatus): Promise<Obra> {
+  const { data } = await apiClient.patch<Obra>(`/obras/${obraId}`, { status });
+  return data;
+}
+
+/** Borra la obra de forma permanente (cascada a tareas y equipo). */
+export async function deleteObra(obraId: number): Promise<void> {
+  await apiClient.delete(`/obras/${obraId}`);
 }
