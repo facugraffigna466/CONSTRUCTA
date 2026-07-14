@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangle, Brain, CheckCircle2, ChevronDown, ChevronRight,
-  Clock, CreditCard, Download, Loader2, Mail, MessageCircle,
+  AlertTriangle, Brain, CheckCircle2, ChevronDown,
+  Clock, CreditCard, Download, Layers, Loader2, Mail, MessageCircle,
   Package, PackageCheck, Plus, SendHorizonal, ShoppingCart, Sparkles,
-  ThumbsDown, ThumbsUp, Trash2, Truck, X,
+  Target, ThumbsDown, ThumbsUp, Trash2, Trophy, Truck, X,
 } from "lucide-react";
 import {
   confirmarContratistaProveedor,
@@ -37,7 +37,6 @@ import type {
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const MONO = "'JetBrains Mono', monospace";
-const COLS = "1fr 75px 110px 105px 130px 85px";
 
 type ModuleId = "materiales" | "cotizaciones" | "pedidos" | "analisis";
 
@@ -50,16 +49,17 @@ const STATUS_META: Record<string, { label: string; dot: string; bg: string; colo
   cotizado:  { label: "Cotizado",  dot: "#FF6B35", bg: "#FFF0E8", color: "#B84C10" },
 };
 
-const SOL_STATUS_META: Record<string, { label: string; dot: string; bg: string; color: string }> = {
-  borrador:   { label: "Borrador",   dot: "#9BA3AB", bg: "#F4F5F4", color: "#5B6770" },
-  enviada:    { label: "Enviada",    dot: "#B45309", bg: "#FFFBEB", color: "#B45309" },
-  respondida: { label: "Respondida", dot: "#3B82F6", bg: "#EBF3FF", color: "#2A62C9" },
-  confirmada: { label: "Confirmada", dot: "#1F8A5B", bg: "#E4F3EC", color: "#136E47" },
-};
 
 function money(n: number | null | undefined): string {
   if (n == null) return "—";
   return "$" + n.toLocaleString("es-AR", { maximumFractionDigits: 2 });
+}
+
+function fmtK(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1) + "M";
+  if (n >= 1_000) return "$" + Math.round(n / 1_000) + "K";
+  return "$" + Math.round(n);
 }
 
 function fmtDate(iso: string): string {
@@ -615,6 +615,13 @@ function AnalisisPanel({
 
 // ─── Card de solicitud ────────────────────────────────────────────────────────
 
+const SOL_STM: Record<string, { label: string; color: string; bg: string; soft: string; rail: string; line: string }> = {
+  borrador:   { label: "Borrador",   color: "#5B6770", bg: "#F4F5F4", soft: "#FAFAF8", rail: "#CDD0CC", line: "#E6E7E5" },
+  enviada:    { label: "Enviada",    color: "#B45309", bg: "#FEF3E8", soft: "#FFFBF4", rail: "#E8A33D", line: "#F0D0A8" },
+  respondida: { label: "Respondida", color: "#2A62C9", bg: "#EBF3FF", soft: "#F8FBFF", rail: "#2A62C9", line: "#C6DBF7" },
+  confirmada: { label: "Confirmada", color: "#136E47", bg: "#E4F3EC", soft: "#F5FBF8", rail: "#1F8A5B", line: "#B8DECA" },
+};
+
 function SolicitudCard({
   sol,
   index,
@@ -632,82 +639,127 @@ function SolicitudCard({
   confirming: boolean;
   deleting: boolean;
 }) {
-  const [expanded, setExpanded] = useState(sol.status === "respondida");
+  const [expanded, setExpanded] = useState(sol.status === "respondida" || sol.status === "confirmada");
   const hasResponses = sol.respuestas.length > 0;
   const refNum = `COT-${String(index + 1).padStart(2, "0")}`;
+  const m = SOL_STM[sol.status] ?? SOL_STM.borrador;
+
+  const proveedoresLabel = sol.suppliers.length > 0
+    ? sol.suppliers.map(s => s.supplier_name).join(", ")
+    : sol.respuestas.length > 0
+      ? [...new Set(sol.respuestas.map(r => r.supplier_name))].join(", ")
+      : sol.contratista_phone
+        ? "Contratista directo"
+        : "Sin proveedor asignado";
+
+  const respCount = sol.respuestas.length;
+  const suppCount = sol.suppliers.length;
 
   return (
-    <div style={{ border: "1px solid #E6E7E5", borderRadius: 12, overflow: "hidden", background: "#fff" }}>
+    <div style={{
+      background: "#fff",
+      border: `1px solid ${m.line}`,
+      borderRadius: 14,
+      overflow: "hidden",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      position: "relative",
+    }}>
+      {/* Left rail */}
+      <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: m.rail, zIndex: 1 }} />
+
+      {/* Header */}
       <button
         onClick={() => setExpanded(e => !e)}
         style={{
-          width: "100%", display: "flex", alignItems: "center", gap: 10,
-          padding: "11px 14px", background: "#fff", border: "none",
-          borderBottom: expanded ? "1px solid #F0EBE2" : "none",
-          cursor: "pointer", textAlign: "left",
+          width: "100%", display: "flex", alignItems: "center", gap: 12,
+          padding: "14px 18px 14px 18px",
+          background: expanded ? m.soft : "#fff",
+          border: "none", borderBottom: expanded ? `1px solid ${m.line}` : "none",
+          cursor: "pointer", textAlign: "left", fontFamily: FONT,
+          boxSizing: "border-box",
         }}
       >
-        <span style={{ fontSize: 12, fontWeight: 700, color: "#FF6B35", fontFamily: MONO, flexShrink: 0 }}>
+        {/* Chevron */}
+        <span style={{ color: "#8E97A0", flexShrink: 0, display: "flex", transform: expanded ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }}>
+          <ChevronDown style={{ width: 14, height: 14 }} />
+        </span>
+        {/* Ref code */}
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: "#FF6B35", fontFamily: MONO, flexShrink: 0, letterSpacing: "0.04em" }}>
           {refNum}
         </span>
+        {/* Main info */}
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329" }}>
-            {sol.suppliers.length > 0
-              ? sol.suppliers.map(s => s.supplier_name).join(", ")
-              : sol.respuestas.length > 0
-                ? [...new Set(sol.respuestas.map(r => r.supplier_name))].join(", ")
-                : sol.contratista_phone
-                  ? "Contratista directo"
-                  : "Sin proveedor asignado"}
+          <span style={{ fontSize: 13.5, fontWeight: 700, color: "#1A2329", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+            {proveedoresLabel}
           </span>
-          <span style={{ fontSize: 11, color: "#8E97A0", marginLeft: 8 }}>{fmtDate(sol.created_at)}</span>
+          <span style={{ fontSize: 11, color: "#8E97A0", display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+            <span>{fmtDate(sol.created_at)}</span>
+            {sol.material_ids.length > 0 && <><span style={{ color: "#D8D3CA" }}>·</span><span>{sol.material_ids.length} material{sol.material_ids.length !== 1 ? "es" : ""}</span></>}
+            {suppCount > 0 && <><span style={{ color: "#D8D3CA" }}>·</span><span>{suppCount} proveedor{suppCount !== 1 ? "es" : ""}</span></>}
+            {respCount > 0 && <><span style={{ color: "#D8D3CA" }}>·</span><span style={{ color: "#2A62C9", fontWeight: 600 }}>{respCount} respuesta{respCount !== 1 ? "s" : ""}</span></>}
+          </span>
         </span>
-        <Pill status={sol.status} meta={SOL_STATUS_META} />
+        {/* Status pill */}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, fontSize: 11, fontWeight: 700, border: `1px solid ${m.line}`, color: m.color, background: m.bg, whiteSpace: "nowrap" as const, flexShrink: 0 }}>
+          {sol.status === "confirmada"
+            ? <CheckCircle2 style={{ width: 11, height: 11 }} />
+            : sol.status === "respondida"
+            ? <Brain style={{ width: 11, height: 11 }} />
+            : sol.status === "enviada"
+            ? <SendHorizonal style={{ width: 11, height: 11 }} />
+            : <Clock style={{ width: 11, height: 11 }} />}
+          {m.label}
+        </span>
+        {/* Delete button */}
         <button
           onClick={e => { e.stopPropagation(); onDelete(sol.id); }}
           disabled={deleting}
           title="Eliminar solicitud"
-          style={{ width: 26, height: 26, borderRadius: 7, border: "1px solid #E6E7E5", background: "#fff", cursor: deleting ? "wait" : "pointer", color: "#C4747B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+          style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E6E7E5", background: "#fff", cursor: deleting ? "wait" : "pointer", color: "#C4747B", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .14s" }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#FCE5E5"; e.currentTarget.style.borderColor = "#F0B0B0"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "#fff"; e.currentTarget.style.borderColor = "#E6E7E5"; }}
         >
           {deleting ? <Loader2 style={{ width: 11, height: 11, animation: "spin 1s linear infinite" }} /> : <Trash2 style={{ width: 11, height: 11 }} />}
         </button>
-        <span style={{ color: "#9BA3AB", flexShrink: 0, display: "flex" }}>
-          {expanded ? <ChevronDown style={{ width: 14, height: 14 }} /> : <ChevronRight style={{ width: 14, height: 14 }} />}
-        </span>
       </button>
 
+      {/* Body */}
       {expanded && (
-        <div>
-          <div style={{ padding: "10px 14px", display: "flex", gap: 12, flexWrap: "wrap", borderBottom: hasResponses ? "1px solid #F0EBE2" : "none", background: "#FAFAF8" }}>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.07em" }}>Materiales:</span>
-              <span style={{ fontSize: 11.5, color: "#3E4A52" }}>{sol.material_ids.length} ítem{sol.material_ids.length !== 1 ? "s" : ""}</span>
+        <div style={{ background: m.soft }}>
+          {/* Meta row */}
+          {(sol.notes || sol.material_ids.length > 0) && (
+            <div style={{ padding: "10px 18px", display: "flex", gap: 16, flexWrap: "wrap", borderBottom: `1px solid ${m.line}` }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#5B6770" }}>
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 1.8L14 5v6l-6 3.2L2 11V5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>
+                <strong style={{ color: "#1A2329" }}>{sol.material_ids.length}</strong> material{sol.material_ids.length !== 1 ? "es" : ""} incluido{sol.material_ids.length !== 1 ? "s" : ""}
+              </span>
+              {sol.notes && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: "#5B6770", fontStyle: "italic" }}>
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M3 8h7M3 12h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  "{sol.notes}"
+                </span>
+              )}
             </div>
-            {sol.notes && (
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.07em" }}>Nota:</span>
-                <span style={{ fontSize: 11.5, color: "#3E4A52" }}>{sol.notes}</span>
-              </div>
-            )}
-          </div>
+          )}
 
+          {/* Supplier chips */}
           {sol.suppliers.length > 0 && (
-            <div style={{ padding: "10px 14px", display: "flex", gap: 6, flexWrap: "wrap", borderBottom: hasResponses ? "1px solid #F0EBE2" : "none" }}>
+            <div style={{ padding: "12px 18px", display: "flex", gap: 8, flexWrap: "wrap", borderBottom: hasResponses ? `1px solid ${m.line}` : "none" }}>
               {sol.suppliers.map(s => {
                 const responded = s.status === "respondida";
                 return (
                   <span key={s.supplier_id} style={{
-                    display: "inline-flex", alignItems: "center", gap: 5,
-                    padding: "4px 10px", borderRadius: 99, fontSize: 11.5, fontWeight: 600,
-                    background: responded ? "#E4F3EC" : "#FDF1DE",
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 12px", borderRadius: 99, fontSize: 12, fontWeight: 600,
+                    background: responded ? "#E4F3EC" : "#FEF3E8",
                     color: responded ? "#136E47" : "#B45309",
-                    border: `1px solid ${responded ? "#B8DECA" : "#F0D0A0"}`,
+                    border: `1px solid ${responded ? "#B8DECA" : "#F0D0A8"}`,
                   }}>
                     {responded
                       ? <CheckCircle2 style={{ width: 11, height: 11 }} />
                       : <Clock style={{ width: 11, height: 11 }} />}
                     {s.supplier_name}
-                    <span style={{ fontSize: 10, opacity: 0.75 }}>
+                    <span style={{ fontSize: 10.5, opacity: 0.75, fontWeight: 400 }}>
                       {responded ? "· respondió" : "· esperando"}
                     </span>
                   </span>
@@ -716,16 +768,21 @@ function SolicitudCard({
             </div>
           )}
 
+          {/* Status messages */}
           {sol.status === "borrador" && (
-            <div style={{ padding: "12px 14px", fontSize: 12, color: "#8E97A0" }}>
+            <div style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#8E97A0" }}>
+              <Clock style={{ width: 13, height: 13 }} />
               Solicitud en borrador — todavía no fue enviada a ningún proveedor.
             </div>
           )}
           {sol.status === "enviada" && sol.respuestas.length === 0 && (
-            <div style={{ padding: "12px 14px", fontSize: 12, color: "#8E97A0" }}>
+            <div style={{ padding: "12px 18px", display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#B45309" }}>
+              <SendHorizonal style={{ width: 13, height: 13 }} />
               Solicitud enviada. Esperando respuesta de los proveedores…
             </div>
           )}
+
+          {/* Responses / Analisis */}
           {sol.respuestas.length > 0 && (
             <AnalisisPanel
               analisis={sol.analisis_ia}
@@ -1273,7 +1330,7 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
 
   const [activeModule, setActiveModule] = useState<ModuleId>("materiales");
   const [statusFilter, setStatusFilter] = useState("todos");
-  const [taskFilter, setTaskFilter]     = useState("todas");
+  const [taskFilter]                     = useState("todas");
   const [search, setSearch]             = useState("");
   const [collapsed, setCollapsed]       = useState<Set<number>>(new Set());
 
@@ -1412,7 +1469,6 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
   if (error || !data) return <p style={{ padding: 24, fontSize: 13, color: "#D03A3A", fontFamily: FONT }}>{error}</p>;
 
   const pendientesCount = data.rows.filter(r => r.status === "pendiente").length;
-  const tareasUnicas = groups.length;
 
   // ── Módulos tab bar ──────────────────────────────────────────────────────────
   const MODULE_TABS = [
@@ -1442,85 +1498,41 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
     },
   ];
 
-  const selBtn = (active: boolean): React.CSSProperties => ({
-    display: "inline-flex", alignItems: "center", gap: 8,
-    padding: "9px 14px", border: "none", cursor: "pointer",
-    background: "none", fontFamily: FONT,
-    borderBottom: active ? "2px solid #FF6B35" : "2px solid transparent",
-    marginBottom: -1,
-    transition: "border-color 0.15s",
-  });
-
-  const selDrop: React.CSSProperties = {
-    padding: "7px 10px", fontSize: 12.5, border: "1px solid #E6E7E5",
-    borderRadius: 8, fontFamily: FONT, color: "#3E4A52",
-    background: "#fff", cursor: "pointer", outline: "none",
-  };
-
   return (
     <div style={{ fontFamily: FONT, display: "flex", flexDirection: "column", gap: 0 }}>
 
-      {/* ── KPIs ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
-        {[
-          { label: "Total estimado", value: data.total_estimado, color: "#1A2329", dot: "#9BA3AB" },
-          { label: "Comprometido",   value: data.total_pedido,   color: "#B45309",  dot: "#B45309" },
-          { label: "Gasto real",     value: data.total_recibido, color: "#1F8A5B",  dot: "#1F8A5B" },
-        ].map(kpi => (
-          <div key={kpi.label} style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, padding: "14px 16px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: kpi.dot, flexShrink: 0 }} />
-              <p style={{ margin: 0, fontSize: 10.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#6B7580" }}>{kpi.label}</p>
-            </div>
-            <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: kpi.color, fontVariantNumeric: "tabular-nums" }}>
-              ${kpi.value.toLocaleString("es-AR", { maximumFractionDigits: 0 })}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Tabs de módulos ── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 0,
-        borderBottom: "1px solid #E6E7E5", marginBottom: 0,
-        overflowX: "auto",
-      }}>
-        <span style={{
-          fontSize: 9.5, fontWeight: 700, color: "#9BA3AB",
-          textTransform: "uppercase", letterSpacing: "0.1em",
-          padding: "0 14px 0 0", flexShrink: 0, paddingBottom: 12,
-        }}>
-          Módulos
-        </span>
+      {/* ── Tabs de módulos (ctabs) ── */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
         {MODULE_TABS.map(m => (
           <button
             key={m.id}
             onClick={() => setActiveModule(m.id)}
-            style={selBtn(activeModule === m.id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 9, padding: "10px 15px",
+              borderRadius: 12, fontFamily: FONT,
+              background: activeModule === m.id ? "#1A2329" : "#fff",
+              border: `1px solid ${activeModule === m.id ? "#1A2329" : "#E6E7E5"}`,
+              fontSize: 13, fontWeight: 600,
+              color: activeModule === m.id ? "#fff" : "#5B6770",
+              cursor: "pointer", boxShadow: "0 1px 4px rgba(0,0,0,0.07)",
+              transition: "all 0.14s",
+            }}
           >
             <span style={{
               width: 22, height: 22, borderRadius: 7, flexShrink: 0,
-              background: activeModule === m.id ? m.numBg : "#E8E5DF",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 10, fontWeight: 800,
+              background: activeModule === m.id ? "#FF6B35" : "#F0EDE7",
               color: activeModule === m.id ? "#fff" : "#7A7167",
-              fontFamily: MONO, transition: "background 0.15s",
+              fontFamily: MONO, fontSize: 10.5, fontWeight: 700,
+              display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               {m.num}
             </span>
-            <span style={{
-              fontSize: 12.5, fontWeight: activeModule === m.id ? 700 : 500,
-              color: activeModule === m.id ? "#1A2329" : "#6B7580",
-              whiteSpace: "nowrap",
-            }}>
-              {m.label}
-            </span>
+            {m.label}
             {m.count > 0 && (
               <span style={{
-                fontSize: 10.5, fontWeight: 700,
-                padding: "1px 7px", borderRadius: 99,
-                background: activeModule === m.id ? "#F2EFE8" : "#F4F5F4",
-                color: activeModule === m.id ? "#5B5347" : "#8E97A0",
+                fontFamily: MONO, fontSize: 10, padding: "1px 6px", borderRadius: 99,
+                background: activeModule === m.id ? "rgba(255,255,255,0.16)" : "#F0EDE7",
+                color: activeModule === m.id ? "#fff" : "#7A7167",
               }}>
                 {m.count}
               </span>
@@ -1530,239 +1542,514 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
       </div>
 
       {/* ════════ MÓDULO 01: MATERIALES ════════ */}
-      {activeModule === "materiales" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <ModuleHeader
-            num="01"
-            numBg="#1A2329"
-            title="Materiales"
-            stats={data.rows.length > 0 ? `${data.rows.length} ítem${data.rows.length !== 1 ? "s" : ""} · ${tareasUnicas} tarea${tareasUnicas !== 1 ? "s" : ""}` : undefined}
-            description="Planilla de obra — cantidades, precios y estado de cada material."
-            actions={
-              <>
-                <button
-                  onClick={() => setShowAddMaterial(true)}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: "#1A2329", background: "#fff", border: "1px solid #D8D3CA", cursor: "pointer" }}
-                >
-                  <Plus style={{ width: 13, height: 13 }} /> Agregar ítem
-                </button>
-                <button
-                  onClick={async () => { setExporting(true); try { await exportPresupuestoExcel(obraId, obraName); } finally { setExporting(false); } }}
-                  disabled={exporting || data.rows.length === 0}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, color: "#5B6770", background: "#fff", border: "1px solid #D8D3CA", cursor: "pointer", opacity: data.rows.length === 0 ? 0.5 : 1 }}
-                >
-                  <Download style={{ width: 13, height: 13 }} /> {exporting ? "Exportando…" : "Exportar Excel"}
-                </button>
-                <button
-                  onClick={() => setShowSolicitudAll(true)}
-                  disabled={pendientesCount === 0}
-                  style={{
-                    display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px",
-                    borderRadius: 10, fontSize: 12.5, fontWeight: 700,
-                    background: pendientesCount === 0 ? "#E6E7E5" : "#FF6B35", border: "none",
-                    color: pendientesCount === 0 ? "#8E97A0" : "#fff",
-                    cursor: pendientesCount === 0 ? "not-allowed" : "pointer",
-                    boxShadow: pendientesCount === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
-                  }}
-                >
-                  <SendHorizonal style={{ width: 13, height: 13 }} /> Generar solicitud
-                </button>
-              </>
-            }
-          />
+      {activeModule === "materiales" && (() => {
+        const totalEst = data.total_estimado;
+        const pctComp  = totalEst > 0 ? Math.round((data.total_pedido / totalEst) * 100) : 0;
+        const segRecv  = totalEst > 0 ? (data.total_recibido / totalEst) * 100 : 0;
+        const segPed   = totalEst > 0 ? (Math.max(0, data.total_pedido - data.total_recibido) / totalEst) * 100 : 0;
+        const segRest  = Math.max(0, 100 - segRecv - segPed);
+        const valPend  = Math.max(0, totalEst - data.total_pedido);
 
-          {/* Barra de filtros */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "#9BA3AB", pointerEvents: "none" }}>
-                <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.4" />
-                <path d="M9.5 9.5L12 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-              <input
-                value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar tarea, material o contratista…"
-                style={{ width: "100%", boxSizing: "border-box", padding: "8px 12px 8px 30px", borderRadius: 10, border: "1px solid #E6E7E5", background: "#fff", fontSize: 12.5, color: "#1A2329", fontFamily: FONT, outline: "none" }}
-              />
-              {search && (
-                <button onClick={() => setSearch("")} style={{ position: "absolute", right: 9, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#9BA3AB", padding: 0, display: "flex" }}>
-                  <X style={{ width: 12, height: 12 }} />
-                </button>
-              )}
-            </div>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={selDrop}>
-              <option value="todos">Estado: Todos</option>
-              <option value="pendiente">Pendiente</option>
-              <option value="pedido">Pedido</option>
-              <option value="recibido">Recibido</option>
-            </select>
-            <select value={taskFilter} onChange={e => setTaskFilter(e.target.value)} style={selDrop}>
-              <option value="todas">Tarea</option>
-              {groups.map(g => <option key={g.taskId} value={String(g.taskId)}>{g.title}</option>)}
-            </select>
-          </div>
+        const MAT_STM: Record<string, { label: string; color: string; bg: string; soft: string; rail: string; line: string }> = {
+          pendiente: { label: "Pendiente", color: "#B45309", bg: "#FEF3E8", soft: "#FFFBF4", rail: "#E8A33D", line: "#F0D0A8" },
+          pedido:    { label: "Pedido",    color: "#2A62C9", bg: "#EBF3FF", soft: "#FFFFFF", rail: "#2A62C9", line: "#C6DBF7" },
+          recibido:  { label: "Recibido",  color: "#136E47", bg: "#E4F3EC", soft: "#FFFFFF", rail: "#1F8A5B", line: "#B8DECA" },
+        };
+        const AV_COLORS = ["#2A62C9","#1F8A5B","#9A4DC9","#C97D0E","#2C6571","#D03A3A","#6D45C7"];
+        const getInitials = (name: string) => name.split(/\s+/).slice(0,2).map(w => w[0]).join("").toUpperCase();
+        const getAvColor  = (name: string) => { let h = 0; for (const c of name) h = (h*31+c.charCodeAt(0))>>>0; return AV_COLORS[h % AV_COLORS.length]; };
 
-          {/* Tabla de materiales */}
-          {groups.length === 0 ? (
-            <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, padding: "44px 24px", textAlign: "center" }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: "#FFF0E8", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                <ShoppingCart style={{ width: 22, height: 22, color: "#E76A2D" }} />
-              </div>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#3E4A52" }}>Todavía no hay materiales cargados</p>
-              <p style={{ margin: "4px 0 16px", fontSize: 12.5, color: "#6B7580" }}>
-                Empezá agregando un ítem y elegí a qué tarea de la obra pertenece.
-              </p>
-              <button
-                onClick={() => setShowAddMaterial(true)}
-                disabled={tasks.length === 0}
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, color: tasks.length === 0 ? "#8E97A0" : "#fff", background: tasks.length === 0 ? "#E6E7E5" : "#FF6B35", border: "none", cursor: tasks.length === 0 ? "not-allowed" : "pointer", boxShadow: tasks.length === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)" }}>
-                <Plus style={{ width: 14, height: 14 }} /> Agregar primer ítem
-              </button>
-              {tasks.length === 0 && <p style={{ margin: "10px 0 0", fontSize: 11.5, color: "#C97D0E" }}>Necesitás al menos una tarea. Creala en el tab Tareas.</p>}
-            </div>
-          ) : (
-            <div style={{ background: "#fff", border: "1px solid #D8D3CA", borderRadius: 12, overflow: "hidden" }}>
-              {/* Encabezado columnas */}
-              <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, padding: "8px 16px", background: "#F7F5F0", borderBottom: "1px solid #E2DDD5" }}>
-                {["Descripción", "Cant.", "Precio unit.", "Subtotal", "Pedido por", "Estado"].map((h, hi) => (
-                  <span key={h} style={{ fontSize: 9.5, fontWeight: 700, color: "#7A7167", letterSpacing: "0.09em", textTransform: "uppercase", textAlign: hi >= 1 && hi <= 3 ? "right" : "left", overflow: "hidden", whiteSpace: "nowrap", display: "block" }}>{h}</span>
-                ))}
-              </div>
+        const counts = {
+          total:     data.rows.length,
+          pendiente: data.rows.filter(r => r.status === "pendiente").length,
+          pedido:    data.rows.filter(r => r.status === "pedido").length,
+          recibido:  data.rows.filter(r => r.status === "recibido").length,
+        };
 
-              {filteredGroups.length === 0 && (
-                <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 13, color: "#8E97A0" }}>
-                  Sin resultados para "<b>{search || statusFilter !== "todos" ? (statusFilter !== "todos" ? statusFilter : search) : taskFilter}</b>"
-                </div>
-              )}
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 
-              {filteredGroups.map((g, gi) => {
-                const isOpen = !collapsed.has(gi);
-                const pendCount = g.rows.filter(r => r.status === "pendiente").length;
-                const uniqueContratistas = [...new Set(g.rows.map(r => r.responsible_name).filter((n): n is string => Boolean(n)))];
-                const contratistaLabel = uniqueContratistas.length === 1 ? uniqueContratistas[0] : uniqueContratistas.length > 1 ? `${uniqueContratistas.length} contrat.` : null;
-                return (
-                  <div key={g.title} style={{ borderTop: gi > 0 ? "1px solid #E2DDD5" : "none" }}>
-                    {/* Fila de sección */}
-                    <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 16px", background: "#FAFAF7", borderBottom: isOpen ? "1px solid #EDE9E1" : "none", boxSizing: "border-box" }}>
-                      <button
-                        onClick={() => setCollapsed(prev => { const n = new Set(prev); n.has(gi) ? n.delete(gi) : n.add(gi); return n; })}
-                        style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left", minWidth: 0 }}
-                      >
-                        <span style={{ color: "#9BA3AB", flexShrink: 0, display: "flex" }}>
-                          {isOpen ? <ChevronDown style={{ width: 13, height: 13 }} /> : <ChevronRight style={{ width: 13, height: 13 }} />}
-                        </span>
-                        <span style={{ width: 3, height: 16, borderRadius: 99, background: "#FF6B35", flexShrink: 0 }} />
-                        <span style={{ fontSize: 11.5, fontWeight: 700, color: "#3E4A52", flex: 1, textTransform: "uppercase", letterSpacing: "0.06em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.title}</span>
-                      </button>
-                      {contratistaLabel && (
-                        <span style={{ display: "inline-flex", alignItems: "center", fontSize: 10.5, fontWeight: 500, padding: "2px 8px", borderRadius: 99, background: "#F2EFE8", color: "#5B6770", flexShrink: 0, whiteSpace: "nowrap", maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {contratistaLabel}
-                        </span>
-                      )}
-                      {pendCount > 0 && (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 99, background: "#EBF3FF", color: "#2A62C9", flexShrink: 0 }}>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#3B82F6" }} />
-                          {pendCount} pend.
-                        </span>
-                      )}
-                      {!isOpen && <span style={{ fontSize: 13, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{money(g.subtotal)}</span>}
+            {/* ── Summary Panel ── */}
+            {data.rows.length > 0 && totalEst > 0 && (
+              <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 16, padding: "18px 20px", marginBottom: 14, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, marginBottom: 16 }}>
+                  <div>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", color: "#8E97A0", textTransform: "uppercase" as const }}>
+                      PRESUPUESTO DE MATERIALES
                     </div>
-
-                    {/* Filas de materiales */}
-                    {isOpen && g.rows.map((r, i) => (
-                      <div key={r.material_id} style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "9px 16px", borderBottom: "1px solid #F4F1EB", background: i % 2 === 0 ? "#fff" : "#FDFCFB" }}>
-                        <span style={{ fontSize: 13, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={r.name}>{r.name}</span>
-                        <span style={{ fontSize: 12.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{r.quantity != null ? `${r.quantity} ${r.unit ?? ""}` : "—"}</span>
-                        <span style={{ fontSize: 12.5, color: "#5B6770", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(r.unit_price)}</span>
-                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#1A2329", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{r.subtotal > 0 ? money(r.subtotal) : "—"}</span>
-                        <span style={{ fontSize: 12, color: r.created_by_name ? "#5B6770" : "#C4C9C6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.created_by_name ?? "—"}</span>
-                        <span><Pill status={r.status} /></span>
+                    <div style={{ fontFamily: MONO, fontSize: 34, fontWeight: 800, letterSpacing: "-0.035em", lineHeight: 1, margin: "9px 0 3px", color: "#1A2329" }}>
+                      {money(totalEst)}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#8E97A0" }}>estimado total de la obra</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 22, flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                      <span style={{ fontFamily: MONO, fontSize: 38, fontWeight: 800, color: "#B45309", letterSpacing: "-0.04em", lineHeight: 1 }}>{pendientesCount}</span>
+                      <span style={{ fontSize: 11, color: "#5B6770", fontWeight: 600, lineHeight: 1.25 }}>materiales<br/>pendientes</span>
+                    </div>
+                    {/* Donut ring */}
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                      <div style={{ width: 58, height: 58, borderRadius: "50%", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", background: `conic-gradient(#FF6B35 ${pctComp * 3.6}deg, #F0EDE7 0deg)` }}>
+                        <div style={{ position: "absolute", inset: 6, borderRadius: "50%", background: "#fff" }} />
+                        <span style={{ position: "relative", zIndex: 1, fontFamily: MONO, fontSize: 13, fontWeight: 700, color: "#E85A26" }}>{pctComp}%</span>
                       </div>
-                    ))}
+                      <div style={{ fontSize: 10, color: "#8E97A0", fontWeight: 600, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>comprometido</div>
+                    </div>
+                  </div>
+                </div>
+                {/* Stacked bar */}
+                <div style={{ display: "flex", height: 14, borderRadius: 99, overflow: "hidden", background: "#F0EDE7", gap: 2 }}>
+                  {segRecv > 0 && <span style={{ width: `${segRecv}%`, height: "100%", background: "#1F8A5B", transition: "width .5s cubic-bezier(.22,.61,.36,1)" }} />}
+                  {segPed  > 0 && <span style={{ width: `${segPed}%`,  height: "100%", background: "#2A62C9", transition: "width .5s cubic-bezier(.22,.61,.36,1)" }} />}
+                  {segRest > 0 && <span style={{ width: `${segRest}%`, height: "100%", background: "#E3E0D8", transition: "width .5s cubic-bezier(.22,.61,.36,1)" }} />}
+                </div>
+                <div style={{ display: "flex", gap: 22, marginTop: 11 }}>
+                  {[
+                    { label: "Recibido",  val: data.total_recibido,                                   bg: "#1F8A5B" },
+                    { label: "Pedido",    val: Math.max(0, data.total_pedido - data.total_recibido),   bg: "#2A62C9" },
+                    { label: "Por pedir", val: valPend,                                                bg: "#CFCBC1" },
+                  ].map(s => (
+                    <span key={s.label} style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11.5, color: "#5B6770" }}>
+                      <span style={{ width: 9, height: 9, borderRadius: 3, background: s.bg, flexShrink: 0 }} />
+                      {s.label}
+                      <strong style={{ fontFamily: MONO, fontWeight: 700, color: "#1A2329" }}>{money(s.val)}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                    {/* Subtotal sección */}
-                    {isOpen && (
-                      <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "7px 16px", background: "#F2EFE8", borderTop: "1px solid #E2DDD5" }}>
-                        <span style={{ gridColumn: "1 / 4", fontSize: 10, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.07em", textAlign: "right" }}>
-                          Subtotal {g.title}
-                        </span>
-                        <span style={{ fontSize: 13, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(g.subtotal)}</span>
-                        <span /><span />
-                      </div>
+            {/* ── Empty state ── */}
+            {groups.length === 0 ? (
+              <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, border: "1px solid #E6E7E5", background: "#FAFAF8" }}>
+                <div aria-hidden="true" style={{ position: "absolute", inset: 0, padding: "24px 24px 0", display: "flex", flexDirection: "column", gap: 10, filter: "blur(7px)", opacity: 0.1, pointerEvents: "none" }}>
+                  {[80, 60, 70].map((_w, i) => (
+                    <div key={i} style={{ height: 50, borderRadius: 12, background: i % 2 === 0 ? "#C8CDD0" : "#D4D8DB" }} />
+                  ))}
+                </div>
+                <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(250,250,248,0.5),#FAFAF8)", pointerEvents: "none" }} />
+                <div style={{ position: "relative", zIndex: 1, textAlign: "center", padding: "52px 40px 48px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  <div style={{ width: 66, height: 66, borderRadius: 18, background: "#F0EDE7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+                    <svg width="32" height="32" viewBox="0 0 16 16" fill="none" style={{ color: "#8E97A0" }}>
+                      <path d="M8 1.8L14 5v6l-6 3.2L2 11V5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                      <path d="M2 5l6 3.2L14 5M8 9V14" stroke="currentColor" strokeWidth="1.3"/>
+                    </svg>
+                  </div>
+                  <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8, color: "#1A2329" }}>Todavía no cargaste materiales</div>
+                  <p style={{ margin: "0 0 22px", fontSize: 13.5, color: "#5B6770", lineHeight: 1.5, maxWidth: 360 }}>
+                    Empezá agregando los materiales que necesita la obra. Después vas a poder pedir cotizaciones y seguir el estado de cada uno.
+                  </p>
+                  <button
+                    onClick={() => setShowAddMaterial(true)}
+                    disabled={tasks.length === 0}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 20px", fontSize: 14, fontWeight: 700, borderRadius: 12, border: "none", fontFamily: FONT, background: tasks.length === 0 ? "#E6E7E5" : "#FF6B35", color: tasks.length === 0 ? "#8E97A0" : "#fff", cursor: tasks.length === 0 ? "not-allowed" : "pointer", boxShadow: tasks.length === 0 ? "none" : "0 12px 24px -8px rgba(255,107,53,0.55)" }}
+                  >
+                    <Plus style={{ width: 14, height: 14 }} /> Agregar primer material
+                  </button>
+                  {tasks.length === 0 && (
+                    <p style={{ margin: "12px 0 0", fontFamily: MONO, fontSize: 11, color: "#B45309" }}>
+                      Necesitás al menos una tarea. Creala en el tab Tareas.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* ── Filters ── */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10, padding: "0 12px", color: "#8E97A0", width: 300, boxShadow: "0 1px 4px rgba(0,0,0,0.07)", flexShrink: 0 }}>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                      <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/>
+                      <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                    <input
+                      value={search} onChange={e => setSearch(e.target.value)}
+                      placeholder="Buscar material, tarea o contratista…"
+                      style={{ border: 0, outline: 0, background: "transparent", padding: "10px 0", fontSize: 13, color: "#1A2329", fontFamily: FONT, width: "100%" }}
+                    />
+                    {search && (
+                      <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "#9BA3AB", padding: 0, display: "flex" }}>
+                        <X style={{ width: 12, height: 12 }} />
+                      </button>
                     )}
                   </div>
-                );
-              })}
+                  {/* Segmented status filter */}
+                  <div style={{ display: "flex", gap: 2, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10, padding: 3, boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+                    {([
+                      ["todos",     "Todos",     counts.total],
+                      ["pendiente", "Pendiente", counts.pendiente],
+                      ["pedido",    "Pedido",    counts.pedido],
+                      ["recibido",  "Recibido",  counts.recibido],
+                    ] as [string, string, number][]).map(([k, l, n]) => (
+                      <button
+                        key={k}
+                        onClick={() => setStatusFilter(k)}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
+                          borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                          border: "none", fontFamily: FONT, transition: "background .12s",
+                          background: statusFilter === k
+                            ? k === "todos"     ? "#1A2329"
+                              : k === "pendiente" ? "#E8A33D"
+                              : k === "pedido"    ? "#2A62C9"
+                              : "#1F8A5B"
+                            : "transparent",
+                          color: statusFilter === k ? "#fff" : "#5B6770",
+                        }}
+                      >
+                        {l}
+                        <span style={{
+                          fontFamily: MONO, fontSize: 10, padding: "0 6px", borderRadius: 99,
+                          background: statusFilter === k ? "rgba(255,255,255,0.22)" : "#F0EDE7",
+                          color: statusFilter === k ? "#fff" : "#7A7167",
+                        }}>{n}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ flex: 1 }} />
+                  <button
+                    onClick={async () => { setExporting(true); try { await exportPresupuestoExcel(obraId, obraName); } finally { setExporting(false); } }}
+                    disabled={exporting || data.rows.length === 0}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 600, background: "#fff", border: "1px solid #E6E7E5", color: "#5B6770", cursor: "pointer", boxShadow: "0 1px 4px rgba(0,0,0,0.07)", fontFamily: FONT, opacity: data.rows.length === 0 ? 0.5 : 1 }}
+                  >
+                    <Download style={{ width: 13, height: 13 }} /> {exporting ? "Exportando…" : "Excel"}
+                  </button>
+                  <button
+                    onClick={() => setShowAddMaterial(true)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 14px", borderRadius: 10, fontSize: 12.5, fontWeight: 700, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", boxShadow: "0 6px 14px -6px rgba(255,107,53,0.55)", fontFamily: FONT }}
+                  >
+                    <Plus style={{ width: 13, height: 13 }} /> Agregar material
+                  </button>
+                </div>
 
-              {/* Total general */}
-              <div style={{ display: "grid", gridTemplateColumns: COLS, columnGap: 8, alignItems: "center", padding: "13px 16px", background: "#1A2329", borderTop: "2px solid #0E161B" }}>
-                <span style={{ gridColumn: "1 / 4", fontSize: 10.5, fontWeight: 700, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.1em", textAlign: "right" }}>
-                  Total general
-                </span>
-                <span style={{ fontSize: 17, fontWeight: 800, color: "#fff", fontVariantNumeric: "tabular-nums", textAlign: "right" }}>{money(data.total_estimado)}</span>
-                <span /><span />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+                {/* ── Group cards ── */}
+                {filteredGroups.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "32px 16px", fontSize: 13, color: "#8E97A0", background: "#fff", borderRadius: 12, border: "1px solid #E6E7E5" }}>
+                    Sin resultados para <b>"{search || statusFilter}"</b>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {filteredGroups.map((g, gi) => {
+                      const isOpen = !collapsed.has(gi);
+                      const mPend = g.rows.filter(r => r.status === "pendiente").length;
+                      const mPed  = g.rows.filter(r => r.status === "pedido").length;
+                      const mRec  = g.rows.filter(r => r.status === "recibido").length;
+                      const done  = mPed + mRec;
+                      const gv    = g.subtotal || 1;
+                      const valR  = g.rows.filter(r => r.status === "recibido").reduce((a, r) => a + r.subtotal, 0);
+                      const valP  = g.rows.filter(r => r.status === "pedido").reduce((a, r) => a + r.subtotal, 0);
+                      const valPn = g.rows.filter(r => r.status === "pendiente").reduce((a, r) => a + r.subtotal, 0);
+
+                      return (
+                        <div
+                          key={g.taskId}
+                          style={{ background: "#fff", border: `1px solid ${mPend > 0 ? "#F0D0A8" : "#E6E7E5"}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}
+                        >
+                          {/* Card header */}
+                          <button
+                            onClick={() => setCollapsed(prev => { const n = new Set(prev); n.has(gi) ? n.delete(gi) : n.add(gi); return n; })}
+                            style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: "none", border: "none", cursor: "pointer", textAlign: "left", boxSizing: "border-box", fontFamily: FONT }}
+                          >
+                            <span style={{ color: "#8E97A0", flexShrink: 0, display: "flex", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }}>
+                              <ChevronDown style={{ width: 14, height: 14 }} />
+                            </span>
+                            <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: "-0.01em", flexShrink: 0, color: "#1A2329" }}>{g.title}</span>
+                            {mPend > 0 ? (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: "#FEF3E8", color: "#B45309", border: "1px solid #F0D0A8" }}>
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#E8A33D" }} />
+                                {mPend} pendiente{mPend > 1 ? "s" : ""}
+                              </span>
+                            ) : (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: "#E4F3EC", color: "#136E47", border: "1px solid #B8DECA" }}>
+                                <CheckCircle2 style={{ width: 11, height: 11 }} /> Todo gestionado
+                              </span>
+                            )}
+                            <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 11, flexShrink: 0 }}>
+                              <span style={{ display: "flex", width: 140, height: 8, borderRadius: 99, overflow: "hidden", background: "#F0EDE7", gap: 1.5 }}>
+                                <span style={{ height: "100%", width: `${(valR/gv)*100}%`, background: "#1F8A5B" }} />
+                                <span style={{ height: "100%", width: `${(valP/gv)*100}%`, background: "#2A62C9" }} />
+                                <span style={{ height: "100%", width: `${(valPn/gv)*100}%`, background: "#E8A33D" }} />
+                              </span>
+                              <span style={{ fontFamily: MONO, fontSize: 10.5, color: "#8E97A0", whiteSpace: "nowrap" }}>{done}/{g.rows.length} gestionados</span>
+                            </span>
+                            <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, minWidth: 96 }}>
+                              <span style={{ fontSize: 9.5, color: "#8E97A0", textTransform: "uppercase" as const, letterSpacing: "0.06em", fontFamily: MONO }}>subtotal</span>
+                              <span style={{ fontFamily: MONO, fontSize: 15, fontWeight: 800, color: "#1A2329" }}>{money(g.subtotal)}</span>
+                            </span>
+                          </button>
+
+                          {/* Material rows */}
+                          {isOpen && (
+                            <div style={{ borderTop: "1px solid #F0EDE7" }}>
+                              {g.rows.map(r => {
+                                const m = MAT_STM[r.status] ?? MAT_STM.pendiente;
+                                const share = g.subtotal > 0 ? Math.round((r.subtotal / g.subtotal) * 100) : 0;
+                                const qty = r.quantity != null ? `${r.quantity}${r.unit ? " " + r.unit : ""}` : "—";
+
+                                return (
+                                  <div
+                                    key={r.material_id}
+                                    style={{
+                                      display: "grid",
+                                      gridTemplateColumns: "118px 1fr 200px 150px 110px",
+                                      alignItems: "center", gap: 14,
+                                      padding: "12px 18px 12px 14px",
+                                      position: "relative",
+                                      background: m.soft,
+                                      borderBottom: "1px solid #F0EDE7",
+                                    }}
+                                  >
+                                    {/* Left rail */}
+                                    <span style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 4, background: m.rail }} />
+                                    {/* Status pill */}
+                                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 99, fontSize: 11, fontWeight: 700, border: `1px solid ${m.line}`, color: m.color, background: m.bg, whiteSpace: "nowrap" as const }}>
+                                      {r.status === "recibido"
+                                        ? <CheckCircle2 style={{ width: 11, height: 11 }} />
+                                        : r.status === "pedido"
+                                        ? <Truck style={{ width: 11, height: 11 }} />
+                                        : <Clock style={{ width: 11, height: 11 }} />}
+                                      {m.label}
+                                    </span>
+                                    {/* Material name + qty */}
+                                    <span style={{ minWidth: 0 }}>
+                                      <span style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.2, whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", display: "block", color: r.status === "recibido" ? "#5B6770" : "#1A2329" }} title={r.name}>{r.name}</span>
+                                      <span style={{ fontFamily: MONO, fontSize: 11, color: "#8E97A0", marginTop: 3, display: "block", whiteSpace: "nowrap" as const }}>
+                                        {qty}{r.unit_price != null && <span> · {money(r.unit_price)}/u</span>}
+                                      </span>
+                                    </span>
+                                    {/* Supplier / contratista */}
+                                    <span style={{ minWidth: 0 }}>
+                                      {r.supplier_name ? (
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                          <span style={{ width: 26, height: 26, borderRadius: 8, background: getAvColor(r.supplier_name), color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: FONT }}>
+                                            {getInitials(r.supplier_name)}
+                                          </span>
+                                          <span style={{ minWidth: 0, lineHeight: 1.2 }}>
+                                            <span style={{ fontSize: 12, fontWeight: 600, color: "#1A2329", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>{r.supplier_name}</span>
+                                            {r.responsible_name && <span style={{ fontSize: 10, color: "#8E97A0" }}>{r.responsible_name}</span>}
+                                          </span>
+                                        </span>
+                                      ) : r.responsible_name ? (
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                          <span style={{ width: 26, height: 26, borderRadius: 8, background: getAvColor(r.responsible_name), color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: FONT }}>
+                                            {getInitials(r.responsible_name)}
+                                          </span>
+                                          <span style={{ fontSize: 12, fontWeight: 600, color: "#1A2329", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" }}>{r.responsible_name}</span>
+                                        </span>
+                                      ) : (
+                                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: "#8E97A0" }}>
+                                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4"/><path d="M3 13c.7-2.4 2.7-3.7 5-3.7s4.3 1.3 5 3.7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                                          Sin asignar
+                                        </span>
+                                      )}
+                                    </span>
+                                    {/* Subtotal + share */}
+                                    <span style={{ textAlign: "right" }}>
+                                      <span style={{ fontFamily: MONO, fontSize: 14.5, fontWeight: 800, color: r.status === "recibido" ? "#5B6770" : "#1A2329", display: "block" }}>{money(r.subtotal)}</span>
+                                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "flex-end", fontFamily: MONO, fontSize: 9.5, color: "#8E97A0", marginTop: 4 }}>
+                                        <span style={{ width: 46, height: 3, borderRadius: 99, background: "#EDE9E1", overflow: "hidden", display: "block" }}>
+                                          <span style={{ display: "block", height: "100%", borderRadius: 99, width: `${share}%`, background: m.rail }} />
+                                        </span>
+                                        {share}%
+                                      </span>
+                                    </span>
+                                    {/* Action */}
+                                    <span style={{ display: "flex", justifyContent: "flex-end" }}>
+                                      {r.status === "pendiente" ? (
+                                        <button
+                                          onClick={() => setShowSolicitudAll(true)}
+                                          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 9, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "1px solid #FFD9C4", color: "#E85A26", background: "#FFF1E9", fontFamily: FONT, transition: "all .14s" }}
+                                          onMouseEnter={e => { e.currentTarget.style.background = "#FF6B35"; e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#FF6B35"; }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = "#FFF1E9"; e.currentTarget.style.color = "#E85A26"; e.currentTarget.style.borderColor = "#FFD9C4"; }}
+                                        >
+                                          <SendHorizonal style={{ width: 12, height: 12 }} /> Cotizar
+                                        </button>
+                                      ) : (
+                                        <button
+                                          style={{ width: 30, height: 30, borderRadius: 8, color: "#8E97A0", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", border: "none", cursor: "pointer" }}
+                                          onMouseEnter={e => { e.currentTarget.style.background = "#F0EDE7"; e.currentTarget.style.color = "#1A2329"; }}
+                                          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#8E97A0"; }}
+                                        >
+                                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="8" r="1.2" fill="currentColor"/><circle cx="8" cy="8" r="1.2" fill="currentColor"/><circle cx="12" cy="8" r="1.2" fill="currentColor"/></svg>
+                                        </button>
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── Total + CTA footer ── */}
+                {filteredGroups.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 14, padding: "16px 22px", background: "linear-gradient(120deg,#1B2A34 0%,#243642 55%,#2C4150 100%)", borderRadius: 14, flexWrap: "wrap", boxShadow: "0 8px 24px -10px rgba(15,22,28,0.4)" }}>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Total general</div>
+                      <div style={{ fontFamily: MONO, fontSize: 24, fontWeight: 800, color: "#fff", letterSpacing: "-0.03em" }}>{money(totalEst)}</div>
+                    </div>
+                    {pendientesCount > 0 ? (
+                      <button
+                        onClick={() => setShowSolicitudAll(true)}
+                        style={{ position: "relative", overflow: "hidden", display: "inline-flex", alignItems: "center", gap: 9, padding: "13px 24px", borderRadius: 12, fontSize: 13, fontWeight: 700, border: "none", background: "linear-gradient(135deg,#FF8856,#E85A26)", color: "#fff", cursor: "pointer", boxShadow: "0 12px 26px -8px rgba(232,90,38,0.65)", fontFamily: FONT }}
+                      >
+                        <span style={{ position: "absolute", top: 0, left: "-60%", width: "50%", height: "100%", background: "linear-gradient(100deg,transparent,rgba(255,255,255,0.35),transparent)", animation: "mat01shine 3s ease-in-out infinite" }} />
+                        <SendHorizonal style={{ width: 15, height: 15, flexShrink: 0 }} />
+                        Cotizar {pendientesCount} pendiente{pendientesCount > 1 ? "s" : ""}
+                      </button>
+                    ) : (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "#4DD9A0", fontWeight: 700 }}>
+                        <CheckCircle2 style={{ width: 15, height: 15 }} /> Todos los materiales cotizados
+                      </span>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            <style>{`
+              @keyframes mat01fadeIn { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+              @keyframes mat01shine { 0%{left:-60%;} 55%,100%{left:130%;} }
+            `}</style>
+          </div>
+        );
+      })()}
 
       {/* ════════ MÓDULO 02: SOLICITUDES DE COTIZACIÓN ════════ */}
-      {activeModule === "cotizaciones" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <ModuleHeader
-            num="02"
-            numBg="#FF6B35"
-            title="Solicitudes de cotización"
-            stats={solicitudes.length > 0 ? `${solicitudes.length} solicitud${solicitudes.length !== 1 ? "es" : ""}` : undefined}
-            description="Pedís presupuesto a proveedores. Cuando llegan 2+ respuestas, la IA compara y recomienda."
-            actions={
+      {activeModule === "cotizaciones" && (() => {
+        const solByStatus = {
+          borrador:   solicitudes.filter(s => s.status === "borrador").length,
+          enviada:    solicitudes.filter(s => s.status === "enviada").length,
+          respondida: solicitudes.filter(s => s.status === "respondida").length,
+          confirmada: solicitudes.filter(s => s.status === "confirmada").length,
+        };
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+            {/* ── Header ── */}
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#1A2329", letterSpacing: "-0.03em", fontFamily: FONT }}>
+                    Cotizaciones
+                  </span>
+                  {solicitudes.length > 0 && (
+                    <span style={{
+                      fontSize: 11, fontWeight: 800, color: "#FF6B35", background: "#FFF0E8",
+                      border: "1px solid #FFD9C4", borderRadius: 99, padding: "2px 9px",
+                      fontFamily: MONO, letterSpacing: "0.02em",
+                    }}>
+                      {solicitudes.length}
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: "3px 0 0", fontSize: 12.5, color: "#6B7580", fontFamily: FONT }}>
+                  Pedís presupuesto a proveedores. Con 2+ respuestas la IA compara y recomienda.
+                </p>
+              </div>
               <button
                 onClick={() => setShowSolicitudAll(true)}
                 disabled={pendientesCount === 0}
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px",
-                  borderRadius: 10, fontSize: 12.5, fontWeight: 700,
-                  background: pendientesCount === 0 ? "#E6E7E5" : "#FF6B35", border: "none",
+                  display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 18px",
+                  borderRadius: 10, fontSize: 12.5, fontWeight: 700, border: "none",
+                  background: pendientesCount === 0 ? "#E6E7E5" : "#FF6B35",
                   color: pendientesCount === 0 ? "#8E97A0" : "#fff",
                   cursor: pendientesCount === 0 ? "not-allowed" : "pointer",
                   boxShadow: pendientesCount === 0 ? "none" : "0 6px 14px -6px rgba(255,107,53,0.5)",
+                  fontFamily: FONT, flexShrink: 0,
                 }}
               >
-                <SendHorizonal style={{ width: 13, height: 13 }} /> Nueva solicitud
+                <SendHorizonal style={{ width: 13, height: 13 }} />
+                Nueva solicitud
               </button>
-            }
-          />
+            </div>
 
-          {solicitudes.length === 0 ? (
-            <div style={{ background: "#fff", border: "1px dashed #D0C8BE", borderRadius: 14, padding: "44px 24px", textAlign: "center" }}>
-              <div style={{ width: 48, height: 48, borderRadius: 14, background: "#FFF0E8", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                <SendHorizonal style={{ width: 20, height: 20, color: "#E76A2D" }} />
+            {/* ── Status pills ── */}
+            {solicitudes.length > 0 && (
+              <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+                {(Object.entries(SOL_STM) as [string, typeof SOL_STM[string]][]).map(([key, meta]) => {
+                  const cnt = solByStatus[key as keyof typeof solByStatus] ?? 0;
+                  if (cnt === 0) return null;
+                  return (
+                    <span key={key} style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "5px 12px", borderRadius: 99, fontSize: 11.5, fontWeight: 700,
+                      background: meta.bg, color: meta.color, border: `1px solid ${meta.line}`,
+                      fontFamily: FONT,
+                    }}>
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: meta.rail, display: "inline-block", flexShrink: 0 }} />
+                      {meta.label}
+                      <span style={{
+                        fontSize: 10, fontWeight: 800, color: meta.color, background: "rgba(255,255,255,0.65)",
+                        borderRadius: 99, padding: "0 5px", fontFamily: MONO,
+                      }}>{cnt}</span>
+                    </span>
+                  );
+                })}
               </div>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#3E4A52" }}>No hay solicitudes de cotización</p>
-              <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "#6B7580" }}>
-                {pendientesCount === 0
-                  ? "Primero cargá materiales pendientes en el módulo Materiales."
-                  : `Tenés ${pendientesCount} material${pendientesCount !== 1 ? "es" : ""} pendiente${pendientesCount !== 1 ? "s" : ""}. Creá una solicitud para cotizarlos.`}
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {solicitudes.map((sol, i) => (
-                <SolicitudCard
-                  key={sol.id}
-                  sol={sol}
-                  index={i}
-                  onConfirmar={handleConfirmarProveedor}
-                  onConfirmarCont={handleConfirmarContratista}
-                  onDelete={handleDeleteSolicitud}
-                  confirming={confirmingSol === sol.id}
-                  deleting={deletingSol === sol.id}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+            )}
+
+            {/* ── Empty state / list ── */}
+            {solicitudes.length === 0 ? (
+              <div style={{
+                background: "#fff", border: "1px solid #EDE9E1", borderRadius: 16,
+                padding: "52px 24px", textAlign: "center",
+                boxShadow: "0 1px 4px rgba(0,0,0,0.04)",
+              }}>
+                <div style={{
+                  width: 52, height: 52, borderRadius: 16, background: "#FFF0E8",
+                  border: "1px solid #FFD9C4", display: "flex", alignItems: "center",
+                  justifyContent: "center", margin: "0 auto 16px",
+                }}>
+                  <SendHorizonal style={{ width: 22, height: 22, color: "#FF6B35" }} />
+                </div>
+                <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#1A2329", letterSpacing: "-0.02em", fontFamily: FONT }}>
+                  Sin solicitudes todavía
+                </p>
+                <p style={{ margin: "6px auto 20px", fontSize: 12.5, color: "#6B7580", maxWidth: 320, lineHeight: 1.6, fontFamily: FONT }}>
+                  {pendientesCount === 0
+                    ? "Primero cargá materiales pendientes en el módulo Materiales."
+                    : `Tenés ${pendientesCount} material${pendientesCount !== 1 ? "es" : ""} pendiente${pendientesCount !== 1 ? "s" : ""}. Creá una solicitud para pedir presupuesto.`}
+                </p>
+                {pendientesCount > 0 && (
+                  <button
+                    onClick={() => setShowSolicitudAll(true)}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 22px",
+                      borderRadius: 10, fontSize: 13, fontWeight: 700, border: "none",
+                      background: "#FF6B35", color: "#fff", cursor: "pointer",
+                      boxShadow: "0 6px 16px -6px rgba(255,107,53,0.55)", fontFamily: FONT,
+                    }}
+                  >
+                    <SendHorizonal style={{ width: 14, height: 14 }} />
+                    Crear primera solicitud
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {solicitudes.map((sol, i) => (
+                  <SolicitudCard
+                    key={sol.id}
+                    sol={sol}
+                    index={i}
+                    onConfirmar={handleConfirmarProveedor}
+                    onConfirmarCont={handleConfirmarContratista}
+                    onDelete={handleDeleteSolicitud}
+                    confirming={confirmingSol === sol.id}
+                    deleting={deletingSol === sol.id}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ════════ MÓDULO 03: PEDIDOS CONFIRMADOS ════════ */}
       {activeModule === "pedidos" && (
@@ -1856,197 +2143,401 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
       )}
 
       {/* ════════ MÓDULO 04: INTELIGENCIA IA ════════ */}
-      {activeModule === "analisis" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <ModuleHeader
-            num="04" numBg="#7C3AED"
-            title="Inteligencia de Compras"
-            description="Análisis estadístico histórico de cotizaciones. El análisis con IA es opcional y se genera bajo demanda."
-            actions={null}
-          />
+      {activeModule === "analisis" && (() => {
+        const respondidas = solicitudes.filter(s => s.respuestas.length > 0);
+        const todasResp = respondidas.flatMap(s => s.respuestas);
+        const porProveedor = todasResp.reduce<Record<string, { count: number; totales: number[] }>>((acc, r) => {
+          const k = r.supplier_name;
+          if (!acc[k]) acc[k] = { count: 0, totales: [] };
+          acc[k].count++;
+          if (r.total != null) acc[k].totales.push(r.total);
+          return acc;
+        }, {});
+        const provEntries = Object.entries(porProveedor).sort((a, b) => b[1].count - a[1].count);
 
-          {/* Stats rápidas sin IA */}
-          {(() => {
-            const respondidas = solicitudes.filter(s => s.respuestas.length > 0);
-            const todasResp = respondidas.flatMap(s => s.respuestas);
-            const porProveedor = todasResp.reduce<Record<string, { count: number; totales: number[] }>>((acc, r) => {
-              const k = r.supplier_name;
-              if (!acc[k]) acc[k] = { count: 0, totales: [] };
-              acc[k].count++;
-              if (r.total != null) acc[k].totales.push(r.total);
-              return acc;
-            }, {});
-            const provEntries = Object.entries(porProveedor).sort((a, b) => b[1].count - a[1].count);
+        const TEND_MAP: Record<string, { label: string; color: string; bg: string; bd: string }> = {
+          competitivo: { label: "Competitivo", color: "#136E47", bg: "#E4F3EC", bd: "#B8DECA" },
+          caro:        { label: "Caro",        color: "#B45309", bg: "#FEF3E8", bd: "#F0D0A8" },
+          variable:    { label: "Variable",    color: "#6D45C7", bg: "#EFE7FB", bd: "#D9C8F2" },
+          sin_datos:   { label: "Sin datos",   color: "#8E97A0", bg: "#F0F1EF", bd: "#E0E2DE" },
+        };
 
-            return (
-              <>
-                {/* KPIs rápidos */}
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-                  {[
-                    { label: "Solicitudes totales", value: solicitudes.length },
-                    { label: "Con respuesta", value: respondidas.length },
-                    { label: "Proveedores únicos", value: provEntries.length },
-                  ].map(k => (
-                    <div key={k.label} style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
-                      <p style={{ margin: "0 0 4px", fontSize: 9.5, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.08em" }}>{k.label}</p>
-                      <p style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums" }}>{k.value}</p>
-                    </div>
-                  ))}
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            <ModuleHeader
+              num="04" numBg="#7C3AED"
+              title="Inteligencia de Compras"
+              description="Análisis estadístico histórico de cotizaciones. El análisis con IA es opcional y se genera bajo demanda."
+              actions={null}
+            />
+
+            {/* ── KPIs ── */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              {[
+                { label: "Solicitudes totales", value: solicitudes.length },
+                { label: "Con respuesta",       value: respondidas.length },
+                { label: "Proveedores únicos",  value: provEntries.length },
+              ].map(k => (
+                <div key={k.label} style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, padding: "12px 16px" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 9.5, fontWeight: 700, color: "#8E97A0", textTransform: "uppercase", letterSpacing: "0.08em" }}>{k.label}</p>
+                  <p style={{ margin: 0, fontSize: 26, fontWeight: 800, color: "#1A2329", fontVariantNumeric: "tabular-nums" }}>{k.value}</p>
                 </div>
+              ))}
+            </div>
 
-                {/* Tabla estadística por proveedor */}
-                {provEntries.length > 0 && (
-                  <div>
-                    <p style={{ margin: "0 0 8px", fontSize: 10, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.09em" }}>Resumen por proveedor</p>
-                    <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, overflow: "hidden" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px 100px 100px", background: "#F2EFE8", borderBottom: "1px solid #D8D3CA" }}>
-                        {["Proveedor", "Resp.", "Promedio", "Mínimo", "Máximo"].map((h, i) => (
-                          <span key={h} style={{ padding: "7px 12px", fontSize: 9.5, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.08em", textAlign: i > 0 ? "right" : "left" }}>{h}</span>
-                        ))}
-                      </div>
-                      {provEntries.map(([nombre, stats], idx) => {
-                        const avg = stats.totales.length > 0 ? stats.totales.reduce((a, b) => a + b, 0) / stats.totales.length : null;
-                        const min = stats.totales.length > 0 ? Math.min(...stats.totales) : null;
-                        const max = stats.totales.length > 0 ? Math.max(...stats.totales) : null;
-                        return (
-                          <div key={nombre} style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px 100px 100px", borderBottom: idx < provEntries.length - 1 ? "1px solid #F0EDE7" : "none", background: idx % 2 === 0 ? "#fff" : "#FDFCFB", alignItems: "center" }}>
-                            <span style={{ padding: "9px 12px", fontSize: 12.5, fontWeight: 600, color: "#1A2329" }}>{nombre}</span>
-                            <span style={{ padding: "9px 12px", fontSize: 12, color: "#5B6770", textAlign: "right" }}>{stats.count}</span>
-                            <span style={{ padding: "9px 12px", fontSize: 12, fontWeight: 700, color: "#1A2329", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(avg)}</span>
-                            <span style={{ padding: "9px 12px", fontSize: 11.5, color: "#1F8A5B", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(min)}</span>
-                            <span style={{ padding: "9px 12px", fontSize: 11.5, color: "#B45309", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(max)}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
+            {/* ── Tabla por proveedor ── */}
+            {provEntries.length > 0 && (
+              <div>
+                <p style={{ margin: "0 0 8px", fontSize: 10, fontWeight: 700, color: "#8E97A0", textTransform: "uppercase", letterSpacing: "0.09em" }}>Resumen por proveedor</p>
+                <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, overflow: "hidden" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px 100px 100px", background: "#F2EFE8", borderBottom: "1px solid #D8D3CA" }}>
+                    {["Proveedor", "Resp.", "Promedio", "Mínimo", "Máximo"].map((h, i) => (
+                      <span key={h} style={{ padding: "7px 12px", fontSize: 9.5, fontWeight: 700, color: "#8E97A0", textTransform: "uppercase", letterSpacing: "0.08em", textAlign: i > 0 ? "right" : "left" }}>{h}</span>
+                    ))}
                   </div>
-                )}
-
-                {/* Botón de análisis IA */}
-                <div style={{ background: "linear-gradient(135deg, #F5F3FF 0%, #EDE9FE 100%)", border: "1px solid #DDD6FE", borderRadius: 14, padding: "20px 22px" }}>
-                  {!analisisIA && !loadingAnalisis && (
-                    <>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: 11, background: "#7C3AED", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <Brain style={{ width: 18, height: 18, color: "#fff" }} />
-                        </div>
-                        <div>
-                          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: "#1A2329" }}>Análisis estratégico con IA</p>
-                          <p style={{ margin: 0, fontSize: 11.5, color: "#6B7580" }}>Comparación histórica · recomendación · materiales críticos · alertas</p>
-                        </div>
+                  {provEntries.map(([nombre, stats], idx) => {
+                    const avg = stats.totales.length > 0 ? stats.totales.reduce((a, b) => a + b, 0) / stats.totales.length : null;
+                    const min = stats.totales.length > 0 ? Math.min(...stats.totales) : null;
+                    const max = stats.totales.length > 0 ? Math.max(...stats.totales) : null;
+                    return (
+                      <div key={nombre} style={{ display: "grid", gridTemplateColumns: "1fr 80px 100px 100px 100px", borderBottom: idx < provEntries.length - 1 ? "1px solid #F0EDE7" : "none", background: idx % 2 === 0 ? "#fff" : "#FDFCFB", alignItems: "center" }}>
+                        <span style={{ padding: "9px 12px", fontSize: 12.5, fontWeight: 600, color: "#1A2329" }}>{nombre}</span>
+                        <span style={{ padding: "9px 12px", fontSize: 12, color: "#5B6770", textAlign: "right" }}>{stats.count}</span>
+                        <span style={{ padding: "9px 12px", fontSize: 12, fontWeight: 700, color: "#1A2329", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(avg)}</span>
+                        <span style={{ padding: "9px 12px", fontSize: 11.5, color: "#1F8A5B", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(min)}</span>
+                        <span style={{ padding: "9px 12px", fontSize: 11.5, color: "#B45309", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{money(max)}</span>
                       </div>
-                      <p style={{ margin: "0 0 14px", fontSize: 11.5, color: "#5B5347" }}>
-                        Genera un análisis completo sobre el historial de compras de esta obra.
-                        {" "}<strong>Se consumen tokens de IA.</strong>
-                      </p>
-                      <button
-                        onClick={handleAnalisisIA}
-                        disabled={respondidas.length === 0}
-                        style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700, border: "none", background: respondidas.length === 0 ? "#E6E7E5" : "#7C3AED", color: respondidas.length === 0 ? "#8E97A0" : "#fff", cursor: respondidas.length === 0 ? "not-allowed" : "pointer", boxShadow: respondidas.length > 0 ? "0 6px 16px -6px rgba(124,58,237,0.55)" : "none" }}
-                      >
-                        <Sparkles style={{ width: 14, height: 14 }} /> Generar análisis
-                      </button>
-                      {respondidas.length === 0 && <p style={{ margin: "8px 0 0", fontSize: 11, color: "#C97D0E" }}>Necesitás al menos una cotización respondida.</p>}
-                      {analisisError && <p style={{ margin: "8px 0 0", fontSize: 12, color: "#D03A3A", fontWeight: 600 }}>{analisisError}</p>}
-                    </>
-                  )}
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-                  {loadingAnalisis && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <Loader2 style={{ width: 18, height: 18, color: "#7C3AED", animation: "spin 1s linear infinite" }} />
-                      <span style={{ fontSize: 13, color: "#5B5347", fontWeight: 600 }}>Analizando historial con IA…</span>
-                    </div>
-                  )}
+            {/* ══════════════════════════════════════════
+                PRE-ANALYSIS CTA
+            ══════════════════════════════════════════ */}
+            {!analisisIA && !loadingAnalisis && (
+              <div style={{ position: "relative", overflow: "hidden", borderRadius: 16, border: "1px solid #E6E7E5", background: "#FAFAF8" }}>
+                {/* Ghost blurred preview */}
+                <div aria-hidden="true" style={{ position: "absolute", inset: 0, padding: 30, display: "flex", flexDirection: "column", gap: 14, filter: "blur(7px)", opacity: 0.11, pointerEvents: "none" }}>
+                  <div style={{ height: 110, borderRadius: 14, background: "linear-gradient(135deg,#243642,#FF6B35)" }} />
+                  <div style={{ display: "flex", gap: 14 }}>
+                    <div style={{ flex: 2, height: 80, borderRadius: 14, background: "#C8CDD0" }} />
+                    <div style={{ flex: 1, height: 80, borderRadius: 14, background: "#D8DCDE" }} />
+                  </div>
+                  <div style={{ display: "flex", gap: 14 }}>
+                    <div style={{ flex: 2, height: 80, borderRadius: 14, background: "#C8CDD0" }} />
+                    <div style={{ flex: 1, height: 80, borderRadius: 14, background: "#D8DCDE" }} />
+                  </div>
+                </div>
+                {/* Gradient veil */}
+                <div aria-hidden="true" style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(250,250,248,0.55), #FAFAF8)", pointerEvents: "none" }} />
 
-                  {analisisIA && !loadingAnalisis && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                      {/* Recomendado + motivo */}
-                      {analisisIA.proveedor_recomendado && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 12, background: "#1A2329", borderRadius: 11, padding: "12px 16px" }}>
-                          <div style={{ width: 34, height: 34, borderRadius: 10, background: "rgba(124,58,237,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                            <Sparkles style={{ width: 15, height: 15, color: "#A78BFA" }} />
-                          </div>
-                          <div>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: "#A78BFA", textTransform: "uppercase", letterSpacing: "0.08em", display: "block" }}>IA recomienda</span>
-                            <span style={{ fontSize: 15, fontWeight: 800, color: "#fff", display: "block" }}>{analisisIA.proveedor_recomendado}</span>
-                            <span style={{ fontSize: 11.5, color: "rgba(255,255,255,0.55)" }}>{analisisIA.motivo}</span>
+                {/* Core */}
+                <div style={{ position: "relative", zIndex: 1, maxWidth: 680, margin: "0 auto", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", padding: "44px 36px 40px" }}>
+                  {/* Radar emblem */}
+                  <div style={{ position: "relative", width: 72, height: 72, borderRadius: 20, background: "linear-gradient(150deg,#1B2A34,#2C4150)", display: "flex", alignItems: "center", justifyContent: "center", color: "#FF6B35", marginBottom: 22, boxShadow: "0 16px 30px -14px rgba(24,34,42,0.5)" }}>
+                    <span className="ia04-ring" />
+                    <span className="ia04-ring ia04-ring-d2" />
+                    <Brain style={{ width: 28, height: 28 }} />
+                  </div>
+
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", color: "#FF6B35", marginBottom: 12 }}>
+                    <Sparkles style={{ width: 10, height: 10 }} /> INTELIGENCIA DE COMPRAS
+                  </div>
+                  <h2 style={{ margin: "0 0 12px", fontSize: 25, fontWeight: 800, letterSpacing: "-0.03em", lineHeight: 1.18, color: "#1A2329" }}>
+                    Dejá que la IA analice tu historial<br />y te diga a quién comprarle
+                  </h2>
+                  <p style={{ margin: "0 0 26px", fontSize: 13.5, color: "#5B6770", lineHeight: 1.5, maxWidth: 500 }}>
+                    Cruza todas las cotizaciones de la obra para encontrar el proveedor más conveniente, las mayores oportunidades de ahorro y los riesgos del mercado.
+                  </p>
+
+                  {/* Capability cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, width: "100%", marginBottom: 24 }}>
+                    {[
+                      { Icon: Trophy,        c: "#FF6B35", t: "Proveedor recomendado",    d: "A quién comprarle según tu historial real de cotizaciones." },
+                      { Icon: Target,        c: "#1F8A5B", t: "Oportunidades de ahorro",  d: "Materiales donde un proveedor te cobra mucho menos que el resto." },
+                      { Icon: AlertTriangle, c: "#B45309", t: "Alertas de mercado",        d: "Subas de precio y proveedores que dejaron de cotizar." },
+                    ].map(({ Icon, c, t, d }, i) => (
+                      <div key={i} style={{ textAlign: "left", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 13, padding: "15px" }}>
+                        <div style={{ width: 34, height: 34, borderRadius: 10, background: c + "1F", display: "flex", alignItems: "center", justifyContent: "center", color: c, marginBottom: 10 }}>
+                          <Icon style={{ width: 16, height: 16 }} />
+                        </div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#1A2329", marginBottom: 4 }}>{t}</div>
+                        <div style={{ fontSize: 11, color: "#5B6770", lineHeight: 1.45 }}>{d}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Data readiness row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "center", fontSize: 12.5, color: "#5B6770", marginBottom: 22 }}>
+                    <span><b style={{ fontFamily: MONO, color: "#1A2329" }}>{solicitudes.length}</b> solicitudes</span>
+                    <span style={{ color: "#D8D3CA" }}>·</span>
+                    <span><b style={{ fontFamily: MONO, color: "#1A2329" }}>{provEntries.length}</b> proveedores</span>
+                    <span style={{ color: "#D8D3CA" }}>·</span>
+                    <span><b style={{ fontFamily: MONO, color: "#1A2329" }}>{respondidas.length}</b> respondidas</span>
+                    {respondidas.length >= 1 && (
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 99, background: "#E4F3EC", color: "#136E47", fontWeight: 700, fontSize: 11, border: "1px solid #B8DECA" }}>
+                        ✓ Datos suficientes
+                      </span>
+                    )}
+                  </div>
+
+                  {/* CTA button */}
+                  <button
+                    onClick={handleAnalisisIA}
+                    disabled={respondidas.length === 0}
+                    style={{
+                      position: "relative", overflow: "hidden",
+                      display: "inline-flex", alignItems: "center", gap: 10, padding: "14px 28px",
+                      borderRadius: 13, fontSize: 14, fontWeight: 700, border: "none", letterSpacing: "-0.01em",
+                      background: respondidas.length === 0 ? "#E6E7E5" : "linear-gradient(135deg,#FF8856,#E85A26)",
+                      color: respondidas.length === 0 ? "#8E97A0" : "#fff",
+                      cursor: respondidas.length === 0 ? "not-allowed" : "pointer",
+                      boxShadow: respondidas.length > 0 ? "0 14px 30px -10px rgba(232,90,38,0.6)" : "none",
+                    }}
+                  >
+                    {respondidas.length > 0 && <span className="ia04-btn-glow" />}
+                    <Sparkles style={{ width: 16, height: 16, flexShrink: 0 }} />
+                    Generar análisis con IA
+                  </button>
+                  {respondidas.length === 0 && (
+                    <p style={{ margin: "10px 0 0", fontFamily: MONO, fontSize: 10.5, color: "#8E97A0" }}>
+                      Necesitás al menos una cotización respondida para activar el análisis.
+                    </p>
+                  )}
+                  {analisisError && <p style={{ margin: "10px 0 0", fontSize: 12, color: "#D03A3A", fontWeight: 600 }}>{analisisError}</p>}
+                  {respondidas.length > 0 && (
+                    <p style={{ margin: "12px 0 0", fontFamily: MONO, fontSize: 10, color: "#8E97A0", letterSpacing: "0.02em" }}>
+                      No se ejecuta solo · consume tokens de IA
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════
+                ANALYZING STATE
+            ══════════════════════════════════════════ */}
+            {loadingAnalisis && (
+              <div style={{ background: "#FAFAF8", border: "1px solid #E6E7E5", borderRadius: 16, padding: "80px 40px", display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+                <div style={{ position: "relative", width: 86, height: 86, borderRadius: "50%", background: "linear-gradient(150deg,#1B2A34,#2C4150)", display: "flex", alignItems: "center", justifyContent: "center", color: "#FF6B35", marginBottom: 26, boxShadow: "0 16px 34px -12px rgba(24,34,42,0.5)" }}>
+                  <span className="ia04-az-ring" />
+                  <span className="ia04-az-ring ia04-az-d2" />
+                  <span className="ia04-az-ring ia04-az-d3" />
+                  <Brain style={{ width: 32, height: 32, animation: "ia04azSpin 3s linear infinite" }} />
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8, color: "#1A2329" }}>Analizando tu historial de compras</div>
+                <div style={{ fontSize: 13, color: "#5B6770", fontFamily: MONO, marginBottom: 24 }}>Comparando proveedores y detectando oportunidades…</div>
+                <div style={{ width: 220, height: 6, borderRadius: 99, background: "#F0EDE7", overflow: "hidden" }}>
+                  <span style={{ display: "block", height: "100%", width: "40%", borderRadius: 99, background: "linear-gradient(90deg,#FF8856,#E85A26)", animation: "ia04azBar 1.6s ease-in-out infinite" }} />
+                </div>
+              </div>
+            )}
+
+            {/* ══════════════════════════════════════════
+                RESULTS
+            ══════════════════════════════════════════ */}
+            {analisisIA && !loadingAnalisis && (() => {
+              const sorted = [...analisisIA.por_proveedor].sort((a, b) => (a.precio_promedio ?? Infinity) - (b.precio_promedio ?? Infinity));
+              const prices = sorted.map(p => p.precio_promedio).filter((v): v is number => v != null);
+              const gMin = prices.length ? Math.min(...prices) : 0;
+              const gMax = prices.length ? Math.max(...prices) : 1;
+              const span = gMax - gMin || 1;
+              const pct = (v: number) => Math.round(((v - gMin) / span) * 82);
+
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, animation: "ia04fadeUp 0.4s cubic-bezier(.22,.61,.36,1)" }}>
+
+                  {/* Hero dark card */}
+                  {analisisIA.proveedor_recomendado && (
+                    <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", background: "linear-gradient(120deg,#16202A 0%,#22333D 55%,#2C4150 100%)", padding: "22px 24px", color: "#fff" }}>
+                      <div aria-hidden="true" style={{ position: "absolute", right: -50, top: -90, width: 320, height: 320, background: "radial-gradient(circle,rgba(255,107,53,0.22),transparent 62%)", pointerEvents: "none" }} />
+                      <div style={{ position: "relative", zIndex: 1 }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+                          <button onClick={() => setAnalisisIA(null)} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 9, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.14)", color: "rgba(255,255,255,0.8)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>
+                            <Sparkles style={{ width: 10, height: 10 }} /> Re-analizar
+                          </button>
+                        </div>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", color: "#FF6B35", marginBottom: 12 }}>
+                          <Sparkles style={{ width: 11, height: 11 }} /> LA IA RECOMIENDA
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20, flexWrap: "wrap" }}>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+                              <div style={{ width: 44, height: 44, borderRadius: 13, background: "linear-gradient(135deg,#FF8856,#E85A26)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", flexShrink: 0, boxShadow: "0 10px 20px -8px rgba(232,90,38,0.7)" }}>
+                                <Trophy style={{ width: 20, height: 20 }} />
+                              </div>
+                              <h2 style={{ margin: 0, fontSize: 24, fontWeight: 800, letterSpacing: "-0.03em", color: "#fff" }}>
+                                {analisisIA.proveedor_recomendado}
+                              </h2>
+                            </div>
+                            <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5, color: "rgba(255,255,255,0.72)", maxWidth: 480 }}>
+                              {analisisIA.motivo}
+                            </p>
                           </div>
                           {analisisIA.ahorro_potencial != null && analisisIA.ahorro_potencial > 0 && (
-                            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-                              <span style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em", display: "block" }}>Ahorro potencial</span>
-                              <span style={{ fontSize: 20, fontWeight: 800, color: "#4DD9A0", fontVariantNumeric: "tabular-nums" }}>{money(analisisIA.ahorro_potencial)}</span>
+                            <div style={{ textAlign: "right", flexShrink: 0 }}>
+                              <div style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.5)", marginBottom: 6 }}>AHORRO POTENCIAL</div>
+                              <div style={{ fontSize: 36, fontWeight: 800, letterSpacing: "-0.04em", color: "#4DD9A0", lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+                                {money(analisisIA.ahorro_potencial)}
+                              </div>
+                              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", marginTop: 8 }}>↓ vs. elegir el proveedor promedio</div>
                             </div>
                           )}
                         </div>
-                      )}
+                      </div>
+                    </div>
+                  )}
 
-                      {/* Stats por proveedor con tendencia */}
-                      {analisisIA.por_proveedor.length > 0 && (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          {analisisIA.por_proveedor.map(p => {
-                            const tendColor = p.tendencia === "competitivo" ? "#136E47" : p.tendencia === "caro" ? "#D03A3A" : "#B45309";
-                            const tendBg = p.tendencia === "competitivo" ? "#E4F3EC" : p.tendencia === "caro" ? "#FCE5E5" : "#FFF3CD";
-                            return (
-                              <div key={p.nombre} style={{ flex: "1 1 150px", background: "#fff", border: "1px solid #E6E7E5", borderRadius: 11, padding: "12px 14px" }}>
-                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
-                                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, marginRight: 6 }}>{p.nombre}</span>
-                                  <span style={{ display: "inline-flex", padding: "2px 7px", borderRadius: 99, fontSize: 10, fontWeight: 700, background: tendBg, color: tendColor, flexShrink: 0 }}>{p.tendencia.replace("_", " ")}</span>
-                                </div>
-                                <p style={{ margin: "0 0 2px", fontSize: 11.5, color: "#6B7580" }}>
-                                  {p.cotizaciones_respondidas} resp. · avg {money(p.precio_promedio)}
-                                </p>
-                                <p style={{ margin: 0, fontSize: 10.5, color: "#8E97A0" }}>{p.fortaleza}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-
-                      {/* Materiales críticos */}
-                      {analisisIA.materiales_criticos.length > 0 && (
-                        <div>
-                          <p style={{ margin: "0 0 7px", fontSize: 10, fontWeight: 700, color: "#7A7167", textTransform: "uppercase", letterSpacing: "0.09em" }}>Materiales con mayor diferencia de precio</p>
-                          <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 10, overflow: "hidden" }}>
-                            {analisisIA.materiales_criticos.map((m, idx) => (
-                              <div key={m.nombre} style={{ display: "grid", gridTemplateColumns: "1fr 130px 80px 60px", alignItems: "center", borderBottom: idx < analisisIA.materiales_criticos.length - 1 ? "1px solid #F0EDE7" : "none", background: idx % 2 === 0 ? "#fff" : "#FDFCFB" }}>
-                                <span style={{ padding: "8px 12px", fontSize: 12, color: "#1A2329", fontWeight: 500 }}>{m.nombre}</span>
-                                <span style={{ padding: "8px 12px", fontSize: 11.5, color: "#136E47", fontWeight: 600 }}>{m.proveedor_mas_barato ?? "—"}</span>
-                                {m.diferencia_pct != null ? (
-                                  <span style={{ padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#1F8A5B", textAlign: "right" }}>−{m.diferencia_pct.toFixed(0)}%</span>
-                                ) : <span />}
-                                <span style={{ padding: "8px 12px", fontSize: 11, color: "#8E97A0", textAlign: "right" }}>{m.veces_cotizado}×</span>
-                              </div>
-                            ))}
+                  {/* Price landscape */}
+                  {sorted.length > 0 && (
+                    <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 18px", borderBottom: "1px solid #F0EDE7" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 30, height: 30, borderRadius: 9, background: "#EEF0F0", color: "#243642", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <Layers style={{ width: 14, height: 14 }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700 }}>Mapa de precios por proveedor</div>
+                            <div style={{ fontSize: 11, color: "#8E97A0", marginTop: 1 }}>Más a la izquierda = más barato</div>
                           </div>
                         </div>
-                      )}
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 10.5, color: "#8E97A0", fontFamily: MONO }}>
+                          <span style={{ width: 9, height: 9, borderRadius: 99, background: "#fff", border: "2.5px solid #1A2329", display: "inline-block" }} />
+                          precio promedio
+                        </div>
+                      </div>
 
-                      {/* Alertas */}
-                      {analisisIA.alertas.length > 0 && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "#B45309", textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0 }}>
-                            <AlertTriangle style={{ width: 11, height: 11 }} /> Alertas
-                          </span>
-                          {analisisIA.alertas.map((a, i) => (
-                            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: 99, fontSize: 11, fontWeight: 600, background: "#FFF3CD", color: "#7A4200", border: "1px solid #F0D080" }}>
-                              <AlertTriangle style={{ width: 9, height: 9, flexShrink: 0 }} />{a}
-                            </span>
-                          ))}
+                      {prices.length >= 2 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 20px 4px" }}>
+                          <span style={{ fontFamily: MONO, fontSize: 10, color: "#8E97A0", flexShrink: 0 }}>{fmtK(gMin)}</span>
+                          <div style={{ flex: 1, height: 1, background: "repeating-linear-gradient(90deg,#D8D3CA 0 5px,transparent 5px 10px)" }} />
+                          <span style={{ fontFamily: MONO, fontSize: 10, color: "#8E97A0", flexShrink: 0 }}>{fmtK(gMax)}</span>
                         </div>
                       )}
 
-                      {/* Regenerar */}
-                      <button onClick={() => setAnalisisIA(null)} style={{ alignSelf: "flex-start", display: "inline-flex", alignItems: "center", gap: 5, padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, background: "#fff", border: "1px solid #DDD6FE", color: "#7C3AED", cursor: "pointer" }}>
-                        <Sparkles style={{ width: 11, height: 11 }} /> Regenerar análisis
-                      </button>
+                      <div style={{ padding: "6px 18px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
+                        {sorted.map((p, idx) => {
+                          const tend = TEND_MAP[p.tendencia] ?? TEND_MAP.sin_datos;
+                          const isRec = p.nombre === analisisIA.proveedor_recomendado;
+                          return (
+                            <div key={p.nombre} style={{ padding: "11px 12px", borderRadius: 12, border: `1px solid ${isRec ? "#FFD9C4" : "transparent"}`, background: isRec ? "linear-gradient(180deg,#FFF7F2,#fff)" : "transparent" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12, flexWrap: "wrap" }}>
+                                <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, background: isRec ? "#FF6B35" : "#F0EDE7", color: isRec ? "#fff" : "#5B6770", fontFamily: MONO, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>{idx + 1}</span>
+                                <span style={{ fontSize: 13, fontWeight: 700, color: "#1A2329" }}>{p.nombre}</span>
+                                {isRec && (
+                                  <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9.5, fontWeight: 700, fontFamily: MONO, letterSpacing: "0.04em", color: "#fff", background: "#FF6B35", padding: "2px 8px", borderRadius: 99 }}>
+                                    <Trophy style={{ width: 9, height: 9 }} /> Recomendado
+                                  </span>
+                                )}
+                                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10.5, fontWeight: 700, padding: "2px 8px", borderRadius: 99, border: `1px solid ${tend.bd}`, color: tend.color, background: tend.bg }}>{tend.label}</span>
+                                <span style={{ marginLeft: "auto", fontFamily: MONO, fontSize: 10, color: "#8E97A0" }}>{p.cotizaciones_respondidas} cotizadas</span>
+                              </div>
+
+                              {p.precio_promedio != null && prices.length >= 2 && (
+                                <div style={{ position: "relative", height: 32, margin: "0 4px 6px" }}>
+                                  <div style={{ position: "absolute", left: 0, right: 0, top: 16, height: 2, background: "#F0EDE7", borderRadius: 99 }} />
+                                  <div style={{ position: "absolute", top: 4, left: `${pct(p.precio_promedio)}%`, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                    <span style={{ fontFamily: MONO, fontSize: 9.5, fontWeight: 700, color: "#1A2329", marginBottom: 3, background: "#fff", padding: "1px 4px", borderRadius: 3, whiteSpace: "nowrap", boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>{fmtK(p.precio_promedio)}</span>
+                                    <span style={{ width: 13, height: 13, borderRadius: 99, background: "#fff", border: `3px solid ${isRec ? "#FF6B35" : "#1A2329"}`, boxShadow: "0 2px 5px rgba(0,0,0,0.12)", display: "block" }} />
+                                  </div>
+                                </div>
+                              )}
+
+                              <div style={{ fontSize: 11, color: "#5B6770", fontStyle: "italic" }}>{p.fortaleza}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Oportunidades */}
+                  {analisisIA.materiales_criticos.length > 0 && (
+                    <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 18px", borderBottom: "1px solid #F0EDE7" }}>
+                        <div style={{ width: 30, height: 30, borderRadius: 9, background: "#E4F3EC", color: "#1F8A5B", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Target style={{ width: 14, height: 14 }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>Oportunidades de ahorro</div>
+                          <div style={{ fontSize: 11, color: "#8E97A0", marginTop: 1 }}>Mayor diferencia de precio entre proveedores</div>
+                        </div>
+                      </div>
+                      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 8 }}>
+                        {analisisIA.materiales_criticos.map((m, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 13, padding: "10px 12px", borderRadius: 11, border: "1px solid #F0EDE7", background: i % 2 === 0 ? "#fff" : "#FDFCFB" }}>
+                            {m.diferencia_pct != null && (
+                              <div style={{ position: "relative", width: 50, height: 50, borderRadius: "50%", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: `conic-gradient(#1F8A5B ${Math.min(100, Math.round(m.diferencia_pct))}%, #EAEAE6 0)` }}>
+                                <div style={{ position: "absolute", inset: 5, borderRadius: "50%", background: "#fff" }} />
+                                <span style={{ position: "relative", zIndex: 1, fontFamily: MONO, fontSize: 12.5, fontWeight: 700, color: "#136E47", lineHeight: 1 }}>{Math.round(m.diferencia_pct)}%</span>
+                                <span style={{ position: "relative", zIndex: 1, fontSize: 8, color: "#8E97A0", textTransform: "uppercase", letterSpacing: "0.04em" }}>menos</span>
+                              </div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#1A2329" }}>{m.nombre}</div>
+                              {m.proveedor_mas_barato && (
+                                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#5B6770", marginTop: 3 }}>
+                                  <Trophy style={{ width: 10, height: 10, color: "#FF6B35", flexShrink: 0 }} />
+                                  Más barato con <b style={{ color: "#1A2329" }}>{m.proveedor_mas_barato}</b>
+                                </div>
+                              )}
+                              <div style={{ fontFamily: MONO, fontSize: 10, color: "#8E97A0", marginTop: 3 }}>cotizado {m.veces_cotizado}× · alta confianza</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alertas */}
+                  {analisisIA.alertas.length > 0 && (
+                    <div style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 18px", borderBottom: "1px solid #F0EDE7" }}>
+                        <div style={{ width: 30, height: 30, borderRadius: 9, background: "#FEF3E8", color: "#B45309", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <AlertTriangle style={{ width: 14, height: 14 }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>Alertas del mercado</div>
+                          <div style={{ fontSize: 11, color: "#8E97A0", marginTop: 1 }}>{analisisIA.alertas.length} señales detectadas</div>
+                        </div>
+                      </div>
+                      <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 7 }}>
+                        {analisisIA.alertas.map((a, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 13px", borderRadius: 10, background: "#FEF3E8", border: "1px solid #F0D0A8" }}>
+                            <span style={{ position: "relative", width: 8, height: 8, borderRadius: 99, background: "#B45309", flexShrink: 0, display: "inline-block" }}>
+                              <span className="ia04-al-pulse" />
+                            </span>
+                            <span style={{ fontSize: 12, color: "#7A4200", fontWeight: 500, lineHeight: 1.4 }}>{a}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
-              </>
-            );
-          })()}
-        </div>
-      )}
+              );
+            })()}
+
+            {/* ── Animations ── */}
+            <style>{`
+              .ia04-ring { position:absolute;inset:0;border-radius:20px;border:1.5px solid rgba(255,107,53,0.4);animation:ia04R 2.6s ease-out infinite; }
+              .ia04-ring-d2 { animation-delay:1.3s; }
+              @keyframes ia04R { 0%{transform:scale(1);opacity:0.8;} 100%{transform:scale(1.5);opacity:0;} }
+              .ia04-btn-glow { position:absolute;top:0;left:-60%;width:50%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,0.4),transparent);animation:ia04pbG 3s ease-in-out infinite; }
+              @keyframes ia04pbG { 0%{left:-60%;} 55%,100%{left:130%;} }
+              .ia04-az-ring { position:absolute;inset:0;border-radius:50%;border:2px solid rgba(255,107,53,0.4);animation:ia04azR 2.2s ease-out infinite; }
+              .ia04-az-d2 { animation-delay:0.7s; } .ia04-az-d3 { animation-delay:1.4s; }
+              @keyframes ia04azR { 0%{transform:scale(1);opacity:0.7;} 100%{transform:scale(1.65);opacity:0;} }
+              @keyframes ia04azSpin { 0%{transform:rotate(0) scale(1);} 50%{transform:rotate(180deg) scale(1.1);} 100%{transform:rotate(360deg) scale(1);} }
+              @keyframes ia04azBar { 0%{margin-left:-40%;} 100%{margin-left:100%;} }
+              @keyframes ia04fadeUp { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
+              .ia04-al-pulse { position:absolute;inset:-4px;border-radius:99px;border:1.5px solid #B45309;opacity:0.4;animation:ia04alP 2s ease-out infinite; }
+              @keyframes ia04alP { 0%{transform:scale(0.6);opacity:0.5;} 100%{transform:scale(1.7);opacity:0;} }
+            `}</style>
+          </div>
+        );
+      })()}
 
       {/* ── Error de acción ── */}
       {actionError && (

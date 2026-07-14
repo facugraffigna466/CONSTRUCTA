@@ -7,7 +7,6 @@ import { ActivityToast } from "./components/ActivityToast";
 import { ObraSetupWizard } from "./components/ObraSetupWizard";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { BitacoraPage } from "./pages/BitacoraPage";
-import { PresupuestosPage } from "./pages/PresupuestosPage";
 import { AdminPage } from "./pages/AdminPage";
 import { ConfiguracionPage } from "./pages/ConfiguracionPage";
 import { EquipoPage } from "./pages/EquipoPage";
@@ -169,9 +168,6 @@ function App() {
   } else if (activePage === "bitacora") {
     pageTitle = "Bitácora de Obra";
     pageSubtitle = "Audios y notas con IA";
-  } else if (activePage === "presupuestos") {
-    pageTitle = "Gestión de Presupuestos";
-    pageSubtitle = "Lectura y comparación con IA";
   } else if (activePage === "admin") {
     pageTitle = "Panel Admin";
     pageSubtitle = "Métricas del tenant y plan";
@@ -202,7 +198,6 @@ function App() {
       return <AdminPage />;
     }
     if (activePage === "bitacora") return <BitacoraPage obra={selectedObra ?? null} />;
-    if (activePage === "presupuestos") return <PresupuestosPage />;
     if (role !== "admin") return <AccessDenied />;
     return <ConfiguracionPage />;
   }
