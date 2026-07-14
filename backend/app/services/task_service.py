@@ -1,9 +1,11 @@
 from datetime import date, timedelta
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError, UnprocessableError
 from app.core.socket_manager import emit_alerts_resolved, emit_task_created, emit_task_deleted, emit_task_updated
 from app.models.alert import AlertType
+from app.models.obra import Obra, ObraStatus
 from app.models.task import Task, TaskStatus
 from app.repositories.alert import AlertRepository
 from app.repositories.calendar import CalendarRepository
@@ -85,6 +87,40 @@ class TaskService:
         obra = await self.obra_repo.get(obra_id)
         if not obra:
             raise NotFoundError("Obra", obra_id)
+
+    async def recompute_obra_status(self, obra_id: int, allow_complete: bool = True) -> None:
+        """Estado AUTOMÁTICO de la obra según sus tareas.
+
+        Regla clave: `pausada`, `cancelada` y `completada` son 'pegajosos' —
+        decisiones manuales/terminales que el automático NUNCA pisa. El auto solo
+        maneja el tramo planificada ↔ en_progreso (y promueve a completada cuando
+        todas las tareas están terminadas). El commit lo hace get_db.
+
+        `allow_complete=False` se usa al reactivar/reabrir a mano: recalcula
+        planificada/en_progreso pero NO vuelve a completar en el mismo acto (para
+        que "reabrir" no rebote a completada si las tareas siguen al 100%).
+        """
+        obra = (await self.repo.session.execute(
+            select(Obra).where(Obra.id == obra_id)
+        )).scalar_one_or_none()
+        if obra is None or obra.status in (
+            ObraStatus.PAUSADA, ObraStatus.CANCELADA, ObraStatus.COMPLETADA
+        ):
+            return
+        tasks = await self.repo.list_by_obra(obra_id)
+        active = [t for t in tasks if t.status != TaskStatus.CANCELADA]
+        if allow_complete and active and all(t.status == TaskStatus.COMPLETADA for t in active):
+            new = ObraStatus.COMPLETADA
+        elif any(
+            t.status in (TaskStatus.EN_PROGRESO, TaskStatus.BLOQUEADA, TaskStatus.COMPLETADA)
+            or (t.estimated_progress or 0) > 0
+            for t in active
+        ):
+            new = ObraStatus.EN_PROGRESO
+        else:
+            new = ObraStatus.PLANIFICADA
+        if obra.status != new:
+            obra.status = new
 
     async def _assert_responsible_active(self, responsible_id: int) -> None:
         """Block assignment of inactive responsibles.
@@ -465,6 +501,7 @@ class TaskService:
         )
         task._date_adjustment = "; ".join(date_notes) if date_notes else None
         await emit_task_created(task, actor)
+        await self.recompute_obra_status(task.obra_id)
         return task
 
     async def get_or_raise(self, task_id: int) -> Task:
@@ -483,9 +520,22 @@ class TaskService:
         await self._get_obra_and_assert_access(obra_id, manager_id)
         tasks = await self.repo.list_by_obra(obra_id)
         links_by_task = await self.repo.get_all_dependency_links_by_obra(obra_id)
+        materials_by_task = await self.repo.materials_summary_by_obra(obra_id)
         for task in tasks:
             task._dep_links = links_by_task.get(task.id, [])
+            task._materials_summary = materials_by_task.get(task.id)
         return tasks
+
+    async def reorder(self, obra_id: int, task_ids: list[int], manager_id: int) -> None:
+        """Reasigna order_index según el orden de IDs dado. Permite insertar una
+        tarea en cualquier posición sin dejar huecos (el commit lo hace get_db)."""
+        await self._get_obra_and_assert_access(obra_id, manager_id)
+        tasks = await self.repo.list_by_obra(obra_id)
+        by_id = {t.id: t for t in tasks}
+        for idx, tid in enumerate(task_ids):
+            task = by_id.get(tid)
+            if task is not None:
+                task.order_index = idx
 
     async def _responsible_label(self, rid: object) -> str:
         if rid is None:
@@ -658,6 +708,7 @@ class TaskService:
         updated._dep_links = await self.repo.get_dependency_links(task_id)  # type: ignore[union-attr]
         updated._date_adjustment = "; ".join(date_notes) if date_notes else None  # type: ignore[union-attr]
         await emit_task_updated(updated, actor)
+        await self.recompute_obra_status(task.obra_id)
         return updated  # type: ignore[return-value]
 
     async def delete(self, task_id: int, manager_id: int, actor: dict | None = None) -> None:
@@ -701,6 +752,7 @@ class TaskService:
 
         await self.repo.delete(task_id)
         await emit_task_deleted(task_id, obra_id, title, actor)
+        await self.recompute_obra_status(obra_id)
 
     async def apply_status_update(self, task_id: int, update: TaskStatusUpdate) -> Task:
         """
@@ -778,6 +830,7 @@ class TaskService:
                     task_id, AlertType.TASK_BLOCKED
                 )
 
+        await self.recompute_obra_status(updated.obra_id)
         return updated  # type: ignore[return-value]
 
     async def apply_status_update_checked(

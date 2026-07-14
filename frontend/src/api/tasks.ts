@@ -113,3 +113,8 @@ export async function updateTaskStatus(
 export async function deleteTask(id: number): Promise<void> {
   await apiClient.delete(`/tasks/${id}`);
 }
+
+/** Reordena las tareas de una obra (lista de IDs en el orden deseado). */
+export async function reorderTasks(obraId: number, taskIds: number[]): Promise<void> {
+  await apiClient.post(`/tasks/obra/${obraId}/reorder`, { task_ids: taskIds });
+}

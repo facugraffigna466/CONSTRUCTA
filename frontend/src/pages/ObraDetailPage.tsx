@@ -540,7 +540,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
               {taskView === "tabla" ? (
                 <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create") ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create") ? () => setShowImport(true) : undefined} />
               ) : (
-                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} onTaskSaved={handleTaskSaved} onTaskDeleted={(id: number) => setTasks(prev => prev.filter(t => t.id !== id))} onBulkImported={() => loadData(true)} />
+                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} onTaskSaved={handleTaskSaved} onTaskDeleted={(id: number) => setTasks(prev => prev.filter(t => t.id !== id))} onBulkImported={() => loadData(true)} onOpenTask={(t: Task) => setTaskToEdit(t)} />
               )}
             </div>
 

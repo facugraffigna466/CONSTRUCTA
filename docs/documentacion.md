@@ -1623,3 +1623,50 @@ Archivos: `GanttTimeline.tsx`, `ResumenTab.tsx`, `ObraDetailPage.tsx`.
 
 ### Validation
 `tsc -b` exit 0 ✓. Verificación manual de drag/resize tras zoom, agrupamiento de subtareas, pinch anclado al cursor y borrado por hover (queda como checklist del PR).
+
+---
+
+## 2026-07-01 — Planilla tipo Google Sheets (feature/planilla-sheets)
+
+Reescritura profunda de la vista **planilla** (`TaskSheetView`) para que se comporte como una hoja de cálculo real, más un rollup de materiales en el backend.
+
+### Frontend (`TaskSheetView.tsx`)
+- **Zoom continuo**: pinch del *trackpad* / `Ctrl+rueda` (listener `wheel` nativo con `ctrlKey`) que aplica CSS `zoom` sobre el lienzo, **anclado al cursor** (ajusta `scrollLeft/Top` por ratio). Persistido por obra; límites `0.5×`–`2×`.
+- **Grilla completa estilo Sheets**: columnas de ancho fijo (Tarea dejó de ser `1fr`) y un lienzo que se **extiende más allá de los datos** (celdas vacías abajo/derecha) para poder scrollear como en Sheets. Las líneas vacías se dibujan con gradientes CSS alineados a las columnas; el alto de fila/header se **mide del DOM** (÷ zoom) para que la grilla vacía alinee exacto. Un `ResizeObserver` extiende el lienzo para llenar siempre la pantalla a cualquier zoom.
+- **Escribir directo**: se quitó el botón "Agregar fila". Clic en una celda vacía (o en la fila fantasma) abre una fila nueva con el cursor en el título vacío. Barra de estado inferior fija con totales + control de zoom + menú "Columnas".
+- **Insertar en cualquier posición**: clic derecho en una fila → *insertar arriba/abajo* (crea y reordena para que caiga en ese lugar, sin huecos) o *eliminar*. El botón de eliminar por hover pasó a la primera columna (`#`).
+- **Mostrar/ocultar columnas**: menú "Columnas" (persistido por obra). Colapso vía `cellStyle`/`gridTemplateColumns` sin tocar el modelo de selección por índice (por eso no se hace *reorder*, que lo rompería).
+- **3 columnas nuevas** (apagadas por defecto): **Hito** (toggle por clic), **Depende de** y **Costo/Materiales** (resumen read-only; clic abre el modal de la tarea vía nueva prop `onOpenTask`).
+
+### Backend
+- **Reorder**: `POST /tasks/obra/{id}/reorder` (schema `TaskReorder`, `TaskService.reorder`) reasigna `order_index` según la lista de IDs → permite insertar en cualquier posición y persiste el orden en la base.
+- **Rollup de materiales**: `TaskRepository.materials_summary_by_obra` (una query agregada) + campos `materials_count/cost/pending` en `TaskRead`, para la columna Costo.
+
+### Validation
+`tsc -b` exit 0 ✓ · backend `py_compile` + `import app.main` ✓. Rebase limpio sobre `main` actualizado (integró PR #26 docs y #27 compras; merge de 3 vías sin conflictos). De paso se quitó el componente muerto `NuevaSolicitudModal` (PR #27) que rompía `tsc`. Pruebas e2e (zoom, insertar, columnas, costo con materiales reales) quedan como checklist del PR.
+
+---
+
+## 2026-07-02 — Estado de obra: automático + manual (feature/obra-estado-auto)
+
+Antes el estado de la obra arrancaba en `planificada` y **nunca cambiaba** (no había transición automática ni UI para cambiarlo): todas quedaban planificadas y las pestañas Activas/Completadas siempre en 0.
+
+### Automático (backend)
+`TaskService.recompute_obra_status(obra_id, allow_complete=True)` derivado de las tareas, enganchado en **create / update / apply_status_update / delete** de tareas:
+- `planificada → en_progreso` cuando alguna tarea arranca (en progreso/bloqueada/completada o avance > 0%).
+- `en_progreso → completada` cuando todas las tareas (no canceladas) están al 100%.
+
+### La regla: no se pisan
+`pausada`, `cancelada` y `completada` son **pegajosos** — el automático nunca los toca (guard al inicio de la función). El auto solo maneja el tramo `planificada ↔ en_progreso → completada`.
+
+### Manual (frontend)
+La **pastilla de estado** de cada card (`PortfolioPage`) es clickeable (menú por `createPortal` para no ser recortado por el `overflow:hidden` del hero) y ofrece acciones contextuales: Pausar / Reactivar. Los estados **terminales** (completada/cancelada) no se cambian a mano: solo se pueden **Eliminar** (borrado real vía `deleteObra` → `DELETE /obras/{id}`, cascada a tareas/equipo). `completada` se alcanza solo de forma automática (se quitó "Marcar completada" manual) y `Cancelar` se reemplazó por Eliminar.
+
+### Reactivar/reabrir al toque
+`ObraService.update`, tras un cambio manual de `status`, llama a `recompute_obra_status(allow_complete=False)` y re-lee la obra: reactivar recalcula el estado real al instante, pero **no re-completa** en el mismo acto (para que reabrir no rebote a completada) y devuelve la obra ya recalculada.
+
+### Fix incluido
+Los clics del menú (portal) burbujeaban por el árbol de React hasta el `onClick` de la card y navegaban al resumen (además de tapar el borrado): se agregó `stopPropagation` al backdrop y al panel del portal.
+
+### Validation
+`tsc -b` exit 0 ✓ · backend `py_compile` + `import app.main` ✓. Pruebas e2e (auto al mover tareas, pausar/reactivar, eliminar, terminal solo-eliminar) quedan como checklist del PR.

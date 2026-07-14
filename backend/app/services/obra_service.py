@@ -87,6 +87,13 @@ class ObraService:
             payload=changes_json,
             triggered_by="user",
         )
+        # Si el cambio manual devolvió la obra al tramo automático (reactivar/reabrir),
+        # recalcular al toque el estado derivado (sin re-completar en el mismo acto)
+        # y devolver la obra ya recalculada.
+        if "status" in changes:
+            from app.services.task_service import TaskService
+            await TaskService(self.repo.session).recompute_obra_status(obra_id, allow_complete=False)
+            return await self.get_for_manager(obra_id, manager_id)
         return updated  # type: ignore[return-value]
 
     async def delete(self, obra_id: int, manager_id: int) -> None:
