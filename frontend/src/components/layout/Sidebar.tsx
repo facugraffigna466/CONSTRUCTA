@@ -8,7 +8,6 @@ import {
   UsersIcon,
   Cog6ToothIcon,
   ChatBubbleLeftEllipsisIcon,
-  DocumentTextIcon,
   ChevronDownIcon,
   ArrowRightStartOnRectangleIcon,
   ShieldCheckIcon,
@@ -205,13 +204,6 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           onClick={() => onNavigate("panel")}
           icon={<Squares2X2Icon style={ICON_SIZE} />}
         />
-        <NavItem
-          label="Presupuestos"
-          active={activePage === "presupuestos"}
-          onClick={() => onNavigate("presupuestos")}
-          icon={<DocumentTextIcon style={ICON_SIZE} />}
-        />
-
         {selectedObra && onTabChange && (
           <>
             {/* obra context header */}
