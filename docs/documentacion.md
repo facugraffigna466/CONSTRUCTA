@@ -1670,3 +1670,29 @@ Los clics del menú (portal) burbujeaban por el árbol de React hasta el `onClic
 
 ### Validation
 `tsc -b` exit 0 ✓ · backend `py_compile` + `import app.main` ✓. Pruebas e2e (auto al mover tareas, pausar/reactivar, eliminar, terminal solo-eliminar) quedan como checklist del PR.
+
+---
+
+## 2026-07-17 — Auditoría sistemática del sistema + informe consolidado
+
+Auditoría técnica módulo por módulo de **todo el sistema**, sin cambios de código de producto: solo relevamiento y documentación de hallazgos.
+
+### Alcance y método
+Se reconciliaron los ocho análisis por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Resultado: **cobertura 26/26 rutas** (ningún módulo sin auditar).
+
+### Entregable
+Nuevo documento maestro **`docs/auditoria-sistema-consolidada.md`** que consolida los 8 análisis en uno solo:
+- Resumen ejecutivo + conteo por severidad: **15 P0 (seguridad) · ~28 P1 (robustez/negocio) · ~20 P2 (pulido)**.
+- Matriz de cobertura de las 26 rutas (cada ruta → doc → hallazgo de mayor severidad).
+- Los 15 P0 en tabla (módulo, impacto, causa raíz), los P1 agrupados por área, los P2.
+- Tabla de resumen por módulo (# de gaps y severidad máxima de ~29 submódulos).
+- Fortalezas del sistema y orden de remediación recomendado.
+
+### Hallazgo dominante (causa raíz única)
+`tenant_id` está desnormalizado en solo 8 de ~22 tablas; las tablas hijas (task, task_material, alert, calendar, baseline, solicitud, historial, plano, obra_team_member) llegan al tenant **por join** con la obra padre, y varios endpoints omitían ese join al chequear acceso → **~13 fugas cross-tenant tipo IDOR** que comparten una sola causa raíz. Los tres P0 más graves fuera de ese patrón: `/uploads` y planos servidos **sin autenticación**, `INTERNAL_API_KEY` vacío que deja pasar los endpoints internos, y el `connect` de Socket.IO que une a las salas de **todas** las obras (fuga en tiempo real).
+
+### Nota de estado
+Existe un borrador de corrección de los IDOR (guards de tenant) + un primer arnés de tests de aislamiento (`backend/tests/test_tenant_isolation.py`, pytest, 3 tests / 10 endpoints verificados con 404 cross-tenant) en la rama `feature/hardening-autorizacion`. **No está mergeado ni pusheado** — este trabajo es solo la auditoría/documentación; aplicar el fix queda como paso aparte.
+
+### Validation
+Documentación pura (sin cambios de código de producto). Cobertura verificada 26/26 rutas.
