@@ -1,6 +1,7 @@
 from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.tenant_denorm import tenant_for_obra
 from app.models.historial import HistorialEvento
 from app.repositories.base import BaseRepository
 
@@ -21,6 +22,7 @@ class HistorialRepository(BaseRepository[HistorialEvento]):
         event = HistorialEvento(
             obra_id=obra_id,
             task_id=task_id,
+            tenant_id=await tenant_for_obra(self.session, obra_id),
             event_type=event_type,
             description=description,
             payload=payload,

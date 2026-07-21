@@ -93,6 +93,7 @@ async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSes
 
     member = ObraTeamMember(
         obra_id=obra_id,
+        tenant_id=current_user.tenant_id,
         responsible_id=resp.id,
         role=payload.role,
         member_type=payload.member_type or "equipo",

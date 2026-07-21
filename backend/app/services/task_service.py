@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError, UnprocessableError
 from app.core.socket_manager import emit_alerts_resolved, emit_task_created, emit_task_deleted, emit_task_updated
+from app.core.tenant_denorm import tenant_for_obra
 from app.models.alert import AlertType
 from app.models.obra import Obra, ObraStatus
 from app.models.task import Task, TaskStatus
@@ -158,7 +159,11 @@ class TaskService:
             )
         )).scalar_one_or_none()
         if not exists:
-            self.repo.session.add(ObraTeamMember(obra_id=obra_id, responsible_id=responsible_id))
+            self.repo.session.add(ObraTeamMember(
+                obra_id=obra_id,
+                tenant_id=await tenant_for_obra(self.repo.session, obra_id),
+                responsible_id=responsible_id,
+            ))
 
     async def _assert_depends_on_valid(
         self, depends_on_id: int, obra_id: int, current_task_id: int | None = None
@@ -281,6 +286,7 @@ class TaskService:
         """
         await self._get_obra_and_assert_access(obra_id, manager_id)
         base_order = len(await self.repo.list_by_obra(obra_id))
+        bulk_tenant = await tenant_for_obra(self.repo.session, obra_id)
 
         task_ids: list[int | None] = []
         errors: list[str] = []
@@ -292,6 +298,7 @@ class TaskService:
                 s_date, d_date, _ = await self._snap_working_dates(obra_id, row.start_date, row.due_date)
                 task = Task(
                     obra_id=obra_id,
+                    tenant_id=bulk_tenant,
                     title=row.title.strip(),
                     start_date=s_date,
                     due_date=d_date,
@@ -488,6 +495,7 @@ class TaskService:
         task_data = data.model_dump(exclude={"dependency_links"})
         task_data["start_date"] = snap_start
         task_data["due_date"] = snap_due
+        task_data["tenant_id"] = await tenant_for_obra(self.repo.session, data.obra_id)
         task = Task(**task_data)
         task = await self.repo.create(task)
         await self._ensure_team_member(task.obra_id, data.responsible_id)

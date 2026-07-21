@@ -1,6 +1,7 @@
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.tenant_denorm import tenant_for_obra
 from app.models.alert import Alert, AlertType
 from app.repositories.base import BaseRepository
 
@@ -22,6 +23,7 @@ class AlertRepository(BaseRepository[Alert]):
             message=message,
             obra_id=obra_id,
             task_id=task_id,
+            tenant_id=await tenant_for_obra(self.session, obra_id),
         )
         alert = await self.create(alert)
         await emit_alert_created(alert)

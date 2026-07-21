@@ -20,6 +20,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.tenant_denorm import tenant_for_obra
 from app.models.budget import Budget
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
 from app.models.solicitud_cotizacion import (
@@ -228,6 +229,7 @@ class SolicitudService:
         ref_code = await self._next_ref_code(obra_id)
         sol = SolicitudCotizacion(
             obra_id=obra_id,
+            tenant_id=await tenant_for_obra(self.db, obra_id),
             ref_code=ref_code,
             status="borrador",
             notes=notes,

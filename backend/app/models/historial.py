@@ -17,6 +17,10 @@ class HistorialEvento(Base):
     task_id: Mapped[int | None] = mapped_column(
         ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Denormalizado desde la obra (aislamiento por tenant sin join).
+    tenant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tenants.id"), nullable=True, index=True
+    )
 
     event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     description: Mapped[str] = mapped_column(Text, nullable=False)
