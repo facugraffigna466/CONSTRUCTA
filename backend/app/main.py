@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import admin as admin_router
-from app.api.routes import alerts, auth, events, notifications, obras, presence, responsibles, tasks, uploads, users, webhooks
+from app.api.routes import alerts, auth, notifications, obras, presence, responsibles, tasks, uploads, users, webhooks
 from app.api.routes import settings as settings_router
 from app.api.routes import calendar as calendar_router
 from app.api.routes import imports as imports_router
@@ -65,7 +65,6 @@ fastapi_app.include_router(webhooks.router, prefix=API_PREFIX)
 fastapi_app.include_router(alerts.router, prefix=API_PREFIX)
 fastapi_app.include_router(notifications.router, prefix=API_PREFIX)
 fastapi_app.include_router(settings_router.router, prefix=API_PREFIX)
-fastapi_app.include_router(events.router, prefix=API_PREFIX)
 fastapi_app.include_router(uploads.router, prefix=API_PREFIX)
 fastapi_app.include_router(presence.router, prefix=API_PREFIX)
 fastapi_app.include_router(calendar_router.router, prefix=API_PREFIX)
