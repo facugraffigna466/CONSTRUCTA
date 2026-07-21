@@ -1,0 +1,61 @@
+name: CI
+
+# Corre en cada push a main y en cada PR. El objetivo principal es ejecutar los
+# tests de aislamiento por tenant (backend/tests/test_tenant_isolation.py) para
+# que ningún endpoint nuevo reintroduzca una fuga cross-tenant (IDOR).
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela corridas viejas de la misma rama/PR cuando llega un push nuevo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — pytest (aislamiento por tenant)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        # Los tests usan SQLite en archivo (conftest.py) — no necesitan Postgres.
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend — type-check + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check + build
+        # `npm run build` = tsc -b && vite build (chequeo de tipos + build de prod).
+        run: npm run build
