@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.deps import CurrentUser, DbSession
 from app.models.user import User
+from app.models.obra import Obra
 from app.models.responsible import Responsible
 from app.models.supplier import Supplier
 from app.models.task import Task
@@ -13,11 +14,16 @@ from app.schemas.task_material import TaskMaterialCreate, TaskMaterialRead, Task
 router = APIRouter(prefix="/tasks/{task_id}/materials", tags=["task-materials"])
 
 
-async def _get_task_or_404(task_id: int, db: DbSession) -> Task:
+async def _get_task_or_404(task_id: int, db: DbSession, tenant_id: int | None = None) -> Task:
     result = await db.execute(select(Task).where(Task.id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    # Aislamiento multi-tenant: la tarea debe pertenecer a una obra del tenant.
+    if tenant_id is not None:
+        obra = await db.get(Obra, task.obra_id)
+        if obra is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
+            raise HTTPException(status_code=404, detail="Tarea no encontrada")
     return task
 
 
@@ -42,8 +48,8 @@ async def _enrich(material: TaskMaterial, db: DbSession) -> TaskMaterialRead:
 
 
 @router.get("", response_model=list[TaskMaterialRead])
-async def list_materials(task_id: int, db: DbSession, _: CurrentUserId):
-    await _get_task_or_404(task_id, db)
+async def list_materials(task_id: int, db: DbSession, current_user: CurrentUser):
+    await _get_task_or_404(task_id, db, current_user.tenant_id)
     result = await db.execute(
         select(TaskMaterial)
         .where(TaskMaterial.task_id == task_id)
@@ -57,7 +63,7 @@ async def list_materials(task_id: int, db: DbSession, _: CurrentUserId):
 async def create_material(
     task_id: int, data: TaskMaterialCreate, db: DbSession, current_user: CurrentUser
 ):
-    await _get_task_or_404(task_id, db)
+    await _get_task_or_404(task_id, db, current_user.tenant_id)
     material = TaskMaterial(
         task_id=task_id,
         name=data.name,
@@ -77,8 +83,9 @@ async def create_material(
 
 @router.patch("/{material_id}", response_model=TaskMaterialRead)
 async def update_material(
-    task_id: int, material_id: int, data: TaskMaterialUpdate, db: DbSession, _: CurrentUserId
+    task_id: int, material_id: int, data: TaskMaterialUpdate, db: DbSession, current_user: CurrentUser
 ):
+    await _get_task_or_404(task_id, db, current_user.tenant_id)
     result = await db.execute(
         select(TaskMaterial).where(
             TaskMaterial.id == material_id, TaskMaterial.task_id == task_id
@@ -98,8 +105,9 @@ async def update_material(
 
 @router.delete("/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_material(
-    task_id: int, material_id: int, db: DbSession, _: CurrentUserId
+    task_id: int, material_id: int, db: DbSession, current_user: CurrentUser
 ):
+    await _get_task_or_404(task_id, db, current_user.tenant_id)
     result = await db.execute(
         select(TaskMaterial).where(
             TaskMaterial.id == material_id, TaskMaterial.task_id == task_id

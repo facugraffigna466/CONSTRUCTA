@@ -10,8 +10,9 @@ DELETE /solicitudes-cotizacion/{id}                     → eliminar solicitud
 """
 from fastapi import APIRouter, HTTPException, Response, status
 
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import CurrentUser, DbSession
 from app.models.obra import Obra
+from app.models.solicitud_cotizacion import SolicitudCotizacion
 from app.schemas.purchase_order import PurchaseOrderRead
 from app.schemas.solicitud_cotizacion import (
     AnalisisHistoricoComprasRead,
@@ -26,11 +27,23 @@ from sqlalchemy import select
 router = APIRouter(tags=["solicitudes-cotizacion"])
 
 
-async def _get_obra_or_404(obra_id: int, db: DbSession) -> Obra:
+async def _get_obra_or_404(obra_id: int, db: DbSession, tenant_id: int | None = None) -> Obra:
     obra = (await db.execute(select(Obra).where(Obra.id == obra_id))).scalar_one_or_none()
     if not obra:
         raise HTTPException(404, "Obra no encontrada")
+    if tenant_id is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
+        raise HTTPException(404, "Obra no encontrada")   # 404 cross-tenant
     return obra
+
+
+async def _assert_solicitud_tenant(solicitud_id: int, db: DbSession, tenant_id: int | None) -> None:
+    sol = (await db.execute(select(SolicitudCotizacion).where(SolicitudCotizacion.id == solicitud_id))).scalar_one_or_none()
+    if not sol:
+        raise HTTPException(404, "Solicitud no encontrada")
+    if tenant_id is not None:
+        obra = await db.get(Obra, sol.obra_id)
+        if obra is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
+            raise HTTPException(404, "Solicitud no encontrada")
 
 
 def _order_read(order) -> PurchaseOrderRead:
@@ -52,8 +65,8 @@ def _order_read(order) -> PurchaseOrderRead:
     "/obras/{obra_id}/solicitudes-cotizacion",
     response_model=list[SolicitudCotizacionRead],
 )
-async def list_solicitudes(obra_id: int, db: DbSession, _: CurrentUserId):
-    await _get_obra_or_404(obra_id, db)
+async def list_solicitudes(obra_id: int, db: DbSession, current_user: CurrentUser):
+    await _get_obra_or_404(obra_id, db, current_user.tenant_id)
     return await SolicitudService(db).list_for_obra(obra_id)
 
 
@@ -68,9 +81,9 @@ async def create_solicitud(
     obra_id: int,
     data: SolicitudCotizacionCreate,
     db: DbSession,
-    current_user_id: CurrentUserId,
+    current_user: CurrentUser,
 ):
-    await _get_obra_or_404(obra_id, db)
+    await _get_obra_or_404(obra_id, db, current_user.tenant_id)
     try:
         svc = SolicitudService(db)
         sol = await svc.create(
@@ -78,7 +91,7 @@ async def create_solicitud(
             material_ids=data.material_ids,
             supplier_ids=data.supplier_ids,
             notes=data.notes,
-            created_by=current_user_id,
+            created_by=current_user.id,
             contratista_phones=data.contratista_phones,
         )
         return await svc._to_read(sol)
@@ -92,8 +105,8 @@ async def create_solicitud(
     "/obras/{obra_id}/analisis-compras",
     response_model=AnalisisHistoricoComprasRead,
 )
-async def analisis_compras(obra_id: int, db: DbSession, _: CurrentUserId):
-    await _get_obra_or_404(obra_id, db)
+async def analisis_compras(obra_id: int, db: DbSession, current_user: CurrentUser):
+    await _get_obra_or_404(obra_id, db, current_user.tenant_id)
     try:
         return await SolicitudService(db).analizar_historico(obra_id)
     except ValueError as exc:
@@ -111,13 +124,14 @@ async def confirmar_proveedor(
     solicitud_id: int,
     data: ConfirmarProveedorRequest,
     db: DbSession,
-    current_user_id: CurrentUserId,
+    current_user: CurrentUser,
 ):
+    await _assert_solicitud_tenant(solicitud_id, db, current_user.tenant_id)
     try:
         order = await SolicitudService(db).confirmar(
             solicitud_id=solicitud_id,
             supplier_id=data.supplier_id,
-            confirmed_by=current_user_id,
+            confirmed_by=current_user.id,
         )
     except ValueError as exc:
         raise HTTPException(404 if "no encontrada" in str(exc).lower() else 422, str(exc))
@@ -135,14 +149,15 @@ async def confirmar_contratista(
     solicitud_id: int,
     data: ConfirmarContratistaRequest,
     db: DbSession,
-    current_user_id: CurrentUserId,
+    current_user: CurrentUser,
 ):
+    await _assert_solicitud_tenant(solicitud_id, db, current_user.tenant_id)
     try:
         order = await SolicitudService(db).confirmar_contratista(
             solicitud_id=solicitud_id,
             supplier_name=data.supplier_name,
             supplier_phone=data.supplier_phone,
-            confirmed_by=current_user_id,
+            confirmed_by=current_user.id,
         )
     except ValueError as exc:
         raise HTTPException(404 if "no encontrada" in str(exc).lower() else 422, str(exc))
@@ -158,8 +173,9 @@ async def confirmar_contratista(
 async def delete_solicitud(
     solicitud_id: int,
     db: DbSession,
-    _: CurrentUserId,
+    current_user: CurrentUser,
 ):
+    await _assert_solicitud_tenant(solicitud_id, db, current_user.tenant_id)
     try:
         await SolicitudService(db).delete_solicitud(solicitud_id)
     except ValueError as exc:

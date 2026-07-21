@@ -55,22 +55,22 @@ async def lookup_responsible_by_whatsapp(
 
 @router.get("/{responsible_id}", response_model=ResponsibleRead)
 async def get_responsible(
-    responsible_id: int, db: DbSession, _: CurrentUserId
+    responsible_id: int, db: DbSession, current_user: CurrentUser
 ):
-    return await ResponsibleService(db).get_or_raise(responsible_id)
+    return await ResponsibleService(db).get_or_raise(responsible_id, current_user.tenant_id)
 
 
 @router.patch("/{responsible_id}", response_model=ResponsibleRead)
 async def update_responsible(
-    responsible_id: int, data: ResponsibleUpdate, db: DbSession, _: AdminUser
+    responsible_id: int, data: ResponsibleUpdate, db: DbSession, current_user: AdminUser
 ):
-    return await ResponsibleService(db).update(responsible_id, data)
+    return await ResponsibleService(db).update(responsible_id, data, current_user.tenant_id)
 
 
 @router.patch("/{responsible_id}/reactivate", response_model=ResponsibleRead)
-async def reactivate_responsible(responsible_id: int, db: DbSession, _: AdminUser):
+async def reactivate_responsible(responsible_id: int, db: DbSession, current_user: AdminUser):
     """Re-activate an inactive responsible. No task reassignment is performed."""
-    return await ResponsibleService(db).reactivate(responsible_id)
+    return await ResponsibleService(db).reactivate(responsible_id, current_user.tenant_id)
 
 
 @router.delete("/{responsible_id}", response_model=ResponsibleRead)
@@ -82,4 +82,4 @@ async def deactivate_responsible(responsible_id: int, db: DbSession, current_use
         "role": current_user.role,
         "channel": "web",
     }
-    return await ResponsibleService(db).deactivate(responsible_id, actor=actor)
+    return await ResponsibleService(db).deactivate(responsible_id, actor=actor, tenant_id=current_user.tenant_id)

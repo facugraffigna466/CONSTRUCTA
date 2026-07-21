@@ -3,7 +3,8 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import AdminUser, CurrentUserId, DbSession
+from app.core.deps import AdminUser, CurrentUser, CurrentUserId, DbSession
+from app.services.obra_service import ObraService
 from app.models.obra_team_member import ObraTeamMember
 from app.models.responsible import Responsible
 from app.services.responsible_service import ResponsibleService
@@ -51,7 +52,8 @@ def _to_read(m: ObraTeamMember, resp: Responsible) -> ObraTeamMemberRead:
 
 
 @router.get("/{obra_id}/team", response_model=list[ObraTeamMemberRead])
-async def list_team(obra_id: int, db: DbSession, _: CurrentUserId):
+async def list_team(obra_id: int, db: DbSession, current_user: CurrentUser):
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     result = await db.execute(
         select(ObraTeamMember)
         .where(ObraTeamMember.obra_id == obra_id)
@@ -63,6 +65,7 @@ async def list_team(obra_id: int, db: DbSession, _: CurrentUserId):
 
 @router.post("/{obra_id}/team", response_model=ObraTeamMemberRead, status_code=status.HTTP_201_CREATED)
 async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSession, current_user: AdminUser):
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     if payload.responsible_id:
         resp = await db.get(Responsible, payload.responsible_id)
         if not resp:
@@ -101,7 +104,8 @@ async def add_team_member(obra_id: int, payload: AddTeamMemberPayload, db: DbSes
 
 
 @router.patch("/{obra_id}/team/{responsible_id}", response_model=ObraTeamMemberRead)
-async def update_team_member(obra_id: int, responsible_id: int, payload: UpdateTeamMemberPayload, db: DbSession, _: AdminUser):
+async def update_team_member(obra_id: int, responsible_id: int, payload: UpdateTeamMemberPayload, db: DbSession, current_user: AdminUser):
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     result = await db.execute(
         select(ObraTeamMember)
         .where(ObraTeamMember.obra_id == obra_id, ObraTeamMember.responsible_id == responsible_id)
@@ -120,7 +124,8 @@ async def update_team_member(obra_id: int, responsible_id: int, payload: UpdateT
 
 
 @router.delete("/{obra_id}/team/{responsible_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def remove_team_member(obra_id: int, responsible_id: int, db: DbSession, _: AdminUser):
+async def remove_team_member(obra_id: int, responsible_id: int, db: DbSession, current_user: AdminUser):
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     await db.execute(
         delete(ObraTeamMember).where(
             ObraTeamMember.obra_id == obra_id,

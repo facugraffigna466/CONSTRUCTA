@@ -29,5 +29,5 @@ async def mark_all_alerts_read(
 
 
 @router.patch("/{alert_id}/read", response_model=AlertRead)
-async def mark_alert_read(alert_id: int, db: DbSession, _: CurrentUserId):
-    return await AlertService(db).mark_read(alert_id)
+async def mark_alert_read(alert_id: int, db: DbSession, current_user: CurrentUser):
+    return await AlertService(db).mark_read(alert_id, tenant_id=current_user.tenant_id)

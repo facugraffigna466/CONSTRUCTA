@@ -12,7 +12,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.services.obra_service import ObraService
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 
@@ -68,8 +69,9 @@ def _duration(start: date | None, due: date | None) -> int | str:
 async def export_tasks_excel(
     obra_id: int,
     db: DbSession,
-    _user_id: CurrentUserId,
+    current_user: CurrentUser,
 ):
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     tasks = await TaskRepository(db).list_by_obra(obra_id)
     if not tasks:
         raise HTTPException(404, "No hay tareas para exportar.")

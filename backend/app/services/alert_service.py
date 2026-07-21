@@ -21,10 +21,16 @@ class AlertService:
     async def list_all(self, unread_only: bool = False, tenant_id: int | None = None) -> list[Alert]:
         return await self.repo.list_all(unread_only=unread_only, tenant_id=tenant_id)
 
-    async def mark_read(self, alert_id: int) -> Alert:
+    async def mark_read(self, alert_id: int, tenant_id: int | None = None) -> Alert:
         alert = await self.repo.get(alert_id)
         if not alert:
             raise NotFoundError("Alert", alert_id)
+        # Aislamiento multi-tenant: la alerta debe pertenecer a una obra del tenant.
+        if tenant_id is not None and alert.obra_id is not None:
+            from app.models.obra import Obra
+            obra = await self.repo.session.get(Obra, alert.obra_id)
+            if obra is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
+                raise NotFoundError("Alert", alert_id)
         if alert.is_read:
             return alert
         updated = await self.repo.update_fields(alert_id, is_read=True)

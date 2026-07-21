@@ -55,9 +55,9 @@ async def delete_obra(obra_id: int, db: DbSession, user_id: CurrentUserId):
 async def get_obra_historial(
     obra_id: int,
     db: DbSession,
-    _: CurrentUserId,
+    current_user: CurrentUser,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ):
     """Return the latest historial events for an obra, ordered by created_at DESC."""
-    await ObraService(db).get_or_raise(obra_id)
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     return await HistorialRepository(db).list_by_obra_limited(obra_id, limit)
