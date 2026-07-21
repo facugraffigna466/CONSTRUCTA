@@ -10,7 +10,7 @@ class ObraTeamMember(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     obra_id: Mapped[int] = mapped_column(ForeignKey("obras.id", ondelete="CASCADE"), nullable=False, index=True)
-    tenant_id: Mapped[int | None] = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)  # denormalizado desde la obra
+    tenant_id: Mapped[int] = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)  # denormalizado desde la obra (Fase 2: NOT NULL)
     responsible_id: Mapped[int] = mapped_column(ForeignKey("responsibles.id", ondelete="CASCADE"), nullable=False, index=True)
     role: Mapped[str | None] = mapped_column(String(100), nullable=True)
     member_type: Mapped[str] = mapped_column(String(20), nullable=False, default="equipo")

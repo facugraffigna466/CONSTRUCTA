@@ -54,9 +54,9 @@ class SolicitudCotizacion(Base):
     obra_id: Mapped[int] = mapped_column(
         ForeignKey("obras.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # Denormalizado desde la obra (aislamiento por tenant sin join).
-    tenant_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tenants.id"), nullable=True, index=True
+    # Denormalizado desde la obra (aislamiento por tenant sin join). NOT NULL (Fase 2).
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("tenants.id"), nullable=False, index=True
     )
     created_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True

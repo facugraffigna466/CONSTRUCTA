@@ -14,9 +14,9 @@ class TaskMaterial(Base):
     task_id: Mapped[int] = mapped_column(
         ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # Denormalizado desde la obra (vía la tarea) para aislar por tenant sin join.
-    tenant_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tenants.id"), nullable=True, index=True
+    # Denormalizado desde la obra (vía la tarea) para aislar por tenant sin join. NOT NULL (Fase 2).
+    tenant_id: Mapped[int] = mapped_column(
+        ForeignKey("tenants.id"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     quantity: Mapped[float | None] = mapped_column(Numeric(10, 3), nullable=True)

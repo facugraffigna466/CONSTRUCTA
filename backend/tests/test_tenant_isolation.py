@@ -45,7 +45,7 @@ async def two_tenants(db):
     obra_a = Obra(name="Obra A", manager_id=ua.id, tenant_id=ta.id)
     db.add(obra_a)
     await db.flush()
-    task_a = Task(obra_id=obra_a.id, title="Tarea de A")
+    task_a = Task(obra_id=obra_a.id, tenant_id=ta.id, title="Tarea de A")
     db.add(task_a)
     await db.flush()
     await db.commit()
