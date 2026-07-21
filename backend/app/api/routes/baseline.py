@@ -3,6 +3,7 @@ from fastapi import APIRouter, status
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from app.core.deps import CurrentUserId, DbSession
+from app.core.tenant_denorm import tenant_for_obra
 from app.models.baseline import TaskBaseline
 from app.services.task_service import TaskService
 
@@ -29,10 +30,12 @@ async def save_baseline(obra_id: int, db: DbSession, user_id: CurrentUserId):
     await db.execute(delete(TaskBaseline).where(TaskBaseline.obra_id == obra_id))
 
     now = None
+    bl_tenant = await tenant_for_obra(db, obra_id)
     entries: list[BaselineEntry] = []
     for task in tasks:
         entry = TaskBaseline(
             obra_id=obra_id,
+            tenant_id=bl_tenant,
             task_id=task.id,
             baseline_start=task.start_date,
             baseline_finish=task.due_date,

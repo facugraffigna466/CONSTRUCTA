@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.tenant_denorm import tenant_for_obra
 from app.models.calendar import CalendarException, WorkingCalendar
 
 
@@ -35,7 +36,7 @@ class CalendarRepository:
         )
         cal = result.scalar_one_or_none()
         if cal is None:
-            cal = WorkingCalendar(obra_id=obra_id)
+            cal = WorkingCalendar(obra_id=obra_id, tenant_id=await tenant_for_obra(self.session, obra_id))
             self.session.add(cal)
             await self.session.commit()
             await self.session.refresh(cal)

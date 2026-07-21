@@ -66,6 +66,7 @@ async def create_material(
     await _get_task_or_404(task_id, db, current_user.tenant_id)
     material = TaskMaterial(
         task_id=task_id,
+        tenant_id=current_user.tenant_id,
         name=data.name,
         quantity=data.quantity,
         unit=data.unit,
