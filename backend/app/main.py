@@ -94,8 +94,15 @@ _UPLOADS_DIR = _Path(__file__).parent.parent / "uploads"
 
 
 @fastapi_app.get("/uploads/{filename}", tags=["upload"])
-async def serve_uploaded_file(filename: str):
+async def serve_uploaded_file(filename: str, exp: str | None = None, sig: str | None = None):
+    from app.core.signing import requires_signature, verify_download
+
     safe = _Path(filename).name
+    # Archivos sensibles (planos, audios): requieren firma válida (HMAC + expiración).
+    # Se valida ANTES de tocar el disco para no revelar existencia sin autorización.
+    # Las imágenes (portadas/avatares) siguen siendo públicas.
+    if requires_signature(safe) and not verify_download(safe, exp, sig):
+        raise _HTTPException(403, "Enlace inválido o expirado.")
     fp = _UPLOADS_DIR / safe
     if not fp.is_file():
         raise _HTTPException(404, "Archivo no encontrado.")

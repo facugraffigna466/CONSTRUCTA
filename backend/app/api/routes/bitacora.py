@@ -18,6 +18,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession
+from app.core.signing import signed_upload_path
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
 from app.models.responsible import Responsible
@@ -39,8 +40,16 @@ AUDIO_TYPES = {"audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/webm"
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB (límite de Whisper)
 
 
+def _audio_url(entry: BitacoraEntry) -> str | None:
+    """Ruta relativa FIRMADA para el audio (el front le antepone su base de API)."""
+    if not entry.audio_path:
+        return None
+    return signed_upload_path(Path(entry.audio_path).name)
+
+
 async def _to_read(entry: BitacoraEntry, db: DbSession) -> BitacoraEntryRead:
     data = BitacoraEntryRead.model_validate(entry)
+    data.audio_url = _audio_url(entry)
     if entry.obra_id:
         data.obra_name = (await db.execute(
             select(Obra.name).where(Obra.id == entry.obra_id)
@@ -69,6 +78,7 @@ async def _to_read_bulk(entries: list[BitacoraEntry], db: DbSession) -> list[Bit
     result: list[BitacoraEntryRead] = []
     for e in entries:
         data = BitacoraEntryRead.model_validate(e)
+        data.audio_url = _audio_url(e)
         data.obra_name = obra_names.get(e.obra_id) if e.obra_id else None
         data.responsible_name = resp_names.get(e.responsible_id) if e.responsible_id else None
         result.append(data)

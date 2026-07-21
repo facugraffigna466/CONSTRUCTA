@@ -29,6 +29,7 @@ class BitacoraEntryRead(BaseModel):
     created_by: int | None
     source: str
     audio_path: str | None
+    audio_url: str | None = None  # ruta relativa FIRMADA (/uploads/<name>?exp=..&sig=..)
     transcript: str | None
     summary: str | None
     key_points: list[str] | None
