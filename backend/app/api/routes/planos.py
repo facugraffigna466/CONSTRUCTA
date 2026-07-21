@@ -7,6 +7,7 @@ from app.core.deps import CurrentUser, DbSession
 from app.models.plano import Plano
 from app.schemas.plano import PlanoRead
 from app.services.plano_service import MAX_BYTES, PlanoService
+from app.services.obra_service import ObraService
 
 router = APIRouter(tags=["planos"])
 
@@ -47,7 +48,8 @@ async def upload_plano(
 
 
 @router.get("/obras/{obra_id}/planos", response_model=list[PlanoRead])
-async def list_planos(obra_id: int, db: DbSession, _: CurrentUser):
+async def list_planos(obra_id: int, db: DbSession, current_user: CurrentUser):
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     planos = await PlanoService(db).list_by_obra(obra_id)
     return [_to_read(p) for p in planos]
 

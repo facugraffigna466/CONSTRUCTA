@@ -13,6 +13,7 @@ from app.repositories.historial import HistorialRepository
 from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
+from app.repositories.user import UserRepository
 from app.schemas.task import DependencyLinkInput, TaskCreate, TaskDueSoonRead, TaskStatusUpdate, TaskUpdate
 from app.services.calendar_service import is_working_day, next_working_day
 
@@ -87,6 +88,12 @@ class TaskService:
         obra = await self.obra_repo.get(obra_id)
         if not obra:
             raise NotFoundError("Obra", obra_id)
+        # Aislamiento multi-tenant: la obra debe ser del mismo tenant que el usuario.
+        # Si no, se reporta como inexistente (404, no 403 — no filtrar qué ids existen).
+        if obra.tenant_id is not None:
+            user = await UserRepository(self.obra_repo.session).get(manager_id)
+            if user is not None and user.tenant_id is not None and obra.tenant_id != user.tenant_id:
+                raise NotFoundError("Obra", obra_id)
 
     async def recompute_obra_status(self, obra_id: int, allow_complete: bool = True) -> None:
         """Estado AUTOMÁTICO de la obra según sus tareas.

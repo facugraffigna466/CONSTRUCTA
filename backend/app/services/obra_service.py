@@ -40,8 +40,13 @@ class ObraService:
 
     async def get_for_manager(self, obra_id: int, manager_id: int) -> Obra:
         obra = await self.get_or_raise(obra_id)
-        if obra.manager_id != manager_id:
-            raise ForbiddenError("You are not the manager of this obra")
+        # Acceso por TENANT (no por creador): cualquier miembro de la empresa puede
+        # operar la obra. manager_id se conserva solo para auditoría/creador.
+        if obra.tenant_id is not None:
+            from app.repositories.user import UserRepository
+            user = await UserRepository(self.repo.session).get(manager_id)
+            if user is not None and user.tenant_id is not None and obra.tenant_id != user.tenant_id:
+                raise NotFoundError("Obra", obra_id)   # 404 cross-tenant
         return obra
 
     async def list_mine(self, manager_id: int) -> list[Obra]:

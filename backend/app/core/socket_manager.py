@@ -110,7 +110,8 @@ async def connect(sid: str, environ: dict, auth: dict | None) -> None:
             if not user or not user.is_active:
                 logger.warning("connect rejected sid=%s user_id=%d reason=user_inactive_or_not_found", sid, user_id)
                 raise ConnectionRefusedError("user inactive")
-            obras = await ObraRepository(db).list_all()
+            # Solo las obras del tenant del usuario (evita fuga cross-tenant en tiempo real).
+            obras = await ObraRepository(db).list_all(tenant_id=user.tenant_id)
             for obra in obras:
                 await sio.enter_room(sid, f"obra_{obra.id}")
 

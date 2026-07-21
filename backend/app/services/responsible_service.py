@@ -24,9 +24,12 @@ class ResponsibleService:
         responsible = Responsible(**data.model_dump(), tenant_id=tenant_id)
         return await self.repo.create(responsible)
 
-    async def get_or_raise(self, responsible_id: int) -> Responsible:
+    async def get_or_raise(self, responsible_id: int, tenant_id: int | None = None) -> Responsible:
         responsible = await self.repo.get(responsible_id)
         if not responsible:
+            raise NotFoundError("Responsible", responsible_id)
+        # Aislamiento multi-tenant.
+        if tenant_id is not None and responsible.tenant_id is not None and responsible.tenant_id != tenant_id:
             raise NotFoundError("Responsible", responsible_id)
         return responsible
 
@@ -44,11 +47,11 @@ class ResponsibleService:
             return await self.repo.list_active(tenant_id=tenant_id)
         return await self.repo.list_all(tenant_id=tenant_id)
 
-    async def update(self, responsible_id: int, data: ResponsibleUpdate) -> Responsible:
-        await self.get_or_raise(responsible_id)
+    async def update(self, responsible_id: int, data: ResponsibleUpdate, tenant_id: int | None = None) -> Responsible:
+        await self.get_or_raise(responsible_id, tenant_id)
         changes = data.model_dump(exclude_none=True)
         if not changes:
-            return await self.get_or_raise(responsible_id)
+            return await self.get_or_raise(responsible_id, tenant_id)
         if "whatsapp_number" in changes:
             existing = await self.repo.get_by_whatsapp(changes["whatsapp_number"])
             if existing and existing.id != responsible_id:
@@ -56,20 +59,20 @@ class ResponsibleService:
         updated = await self.repo.update_fields(responsible_id, **changes)
         return updated  # type: ignore[return-value]
 
-    async def reactivate(self, responsible_id: int) -> Responsible:
+    async def reactivate(self, responsible_id: int, tenant_id: int | None = None) -> Responsible:
         """Re-activate an inactive responsible.
 
         No task reassignment is done — the responsible becomes available
         for new task assignments but existing tasks are unchanged.
         """
-        responsible = await self.get_or_raise(responsible_id)
+        responsible = await self.get_or_raise(responsible_id, tenant_id)
         if responsible.is_active:
             return responsible
         updated = await self.repo.update_fields(responsible_id, is_active=True)
         return updated  # type: ignore[return-value]
 
-    async def deactivate(self, responsible_id: int, actor: dict | None = None) -> Responsible:
-        await self.get_or_raise(responsible_id)
+    async def deactivate(self, responsible_id: int, actor: dict | None = None, tenant_id: int | None = None) -> Responsible:
+        await self.get_or_raise(responsible_id, tenant_id)
         updated = await self.repo.update_fields(responsible_id, is_active=False)
         affected_tasks = await self.task_repo.unassign_active_tasks_by_responsible(
             responsible_id

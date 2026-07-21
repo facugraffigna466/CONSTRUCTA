@@ -30,8 +30,13 @@ async def obra_events(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
     obra = await ObraRepository(db).get(obra_id)
-    if not obra or obra.manager_id != user_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
+    if not obra:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    # Acceso por TENANT (no por creador): cualquier miembro de la empresa.
+    from app.repositories.user import UserRepository
+    user = await UserRepository(db).get(user_id)
+    if not user or (obra.tenant_id is not None and obra.tenant_id != user.tenant_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
     q = sse_manager.subscribe(obra_id)
 
