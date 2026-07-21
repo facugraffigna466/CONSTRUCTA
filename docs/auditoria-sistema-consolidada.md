@@ -1,7 +1,7 @@
 # Auditoría del sistema — Informe consolidado
 
-**Fecha:** 2026-07-17
-**Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico.
+**Fecha:** 2026-07-17 (actualizado 2026-07-18 con la auditoría de frontend pantalla por pantalla — §9).
+**Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
 **Alcance:** todo el sistema — autenticación, planes/tenants, obras, tareas, cronograma, comunicación de campo (WhatsApp/alertas/presencia), compras y documentos, bitácora con IA, infraestructura transversal, frontend, y modelo de datos/integraciones.
 
 Este documento **no reemplaza** los análisis por módulo: los consolida. El detalle de cada hallazgo (solución propuesta con código, esfuerzo estimado) está en el documento del módulo correspondiente. Acá está el mapa completo, la cobertura verificada y el ranking de severidad de todo el sistema.
@@ -20,7 +20,9 @@ Este documento **no reemplaza** los análisis por módulo: los consolida. El det
 |-----------|----------|------------|
 | 🔴 **P0 — Crítico / Seguridad** | 15 | Fugas cross-tenant (IDOR), archivos públicos sin auth, secretos con default inseguro |
 | 🟠 **P1 — Robustez / Negocio** | ~28 | Sin tests/CI, billing incompleto, recuperación de cuenta, rate limiting, multi-worker |
-| 🟡 **P2 — Pulido / UX / Deuda** | ~20 | Paginación, accesibilidad, routing por URL, copy, memoización |
+| 🟡 **P2 — Pulido / UX / Deuda** | ~27 | Paginación, accesibilidad, routing por URL, copy, memoización, código muerto, diálogos nativos |
+
+> **Adenda 2026-07-18 (§9):** la pasada por pantalla del frontend no sumó P0. Sí sumó **~4 P1** (dato incorrecto en `AdminPage`, errores en silencio en `EquipoPage`, `BACKEND_URL` localhost en Bitácora, a11y en Gantt/planilla) y **~7 P2** (destacan **~2.229 líneas de código muerto** en 7 archivos y diálogos nativos `confirm()`/`alert()` en 8 pantallas).
 
 **Prioridad #1 absoluta:** cerrar el cluster de aislamiento por tenant (los 15 P0). Es lo que separa "app de demo" de "SaaS multi-empresa que puede vender".
 
@@ -40,6 +42,8 @@ Este documento **no reemplaza** los análisis por módulo: los consolida. El det
 | [`analisis-modulo-datos-integraciones.md`](analisis-modulo-datos-integraciones.md) | Modelo de datos (`tenant_id`, nullability), email (Brevo), n8n, auth interno |
 
 **Auditorías complementarias previas** (ya resueltas o de otro alcance): [`auditoria-ux.md`](auditoria-ux.md) (P0/P1/P2 de UX, cerrada), [`auditoria-general.md`](auditoria-general.md) (recorrido en navegador, 7 hallazgos cerrados), [`auditoria-flujo-alta.md`](auditoria-flujo-alta.md) (flujo de onboarding).
+
+> La **auditoría del frontend pantalla por pantalla** (las 12 páginas y ~35 componentes, una por una) está incorporada en este mismo documento — **§9**.
 
 ---
 
@@ -164,9 +168,16 @@ Agrupados por área. Detalle y solución en el doc del módulo.
 - El contratista responde por un canal no verificado.
 - Uploads/planos sin validación de tamaño/tipo; almacenamiento en filesystem local (no escala, riesgo de pérdida).
 
+**Frontend — pantallas** (§9)
+- `AdminPage`: la barra "Tareas totales en el sistema" compara el total contra el límite **por obra** → dato/porcentaje incorrecto (F1).
+- `EquipoPage`: cambio de rol y baja de miembro **fallan en silencio**; la baja **no pide confirmación** (F2).
+- `BitacoraPage`: `BACKEND_URL` cae a `localhost:8000` si falta el env → **audios rotos en producción** (F3).
+- Accesibilidad casi nula en los componentes interactivos pesados (Gantt: 0 `aria`; planilla: 1) y modales sin foco atrapado (F4).
+
 ### 🟡 P2 — Pulido, UX y deuda técnica
 
-- **Frontend:** sin enrutamiento por URL (todo es estado en `App.tsx`, no hay deep-links ni back del navegador); prop-drilling de navegación desde `App.tsx`; accesibilidad mínima (foco, roles ARIA, teclado); desktop-first sin responsive real; componentes pesados sin memoizar.
+- **Frontend:** sin enrutamiento por URL (todo es estado en `App.tsx`, no hay deep-links ni back del navegador); prop-drilling de navegación desde `App.tsx`; accesibilidad mínima (foco, roles ARIA, teclado); desktop-first sin responsive real (matizado: el *chrome* sí tiene drawer responsive); componentes pesados sin memoizar.
+- **Frontend — pantallas (§9):** ~2.229 líneas de **código muerto** (7 archivos, 4 páginas nunca montadas); diálogos nativos `confirm()`/`alert()` en 8 pantallas (inconsistente con los modales estilados); afford muertos en el Sidebar (workspace switcher, % de "Fijadas" hardcodeado); Tailwind usado en producción contra la regla del `CLAUDE.md`; mega-componentes (`ComprasTab` 2578, `TaskSheetView` 1923, `GanttTimeline` 1858); `fetchAlerts()` trae todas las alertas y filtra en el cliente; `AcceptInvitePage` acepta a ciegas.
 - **Cronograma:** tareas sin fechas quedan fuera del cálculo de ruta crítica sin aviso claro; la ruta crítica se recalcula en el front bajo demanda sin caché.
 - **Planilla/Gantt:** no se pueden reordenar columnas (selección atada al índice); el reorden de filas solo persiste en `localStorage`; la columna "Costo/Materiales" hace ida y vuelta al modal.
 - **Settings:** `ConfiguracionPage` concentra varias responsabilidades sin auditar como flujo.
@@ -207,7 +218,8 @@ Agrupados por área. Detalle y solución en el doc del módulo.
 | Config / Infra | 3 | 🔴 P0 | Secretos con default inseguro |
 | Base de datos | 2 | 🔴 P0 | `tenant_id` no denormalizado / nullable |
 | Tests / CI / Observabilidad | 6 | P1 | Sin tests, sin CI, sin tracking |
-| Frontend | 6 | P2 | Funcional; deuda de routing/a11y/responsive |
+| Frontend (transversal) | 6 | P2 | Funcional; deuda de routing/a11y/responsive |
+| Frontend — pantallas (§9) | 11 | 🟠 P1 | Alta calidad por pantalla; dato incorrecto en `AdminPage`, errores en silencio en `EquipoPage`, `BACKEND_URL` localhost; ~2.229 líneas muertas |
 
 ---
 
@@ -252,3 +264,60 @@ Para balancear: la auditoría también confirma decisiones sólidas.
 - **Frontend consistente:** inline styles con paleta unificada, tipografías definidas, componentes ricos (Gantt drag/resize, planilla estilo Sheets).
 
 El sistema está **cerca** de ser production-ready. Lo que lo separa es, sobre todo, el cluster de aislamiento por tenant y el arnés de tests/CI que lo mantenga cerrado.
+
+---
+
+## 9. Frontend — auditoría pantalla por pantalla
+
+Complemento del `analisis-modulo-frontend.md` (que auditó el front por temas transversales). Acá se recorrió **cada una de las 12 páginas y los ~35 componentes** leyendo el código real de las pantallas vivas, para responder "¿qué muestra cada pantalla, qué estados maneja, qué se rompe y qué le falta?". *(Método: lectura del código + barrido de señales — diálogos nativos, catches que tragan errores, `aria`/`role`, estados vacío/carga — + verificación de montaje contra `App.tsx`. Fecha: 2026-07-18.)*
+
+**Veredicto:** la calidad por pantalla es alta y consistente (estados de carga/error/vacío casi siempre, validaciones con mensajes accionables, lenguaje visual homogéneo). **No hay P0 de UI**: ningún gap rompe el flujo principal ni es de seguridad. Los hallazgos son de higiene de UX, consistencia, dato correcto y limpieza.
+
+### 9.1 Mapa de pantallas — vivas vs muertas
+
+Solo **8 de las 12 páginas están montadas** en `App.tsx` (routing por estado, sin URL). Las otras 4 son **código muerto** (nunca importadas), y arrastran 3 componentes muertos:
+
+| Módulo muerto | Tipo | Por qué |
+|---|---|---|
+| `pages/DashboardPage.tsx` (161) | Página | Nunca importada |
+| `pages/ObrasPage.tsx` (161) | Página | Nunca importada |
+| `pages/ResponsablesPage.tsx` (419) | Página | Nunca importada (el equipo per-obra vive en `ObraResponsablesTab`) |
+| `pages/PresupuestosPage.tsx` (556) | Página | Nunca importada |
+| `components/PresupuestoTab.tsx` (745) | Componente | El tab Presupuesto monta `ComprasTab`, no este |
+| `components/AlertsPanel.tsx` (108) | Componente | Solo lo usaba `DashboardPage` (muerta) |
+| `components/StatCard.tsx` (79) | Componente | Solo lo usaba `DashboardPage` (muerta) |
+
+**Total: ~2.229 líneas de código muerto en 7 archivos.** Verificado por grep de imports; borrarlos es un PR de limpieza de bajo riesgo (antes de borrar `ResponsablesPage`/`PresupuestosPage`, confirmar que su función está cubierta por `ObraResponsablesTab`/`ComprasTab` — lo está).
+
+Pantallas vivas: `LoginPage`, `AcceptInvitePage`, `PortfolioPage`, `ObraDetailPage` (+ tabs), `BitacoraPage`, `EquipoPage`, `AdminPage`, `ConfiguracionPage`.
+
+### 9.2 Qué funciona (por área)
+
+| Área | Highlights |
+|---|---|
+| **Auth** (`LoginPage`, `AcceptInvitePage`) | Login+registro con creación de tenant; errores por código (409/422); toggle password; validaciones con mensajes accionables |
+| **Portfolio** | KPI strip, filtros con contador, búsqueda, **3 estados vacíos** distintos, fallback de imagen, menú de estado por portal |
+| **Hub de obra** (`ObraDetailPage`) | Carga única con `Promise.all`, distingue 403 de error de red, sockets en vivo, skeletons, toggle planilla/tabla, panel de tareas críticas |
+| **Cronograma** (`Gantt`, planilla, `TaskFormModal`) | Drag/resize, cascade con preview, snapping a día laboral, grilla tipo Sheets, confirmación de cascade |
+| **Compras** (`ComprasTab`) | Sub-tabs, análisis comparativo de cotizaciones IA, modales de material/pedido, manejo de error |
+| **Bitácora IA** | Grabación→transcripción→sugerencias editables aplicables, estados con metadata clara, animaciones |
+| **Org/Admin/Config** | Barras de uso con umbrales de color, permisos por rol, índice de secciones sticky |
+| **UI transversal** | Top bar sticky, **drawer responsive real** (matiza el "sin responsive" del audit temático), `ErrorBoundary` doble, toasts, skeletons |
+
+### 9.3 Gaps de frontend por pantalla
+
+| # | Pantalla | Gap | Severidad |
+|---|----------|-----|:---------:|
+| F1 | `AdminPage` | La barra "Tareas totales en el sistema" compara el total contra `tasks_per_obra_limit` (límite **por obra**) → % y color engañosos (`AdminPage:147-152`) | 🟠 P1 |
+| F2 | `EquipoPage` | Cambio de rol y baja de miembro **fallan en silencio** (`catch { /* silent */ }`); la baja se ejecuta **sin confirmación** | 🟠 P1 |
+| F3 | `BitacoraPage` | `BACKEND_URL` cae a `http://localhost:8000` si falta `VITE_API_URL` → **audios rotos en producción** (`BitacoraPage:16`) | 🟠 P1 |
+| F4 | Gantt / planilla / modales | Accesibilidad casi nula: `GanttTimeline` (1858 líneas) **0** `aria`/`role`; `TaskSheetView` 1; modales sin foco atrapado / `Esc` consistente | 🟠 P1 |
+| F5 | `ObraDetailPage`, `AppLayout` | `fetchAlerts()` trae **todas** las alertas del tenant y filtra por obra en el cliente → costo en escala | 🟡 P2 |
+| F6 | 8 pantallas | Diálogos nativos `confirm()`/`alert()` para acciones destructivas conviviendo con modales estilados → inconsistencia (`PortfolioPage`, `TaskSheetView`, `ComprasTab`, `PlanosTab`, `ObraSetupWizard`, `BitacoraPage`, `InviteModal`) | 🟡 P2 |
+| F7 | Todas | **~2.229 líneas de código muerto** (§9.1) | 🟡 P2 |
+| F8 | `Sidebar` | Afford muertos: "workspace switcher" con chevron que **no cambia de workspace**; obras "Fijadas" con % **hardcodeado** por estado, no avance real | 🟡 P2 |
+| F9 | `LoginPage`, `AcceptInvitePage` | Sin "olvidé mi contraseña" (ya en P1 auth); `AcceptInvitePage` **acepta a ciegas** (no muestra quién invitó ni a qué empresa/email) | 🟡 P2 |
+| F10 | `CLAUDE.md` vs código | El front **sí usa Tailwind en producción** (`LoginPage`, `AppLayout`, clases `constructa-*`), contra la regla documentada "NO Tailwind" → doc y código no coinciden | 🟡 P2 |
+| F11 | `ComprasTab` (2578), `TaskSheetView` (1923), `GanttTimeline` (1858) | Mega-componentes: render + estado + interacción + API en un archivo, sin `React.memo` → mantenibilidad y jank en obras grandes | 🟡 P2 |
+
+> El detalle por pantalla (Qué funciona / Gaps con solución y esfuerzo) fue redactado en esta pasada; sus hallazgos quedan consolidados acá. Los mega-componentes (`ComprasTab`, `GanttTimeline`, `TaskSheetView`, `ConfiguracionPage`) se auditaron por estructura + señales + lo cubierto en `auditoria-ux.md`; una revisión línea por línea de su lógica interna queda como profundización opcional.
