@@ -10,7 +10,7 @@ class TaskBaseline(Base):
     id:               Mapped[int]           = mapped_column(primary_key=True)
     obra_id:          Mapped[int]           = mapped_column(ForeignKey("obras.id",  ondelete="CASCADE"), nullable=False, index=True)
     task_id:          Mapped[int]           = mapped_column(ForeignKey("tasks.id",  ondelete="CASCADE"), nullable=False, index=True)
-    tenant_id:        Mapped[int | None]    = mapped_column(ForeignKey("tenants.id"), nullable=True, index=True)  # denormalizado desde la obra
+    tenant_id:        Mapped[int]           = mapped_column(ForeignKey("tenants.id"), nullable=False, index=True)  # denormalizado desde la obra (Fase 2: NOT NULL)
     baseline_start:   Mapped[date | None]   = mapped_column(Date,  nullable=True)
     baseline_finish:  Mapped[date | None]   = mapped_column(Date,  nullable=True)
     saved_at:         Mapped[datetime]      = mapped_column(

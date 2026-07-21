@@ -14,9 +14,9 @@ class WorkingCalendar(Base):
         Integer, ForeignKey("obras.id", ondelete="CASCADE"),
         unique=True, nullable=False, index=True,
     )
-    # Denormalizado desde la obra (aislamiento por tenant sin join).
-    tenant_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("tenants.id"), nullable=True, index=True
+    # Denormalizado desde la obra (aislamiento por tenant sin join). NOT NULL (Fase 2).
+    tenant_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=False, index=True
     )
     # Bitmask: bit0=Lun, bit1=Mar, bit2=Mié, bit3=Jue, bit4=Vie, bit5=Sáb, bit6=Dom
     # Default 0b0111111 = Lun–Sáb (63)

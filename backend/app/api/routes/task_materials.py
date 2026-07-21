@@ -4,7 +4,6 @@ from sqlalchemy.orm import selectinload
 
 from app.core.deps import CurrentUser, DbSession
 from app.models.user import User
-from app.models.obra import Obra
 from app.models.responsible import Responsible
 from app.models.supplier import Supplier
 from app.models.task import Task
@@ -19,11 +18,10 @@ async def _get_task_or_404(task_id: int, db: DbSession, tenant_id: int | None = 
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    # Aislamiento multi-tenant: la tarea debe pertenecer a una obra del tenant.
-    if tenant_id is not None:
-        obra = await db.get(Obra, task.obra_id)
-        if obra is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
-            raise HTTPException(status_code=404, detail="Tarea no encontrada")
+    # Aislamiento multi-tenant: filtro directo por el tenant_id denormalizado de la
+    # tarea (Fase 2) — sin cargar la obra (single-column, no join).
+    if tenant_id is not None and task.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Tarea no encontrada")
     return task
 
 

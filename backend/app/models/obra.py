@@ -54,7 +54,7 @@ class Obra(Base):
         nullable=False,
     )
 
-    tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=False)
 
     manager: Mapped["User"] = relationship("User", back_populates="obras")
     tenant: Mapped["Tenant | None"] = relationship("Tenant", back_populates="obras", foreign_keys=[tenant_id])
