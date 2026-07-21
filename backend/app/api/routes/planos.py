@@ -2,8 +2,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
-from app.core.config import settings
 from app.core.deps import CurrentUser, DbSession
+from app.core.signing import signed_upload_url
 from app.models.plano import Plano
 from app.schemas.plano import PlanoRead
 from app.services.plano_service import MAX_BYTES, PlanoService
@@ -14,8 +14,8 @@ router = APIRouter(tags=["planos"])
 
 def _to_read(plano: Plano) -> PlanoRead:
     out = PlanoRead.model_validate(plano)
-    base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
-    return out.model_copy(update={"file_url": f"{base}/uploads/{plano.file_path}"})
+    # URL firmada (HMAC + expiración): los planos no se sirven públicamente.
+    return out.model_copy(update={"file_url": signed_upload_url(plano.file_path)})
 
 
 @router.post("/obras/{obra_id}/planos", response_model=PlanoRead, status_code=status.HTTP_201_CREATED)

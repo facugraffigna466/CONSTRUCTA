@@ -26,6 +26,7 @@ export interface BitacoraEntry {
   created_by: number | null;
   source: "web" | "whatsapp";
   audio_path: string | null;
+  audio_url: string | null;  // ruta relativa firmada (/uploads/<name>?exp=..&sig=..)
   transcript: string | null;
   summary: string | null;
   key_points: string[] | null;

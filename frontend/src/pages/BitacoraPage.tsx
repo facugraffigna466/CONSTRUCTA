@@ -303,9 +303,9 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
             style={{ overflow: "hidden" }}
           >
             <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-        {/* Audio player */}
-        {entry.audio_path && (
-          <audio controls src={`${BACKEND_URL}${entry.audio_path}`} style={{ width: "100%", height: 36 }} />
+        {/* Audio player — usa la URL firmada (audio_url); audio_path queda de fallback legacy */}
+        {(entry.audio_url || entry.audio_path) && (
+          <audio controls src={`${BACKEND_URL}${entry.audio_url ?? entry.audio_path}`} style={{ width: "100%", height: 36 }} />
         )}
 
         {/* Sin obra asignada */}
