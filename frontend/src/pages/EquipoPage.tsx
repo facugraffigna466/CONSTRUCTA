@@ -26,6 +26,13 @@ export function EquipoPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [members, setMembers]       = useState<ApiUser[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [error, setError]           = useState<string | null>(null);
+  const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
+
+  function apiError(e: unknown, fallback: string): string {
+    const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+    return typeof detail === "string" ? detail : fallback;
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -71,6 +78,18 @@ export function EquipoPage() {
           </button>
         )}
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 10,
+          padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#A82B2B", fontWeight: 500,
+        }}>
+          <span>{error}</span>
+          <button onClick={() => setError(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#A82B2B", fontSize: 16, lineHeight: 1, padding: 0 }} title="Cerrar">×</button>
+        </div>
+      )}
 
       {/* Members table */}
       <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
@@ -126,10 +145,18 @@ export function EquipoPage() {
                     value={m.role}
                     onChange={async (e) => {
                       const newRole = e.target.value as "admin" | "collaborator";
+                      const prevRole = m.role;
+                      setError(null);
+                      // optimista
+                      setMembers(p => p.map(x => x.id === m.id ? { ...x, role: newRole } : x));
                       try {
                         const updated = await updateMemberRole(m.id, newRole);
                         setMembers(p => p.map(x => x.id === m.id ? { ...x, role: updated.role } : x));
-                      } catch { /* silent */ }
+                      } catch (err) {
+                        // revertir + avisar
+                        setMembers(p => p.map(x => x.id === m.id ? { ...x, role: prevRole } : x));
+                        setError(apiError(err, "No se pudo cambiar el rol del miembro."));
+                      }
                     }}
                     style={{
                       fontSize: 11, fontWeight: 600, borderRadius: 99, padding: "2px 9px",
@@ -147,22 +174,41 @@ export function EquipoPage() {
                 )}
 
                 {canRemove && m.role !== "admin" && !isMe && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await removeMember(m.id);
-                        setMembers(p => p.filter(x => x.id !== m.id));
-                      } catch { /* silent */ }
-                    }}
-                    title="Eliminar miembro"
-                    style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.line}`, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.text3, flexShrink: 0, transition: ".12s" }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#FCE5E5"; (e.currentTarget as HTMLElement).style.color = "#D03A3A"; (e.currentTarget as HTMLElement).style.borderColor = "#F5BCBC"; }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = C.text3; (e.currentTarget as HTMLElement).style.borderColor = C.line; }}
-                  >
-                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                      <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                    </svg>
-                  </button>
+                  confirmRemoveId === m.id ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                      <span style={{ fontSize: 11.5, color: C.text2 }}>¿Quitar?</span>
+                      <button
+                        onClick={async () => {
+                          setError(null);
+                          try {
+                            await removeMember(m.id);
+                            setMembers(p => p.filter(x => x.id !== m.id));
+                          } catch (err) {
+                            setError(apiError(err, "No se pudo quitar al miembro."));
+                          } finally {
+                            setConfirmRemoveId(null);
+                          }
+                        }}
+                        style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 7, border: "none", background: "#D03A3A", color: "#fff", cursor: "pointer" }}
+                      >Sí</button>
+                      <button
+                        onClick={() => setConfirmRemoveId(null)}
+                        style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 7, border: `1px solid ${C.line}`, background: "#fff", color: C.text2, cursor: "pointer" }}
+                      >No</button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setError(null); setConfirmRemoveId(m.id); }}
+                      title="Quitar miembro"
+                      style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.line}`, background: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: C.text3, flexShrink: 0, transition: ".12s" }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "#FCE5E5"; (e.currentTarget as HTMLElement).style.color = "#D03A3A"; (e.currentTarget as HTMLElement).style.borderColor = "#F5BCBC"; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = C.text3; (e.currentTarget as HTMLElement).style.borderColor = C.line; }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+                        <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  )
                 )}
               </div>
             );
