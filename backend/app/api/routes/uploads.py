@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.core.config import settings
 from app.core.deps import CurrentUserId
 
 UPLOADS_DIR = Path(__file__).parent.parent.parent.parent / "uploads"
@@ -11,8 +12,6 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 
 ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_BYTES = 5 * 1024 * 1024  # 5 MB
-
-BACKEND_URL = "http://localhost:8000"
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 
@@ -37,7 +36,10 @@ async def upload_image(
     filename = f"{uuid.uuid4().hex}.{ext}"
     (UPLOADS_DIR / filename).write_bytes(content)
 
-    url = f"{BACKEND_URL}/uploads/{filename}"
-    return JSONResponse({"url": url})
+    # URL absoluta desde la config (en prod, PUBLIC_BASE_URL = URL real del backend).
+    # Fallback a localhost solo para dev. Antes estaba hardcodeado a localhost, lo que
+    # dejaba las imágenes de obra/avatar rotas en producción (se guarda esta URL en la DB).
+    base = (settings.PUBLIC_BASE_URL or "http://localhost:8000").rstrip("/")
+    return JSONResponse({"url": f"{base}/uploads/{filename}"})
 
 

@@ -35,8 +35,11 @@ def test_signature_rejects_tampering():
     parts = dict(kv.split("=") for kv in q.split("&"))
     # firma de OTRO archivo no sirve para este
     assert verify_download("otro.pdf", parts["exp"], parts["sig"]) is False
-    # firma corrupta
-    assert verify_download("plano.pdf", parts["exp"], parts["sig"][:-1] + "0") is False
+    # firma corrupta — cambiar el último char por uno GARANTIZADO distinto
+    # (antes usaba "0" fijo → flaky ~1/16 cuando la firma ya terminaba en "0").
+    last = parts["sig"][-1]
+    bad_sig = parts["sig"][:-1] + ("1" if last != "1" else "2")
+    assert verify_download("plano.pdf", parts["exp"], bad_sig) is False
     # sin firma
     assert verify_download("plano.pdf", None, None) is False
 
