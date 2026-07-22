@@ -216,7 +216,7 @@ On partial failure, fall back to `loadData(true)` to re-sync state.
 
 ### AR-04 — Unread Count Badge
 The "Alertas" tab always shows an unread badge when `alerts.filter(a => !a.is_read).length > 0`.
-The Resumen tab shows a StatCard "Alertas activas" with this count.
+The Resumen tab shows a KPI tile "Alertas activas" with this count.
 Both must stay in sync — they read from the same `alerts` state in `ObraDetailPage`.
 
 ---
@@ -543,9 +543,8 @@ All repositories share the same session injected at service construction. No ext
 **Adding a new alert type:**
 1. Add the value to `AlertType` enum in `backend/app/models/alert.py`
 2. Add the DB enum value via Alembic migration (enum changes require explicit migration)
-3. Add `type_label` and `TYPE_STYLE` entries in `frontend/src/components/AlertasTab.tsx`
-4. Add the same entry to `AlertsPanel.tsx` (used in the Resumen tab preview)
-5. Add the type to `AlertType` in `frontend/src/types/index.ts`
+3. Add `type_label` and `TYPE_STYLE` entries in `frontend/src/components/AlertasTab.tsx` (única fuente del estilo por tipo; ResumenTab solo muestra el conteo)
+4. Add the type to `AlertType` in `frontend/src/types/index.ts`
 
 **Reflecting in frontend:**
 After any mutation that triggers this rule, the frontend calls `loadData(true)`, which re-fetches `fetchAlerts()`. The new alert appears automatically. No frontend code change needed unless you added a new `AlertType`.
@@ -575,9 +574,9 @@ For a frontend change:
 |---|---|---|
 | `TaskService.apply_status_update` | Chatbot pipeline, historial, alerts | Test full WhatsApp → webhook → DB → alert flow |
 | `ResponsibleService.deactivate` | Task unassignment cascade, historial | Verify tasks become `responsible_id = null`, events logged |
-| `loadData` in `ObraDetailPage` | All 5 tabs, StatCards, unread badge | Open each tab and verify counts after mutation |
+| `loadData` in `ObraDetailPage` | All 5 tabs, KPI tiles, unread badge | Open each tab and verify counts after mutation |
 | `TaskFormModal` responsible dropdown | Inactive responsible guard (FS-06) | Deactivate responsible, reopen edit modal, verify warning |
-| `AlertType` enum | DB migration required, frontend badge styles | Check `AlertasTab.tsx` and `AlertsPanel.tsx` TYPE_STYLE |
+| `AlertType` enum | DB migration required, frontend badge styles | Check `AlertasTab.tsx` TYPE_STYLE |
 | `Task` or `Responsible` schema `Read` | All API responses, frontend `types/index.ts` | Align `TaskRead` fields with `Task` type in `types/index.ts` |
 
 **Step 3 — The chatbot pipeline is the most fragile path.**

@@ -9,7 +9,7 @@ description: Use when adding, modifying, or debugging the alert generation syste
 - Adding a new risk detection condition to `AlertService.evaluate_task_risks_for_obra()`
 - Modifying alert deduplication logic
 - Changing when `task_blocked` alerts are created
-- Modifying `AlertsPanel.tsx` or `AlertasTab.tsx` to display a new alert type
+- Modifying `AlertasTab.tsx` to display a new alert type
 - Debugging why alerts are not being generated or are duplicated
 - Adding alert-related historial events
 
@@ -25,8 +25,8 @@ backend/app/repositories/alert.py                   — create_alert(), exists_u
 backend/app/services/alert_service.py               — evaluate_task_risks_for_obra(), mark_read()
 backend/app/services/task_service.py                — apply_status_update() — where TASK_BLOCKED is created
 backend/app/api/routes/tasks.py                     — GET /tasks/obra/{obra_id} triggers risk evaluation
-frontend/src/components/AlertasTab.tsx              — full alert view with filter/type badges
-frontend/src/components/AlertsPanel.tsx             — alert preview (max 5) in ResumenTab
+frontend/src/components/AlertasTab.tsx              — full alert view with filter/type badges (ÚNICA fuente del TYPE_STYLE por tipo)
+frontend/src/components/ResumenTab.tsx              — KPI "Alertas activas" (solo el conteo de no leídas; no renderiza por tipo)
 frontend/src/types/index.ts                         — AlertType type
 frontend/src/api/alerts.ts                          — fetchAlerts(), markAlertRead()
 docs/skills.md                                      — AR-01 through AR-04
@@ -132,7 +132,7 @@ Without this, every page load regenerates the same alert.
      new_type:     "border-constructa-info ...",  // ← add
    };
    ```
-3. Add same entry to `AlertsPanel.tsx` which also has a `TYPE_STYLE` map
+3. El `TYPE_STYLE` por tipo vive únicamente en `AlertasTab.tsx` (ResumenTab solo muestra el conteo) — no hay segunda copia que sincronizar
 4. Run `npm run build`
 
 ### Adding a new risk condition to evaluate_task_risks_for_obra()
@@ -164,9 +164,9 @@ Without this, every page load regenerates the same alert.
 
 ### Modifying alert display in the frontend
 
-1. Read `AlertasTab.tsx` — it has filter pills (todas/no_leidas/leidas) and per-alert card rendering
-2. Read `AlertsPanel.tsx` — it's the preview in ResumenTab (max 5 alerts)
-3. Changes to the alert card layout must be made in BOTH files to stay consistent
+1. Read `AlertasTab.tsx` — it has filter pills (todas/no_leidas/leidas) and per-alert card rendering (única vista por tipo)
+2. `ResumenTab.tsx` solo muestra el KPI de conteo ("Alertas activas") — no renderiza tarjetas por tipo
+3. El layout de las tarjetas de alerta vive solo en `AlertasTab.tsx`
 4. Badge type labels use the `type_label` map — update it
 5. Color/border uses `TYPE_STYLE` — update both files
 
@@ -201,7 +201,7 @@ cd frontend && npm run build
 | Missing dedup check before `create_alert()` | Alert duplicates on every page load | Always call `exists_unread_for_task()` or `exists_unread_for_obra()` first |
 | Adding enum value without Alembic migration | DB error on insert | Run `ALTER TYPE alerttype ADD VALUE '...'` in a new migration |
 | Updating `AlertType` in only one file (models or types) | Type mismatch between DB and frontend | Update both `alert.py` model and `types/index.ts` |
-| Updating badge style in `AlertasTab` but not `AlertsPanel` | Inconsistent look between full view and preview | Both files have `TYPE_STYLE` — update both |
+| Buscar un segundo `TYPE_STYLE` para sincronizar | Ya no existe: `AlertsPanel` fue eliminado (código muerto); el estilo por tipo vive solo en `AlertasTab.tsx` | Actualizar solo `AlertasTab.tsx` |
 | Creating alerts in a route handler | Breaks service-layer separation | Move to `AlertService` or the appropriate service |
 | Auto-modifying tasks when alert is generated | DR-05 violation | Alerts are passive — no side effects on tasks |
 
@@ -228,7 +228,6 @@ What alert behavior was added or changed.
 - `backend/app/services/alert_service.py`
 - `frontend/src/types/index.ts`
 - `frontend/src/components/AlertasTab.tsx`
-- `frontend/src/components/AlertsPanel.tsx`
 - (list others)
 
 ### Problems found
