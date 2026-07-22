@@ -1696,3 +1696,25 @@ Existe un borrador de corrección de los IDOR (guards de tenant) + un primer arn
 
 ### Validation
 Documentación pura (sin cambios de código de producto). Cobertura verificada 26/26 rutas.
+
+---
+
+## 2026-07-18 — Remediación del cluster P0 de seguridad (14/15 cerrados)
+
+Se cerró y mergeó a `main` **todo el cluster P0 de aislamiento por tenant** del informe consolidado de auditoría, en una serie de PRs enfocados. Cada uno con tests y verificado por CI.
+
+### Qué se cerró
+- **13 IDOR cross-tenant** (#3–#13): guards de tenant en cada endpoint hijo de obra/tarea (tasks, materiales, solicitudes, obra_team, exports, planos, historial, alerts, calendar, baseline) + `socket_manager` que conecta solo a las salas del tenant. Arnés `tests/test_tenant_isolation.py`.
+- **#1 uploads/planos/audios sin auth**: URLs firmadas HMAC + expiración (`app/core/signing.py`); la ruta `/uploads` exige firma para no-imágenes (planos/audio); imágenes de portada/avatar siguen públicas (uuid4). `tests/test_upload_signing.py`.
+- **#5 `INTERNAL_API_KEY`**: ya fallaba cerrado (401 si vacío) — sin cambio.
+- **#15 SSE/JWT en query**: se removió el endpoint SSE (`events.py` + `sse_manager`) — era **código muerto** (el front usa Socket.IO); elimina el token de la query.
+- **#2 causa raíz — denormalización de `tenant_id`**:
+  - **Fase 1** (mig. 0040): columna `tenant_id` (nullable, FK, index) en 8 tablas hijas + backfill desde la obra + keep-in-sync (`app/core/tenant_denorm.py` en los ~10 sitios de creación). `tests/test_tenant_denorm.py`.
+  - **Fase 2** (mig. 0041): `tenant_id NOT NULL` en obras + 6 hijas siempre-parentadas (alerts/historial quedan nullable por su `obra_id` nullable) + guard de `task_materials` filtrando por `task.tenant_id` directo (single-`WHERE`, sin join).
+- **CI** (GitHub Actions, `.github/workflows/ci.yml`): corre los 16 tests + build del front en cada push/PR → ningún endpoint nuevo reintroduce un IDOR.
+
+### Único punto abierto — #14 (parcial)
+El IDOR de responsables se cerró. El `whatsapp_number` **único-global** NO se volvió per-tenant: es la clave de ruteo del WhatsApp entrante (número Twilio compartido → el `From` es la única señal de tenant). Volverlo per-tenant exige un número por tenant → **decisión de arquitectura de producto**, documentada como limitación en el audit.
+
+### Validation
+`import app.main` ✓ · **pytest 16/16** ✓ · build del front ✓ (CI en verde). Migraciones 0040/0041 se validan con `alembic upgrade` sobre Postgres (los tests usan `create_all`). Doc de auditoría (`auditoria-sistema-consolidada.md`) actualizado con el estado de resolución (§1/§4/§7).
