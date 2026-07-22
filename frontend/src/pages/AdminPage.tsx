@@ -144,12 +144,21 @@ export function AdminPage() {
             <UsageBar label="Usuarios" icon={<Users size={14} />} current={usage.users_count} limit={usage.users_limit} />
           </div>
 
+          {/* El plan limita tareas POR OBRA, no el total del sistema → mostrar el total
+              como dato informativo (sin barra/límite global) y aclarar el límite por obra. */}
           <UsageBar
-            label="Tareas totales en el sistema"
+            label="Tareas totales (todas las obras)"
             icon={<Zap size={14} />}
             current={usage.tasks_count}
-            limit={usage.tasks_per_obra_limit}
+            limit={null}
           />
+          <p style={{ margin: "8px 2px 0", fontSize: 12.5, color: C.text2 }}>
+            Tu plan permite hasta{" "}
+            <b style={{ color: C.text }}>
+              {usage.tasks_per_obra_limit ?? "ilimitadas"}
+            </b>{" "}
+            tareas por obra.
+          </p>
 
           {/* Upgrade CTA */}
           {(usage.obras_limit !== null || usage.users_limit !== null) && (
