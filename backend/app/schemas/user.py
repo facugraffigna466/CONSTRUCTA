@@ -61,5 +61,14 @@ class AcceptInviteRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=8)
+
+
 class RoleUpdateRequest(BaseModel):
     role: Literal["admin", "collaborator"]

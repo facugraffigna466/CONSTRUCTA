@@ -11,6 +11,7 @@ from app.repositories.user import UserRepository
 from app.schemas.user import AcceptInviteRequest, InviteRequest, UserCreate
 
 INVITE_TTL_HOURS = 72
+RESET_TTL_HOURS = 1
 
 
 class AuthService:
@@ -95,5 +96,36 @@ class AuthService:
             is_active=True,
             invitation_token=None,
             invitation_expires_at=None,
+        )
+        return create_access_token(user.id)
+
+    async def request_password_reset(self, email: str) -> tuple[User, str] | None:
+        """Genera un token de reset para un usuario activo. Devuelve (user, token) o None
+        si el email no existe / está inactivo (el caller NO revela cuál es el caso)."""
+        user = await self.repo.get_by_email(email)
+        if not user or not user.is_active:
+            return None
+        token = secrets.token_urlsafe(32)
+        expires = datetime.now(timezone.utc) + timedelta(hours=RESET_TTL_HOURS)
+        await self.repo.update_fields(user.id, reset_token=token, reset_token_expires=expires)
+        return user, token
+
+    async def reset_password(self, token: str, new_password: str) -> str:
+        """Valida el token, setea la nueva contraseña y devuelve un access token (login)."""
+        user = await self.repo.get_by_reset_token(token)
+        if not user:
+            raise HTTPException(status_code=400, detail="El enlace de recuperación es inválido")
+        exp = user.reset_token_expires
+        if exp is not None:
+            # SQLite devuelve datetimes naive; normalizar a UTC-aware antes de comparar.
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="El enlace de recuperación expiró")
+        await self.repo.update_fields(
+            user.id,
+            hashed_password=hash_password(new_password),
+            reset_token=None,
+            reset_token_expires=None,
         )
         return create_access_token(user.id)
