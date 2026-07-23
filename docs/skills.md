@@ -358,10 +358,9 @@ Use this when adding a new tab to `ObraDetailPage`, a new panel to the Resumen t
 
 **Adding a new tab to ObraDetailPage:**
 
-1. **Define the tab ID** in `ObraDetailPage.tsx`:
+1. **Add the tab ID** to the `ObraTab` type in `frontend/src/types/index.ts` (NO hay un array `TABS`: un tab = este tipo + un `case` en `renderTab()` + un `NavItem` en el Sidebar):
    ```tsx
-   type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial" | "nueva_tab";
-   const TABS = [..., { id: "nueva_tab", label: "Nueva Tab" }];
+   export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial" | "presupuesto" | "planos" | "nueva_tab";
    ```
 
 2. **Create the component** in `frontend/src/components/NuevaTab.tsx`.
@@ -377,13 +376,19 @@ Use this when adding a new tab to `ObraDetailPage`, a new panel to the Resumen t
 3. **Never fetch inside the tab component.** All data comes from `ObraDetailPage` props.
    If the tab needs data not yet fetched in `loadData`, add the fetch call to `loadData` in `ObraDetailPage.tsx`, not in the tab.
 
-4. **Wire the case** in `renderTab()`:
+4. **Wire the case** in `renderTab()` (in `ObraDetailPage.tsx`):
    ```tsx
    case "nueva_tab":
      return <NuevaTab tasks={tasks} responsibles={responsibles} onRefresh={() => loadData(true)} />;
    ```
 
-5. **After any mutation in the tab**, call `onRefresh()` — never update state locally in the tab.
+5. **Add the nav item** in `frontend/src/components/layout/Sidebar.tsx` (obra section, junto a Resumen/Tareas/…):
+   ```tsx
+   <NavItem label="Nueva Tab" active={activePage === "panel" && activeTab === "nueva_tab"}
+            onClick={() => onTabChange("nueva_tab")} icon={<SomeIcon style={ICON_SIZE} />} />
+   ```
+
+6. **After any mutation in the tab**, call `onRefresh()` — never update state locally in the tab.
 
 **Component structure rules:**
 
