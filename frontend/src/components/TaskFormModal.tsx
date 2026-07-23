@@ -7,6 +7,7 @@ import { TaskMaterialsSection, type DraftMaterial } from "./TaskMaterialsSection
 import { TaskBitacoraOrigin } from "./TaskBitacoraOrigin";
 import { createMaterial } from "../api/taskMaterials";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
+import { useDialog } from "../hooks/useDialog";
 import type { DependencyType, Responsible, Task } from "../types";
 
 type DepLink = { depends_on_id: number; dependency_type: DependencyType; lag_days: number };
@@ -113,6 +114,8 @@ export function TaskFormModal({
   onClose,
   onSaved,
 }: TaskFormModalProps) {
+  // escClose:false → el Esc en capas propio (cierra subdiálogos primero) sigue mandando.
+  const dialogRef = useDialog(onClose, { escClose: false });
   useEffect(() => {
     if (mode === "edit" && task) {
       emitStartEditing(task.id, obraId);
@@ -301,7 +304,7 @@ export function TaskFormModal({
       overflowY: "auto",
       overscrollBehavior: "contain",
     }}>
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={mode === "edit" ? "Editar tarea" : "Nueva tarea"} style={{
         background: "#fff",
         borderRadius: 18,
         width: "100%",

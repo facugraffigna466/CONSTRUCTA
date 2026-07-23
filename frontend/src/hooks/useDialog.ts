@@ -2,20 +2,36 @@ import { useEffect, useRef } from "react";
 
 /**
  * Accesibilidad para modales/diálogos:
- * - **Esc** cierra (llama `onClose`).
+ * - **Esc** cierra (llama `onClose`), salvo `escClose: false`.
  * - **Foco atrapado**: Tab/Shift+Tab cicla solo dentro del diálogo.
  * - **Autofoco** al abrir (primer elemento focusable, o el panel).
  * - **Restaura el foco** al elemento que estaba activo antes de abrir.
+ * - **Anidamiento**: una pila global asegura que solo el diálogo de ARRIBA
+ *   maneje Esc y atrape el foco (evita que un modal anidado cierre al de abajo).
  *
  * Uso: `const ref = useDialog(onClose)` y en el panel:
  * `ref={ref} role="dialog" aria-modal="true" aria-label="..."` (o aria-labelledby).
  */
-export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () => void) {
+
+// Pila global de diálogos abiertos (el último es el de arriba).
+const dialogStack: symbol[] = [];
+
+export function useDialog<T extends HTMLElement = HTMLDivElement>(
+  onClose: () => void,
+  opts: { escClose?: boolean } = {},
+) {
+  const { escClose = true } = opts;
   const ref = useRef<T>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const escRef = useRef(escClose);
+  escRef.current = escClose;
 
   useEffect(() => {
+    const id = Symbol("dialog");
+    dialogStack.push(id);
+    const isTop = () => dialogStack[dialogStack.length - 1] === id;
+
     const prevFocus = document.activeElement as HTMLElement | null;
     const node = ref.current;
 
@@ -35,7 +51,8 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () =>
     (focusables()[0] ?? node)?.focus();
 
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+      if (!isTop()) return; // solo el diálogo de arriba responde
+      if (e.key === "Escape" && escRef.current) {
         e.stopPropagation();
         onCloseRef.current();
         return;
@@ -63,6 +80,8 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(onClose: () =>
     document.addEventListener("keydown", onKey, true);
     return () => {
       document.removeEventListener("keydown", onKey, true);
+      const i = dialogStack.indexOf(id);
+      if (i !== -1) dialogStack.splice(i, 1);
       prevFocus?.focus?.();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
