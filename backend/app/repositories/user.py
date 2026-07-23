@@ -20,6 +20,12 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_reset_token(self, token: str) -> User | None:
+        result = await self.session.execute(
+            select(User).where(User.reset_token == token)
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_whatsapp(self, number: str) -> User | None:
         result = await self.session.execute(
             select(User).where(User.whatsapp_number == number, User.is_active.is_(True))

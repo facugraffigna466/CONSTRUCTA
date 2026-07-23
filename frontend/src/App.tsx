@@ -6,6 +6,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { ActivityToast } from "./components/ActivityToast";
 import { ObraSetupWizard } from "./components/ObraSetupWizard";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 import { BitacoraPage } from "./pages/BitacoraPage";
 import { AdminPage } from "./pages/AdminPage";
 import { ConfiguracionPage } from "./pages/ConfiguracionPage";
@@ -23,6 +24,12 @@ import type { AlertFocusField } from "./pages/ObraDetailPage";
 // Extract invite token from URL if present: /invite/{token}
 function getInviteToken(): string | null {
   const match = window.location.pathname.match(/^\/invite\/(.+)$/);
+  return match ? match[1] : null;
+}
+
+// Extract reset token from URL if present: /reset-password/{token}
+function getResetToken(): string | null {
+  const match = window.location.pathname.match(/^\/reset-password\/(.+)$/);
   return match ? match[1] : null;
 }
 
@@ -76,6 +83,20 @@ function App() {
   }, [authed, userLoading, selectedObra, activePage]);
 
   const inviteToken                     = getInviteToken();
+  const resetToken                      = getResetToken();
+
+  // Reset-password flow — intercept before anything else
+  if (resetToken) {
+    return (
+      <ResetPasswordPage
+        token={resetToken}
+        onDone={(accessToken) => {
+          setToken(accessToken);
+          window.location.href = "/"; // limpia la URL /reset-password/... y entra a la app
+        }}
+      />
+    );
+  }
 
   // Invite flow — intercept before anything else
   if (inviteToken) {

@@ -157,3 +157,29 @@ async def send_email(to_email: str, subject: str, html: str, text: str = "") -> 
     except requests.RequestException as exc:
         logger.error("Brevo send failed to %s: %s", to_email, exc)
         return False
+
+
+def _build_reset_html(reset_url: str) -> str:
+    return f"""\
+<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A2329;">
+  <h1 style="font-size:20px;margin:0 0 8px;">Recuperá tu contraseña</h1>
+  <p style="font-size:14px;line-height:1.5;color:#5B6770;margin:0 0 20px;">
+    Recibimos un pedido para restablecer la contraseña de tu cuenta de Constructa.
+    Hacé clic en el botón para elegir una nueva. Si no fuiste vos, ignorá este mensaje.
+  </p>
+  <a href="{reset_url}" style="display:inline-block;background:#FF6B35;color:#fff;text-decoration:none;
+     font-weight:600;padding:12px 22px;border-radius:10px;font-size:14px;">Restablecer contraseña</a>
+  <p style="font-size:12px;color:#8E97A0;margin:20px 0 0;">
+    O copiá este enlace: <a href="{reset_url}" style="color:#FF6B35;word-break:break-all;">{reset_url}</a><br>
+    El enlace expira en 1 hora.
+  </p>
+</div>"""
+
+
+async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
+    return await send_email(
+        to_email,
+        subject="Recuperá tu contraseña — Constructa",
+        html=_build_reset_html(reset_url),
+        text=f"Restablecé tu contraseña de Constructa en: {reset_url}\n\nEl enlace expira en 1 hora.",
+    )

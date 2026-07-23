@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { login, register } from "../api/auth";
+import { login, register, requestPasswordReset } from "../api/auth";
 import { setToken } from "../lib/tokenStorage";
 import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, ArrowRightIcon, UserIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
 import { MessageCircle, BarChart2, Bell, FileUp } from "lucide-react";
@@ -10,7 +10,8 @@ interface LoginPageProps {
 
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
+  const [forgotSent, setForgotSent] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -25,9 +26,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     return () => clearTimeout(t);
   }, []);
 
-  function switchMode(m: "login" | "register") {
+  function switchMode(m: "login" | "register" | "forgot") {
     setMode(m);
     setError(null);
+    setForgotSent(false);
   }
 
   async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
@@ -35,6 +37,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     setError(null);
     setLoading(true);
     try {
+      if (mode === "forgot") {
+        await requestPasswordReset(email);
+        setForgotSent(true);
+        return;
+      }
       if (mode === "register") {
         if (fullName.trim().length < 2) {
           setError("Ingresá tu nombre completo.");
@@ -191,12 +198,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           {/* Heading */}
           <div className="mb-8">
             <h2 className="font-display text-2xl xl:text-3xl font-bold text-constructa-text tracking-tight mb-1.5">
-              {mode === "login" ? "Accedé al sistema" : "Creá tu cuenta"}
+              {mode === "login" ? "Accedé al sistema" : mode === "forgot" ? "Recuperá tu contraseña" : "Creá tu cuenta"}
             </h2>
             <p className="text-sm text-constructa-secondaryText">
               {mode === "login"
                 ? "Ingresá tus credenciales para continuar."
-                : "Tu empresa, tus obras, tu equipo — en 30 segundos."}
+                : mode === "forgot"
+                  ? "Ingresá tu email y te enviamos un enlace para elegir una nueva."
+                  : "Tu empresa, tus obras, tu equipo — en 30 segundos."}
             </p>
           </div>
 
@@ -265,7 +274,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
 
-            {/* Password */}
+            {/* Password — oculto en modo "olvidé mi contraseña" */}
+            {mode !== "forgot" && (
             <div>
               <label className="block font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-constructa-secondaryText mb-2">
                 Contraseña
@@ -296,6 +306,20 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 </button>
               </div>
             </div>
+            )}
+
+            {/* Éxito del envío de recuperación */}
+            {mode === "forgot" && forgotSent && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                background: "#E4F3EC", border: "1px solid #BFE3CE",
+                borderRadius: 10, padding: "12px 14px",
+              }}>
+                <span style={{ fontSize: 13, color: "#136E47", fontWeight: 500 }}>
+                  Si el email existe, te enviamos un enlace para recuperar tu contraseña. Revisá tu correo.
+                </span>
+              </div>
+            )}
 
             {/* Error */}
             {error && (
@@ -326,24 +350,45 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
                     </svg>
-                    {mode === "register" ? "Creando cuenta..." : "Ingresando..."}
+                    {mode === "register" ? "Creando cuenta..." : mode === "forgot" ? "Enviando..." : "Ingresando..."}
                   </span>
                 ) : (
                   <>
-                    {mode === "register" ? "Crear cuenta y empezar" : "Ingresar"}
+                    {mode === "register" ? "Crear cuenta y empezar" : mode === "forgot" ? "Enviar enlace" : "Ingresar"}
                     <ArrowRightIcon className="w-4 h-4" />
                   </>
                 )}
               </button>
               {mode === "login" ? (
+                <>
+                  <p className="text-center text-xs text-constructa-secondaryText mt-3 mb-0">
+                    <button
+                      type="button"
+                      onClick={() => switchMode("forgot")}
+                      className="text-constructa-primary font-semibold hover:underline"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </p>
+                  <p className="text-center text-xs text-constructa-secondaryText mt-2 mb-0">
+                    ¿Primera vez en CONSTRUCTA?{" "}
+                    <button
+                      type="button"
+                      onClick={() => switchMode("register")}
+                      className="text-constructa-primary font-semibold hover:underline"
+                    >
+                      Creá la cuenta de tu empresa
+                    </button>
+                  </p>
+                </>
+              ) : mode === "forgot" ? (
                 <p className="text-center text-xs text-constructa-secondaryText mt-3 mb-0">
-                  ¿Primera vez en CONSTRUCTA?{" "}
                   <button
                     type="button"
-                    onClick={() => switchMode("register")}
+                    onClick={() => switchMode("login")}
                     className="text-constructa-primary font-semibold hover:underline"
                   >
-                    Creá la cuenta de tu empresa
+                    Volver a ingresar
                   </button>
                 </p>
               ) : (
