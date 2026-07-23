@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
+import { useDialog } from "../hooks/useDialog";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { createResponsible, lookupResponsibleByWhatsapp } from "../api/responsibles";
 import { addObraTeamMember } from "../api/obraTeam";
@@ -837,6 +838,8 @@ export interface ObraSetupWizardProps {
 }
 
 export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
+  // foco atrapado + role=dialog; Esc cierra con la guarda de "descartar cambios" (safeClose, hoisted).
+  const dialogRef = useDialog(safeClose);
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
@@ -1011,7 +1014,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
         padding: 16,
       }}
     >
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Nueva obra" style={{
         background: "#fff", width: "100%", maxWidth: 680,
         borderRadius: 18, display: "flex", flexDirection: "column",
         height: "90vh", overflow: "hidden",

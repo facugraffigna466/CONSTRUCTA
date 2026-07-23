@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
 import type { UserRole } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
+import { useDialog } from "../hooks/useDialog";
 import { fetchMembers, inviteMember, removeMember } from "../api/users";
 import type { ApiUser } from "../api/users";
 
@@ -32,6 +33,7 @@ export function InviteModal({ onClose }: Props) {
   const { user } = useUser();
   const canInvite = usePermission("miembro.invite");
   const canRemove = usePermission("miembro.remove");
+  const dialogRef = useDialog(onClose);
 
   const [members, setMembers]     = useState<ApiUser[]>([]);
   const [loadingM, setLoadingM]   = useState(true);
@@ -115,7 +117,7 @@ export function InviteModal({ onClose }: Props) {
         padding: 24,
       }}
     >
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Invitar miembros" style={{
         background: C.surface, borderRadius: 16,
         width: "100%", maxWidth: 500,
         maxHeight: "88vh", overflow: "hidden",

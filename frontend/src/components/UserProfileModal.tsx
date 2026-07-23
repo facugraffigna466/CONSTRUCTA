@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useUser } from "../context/UserContext";
 import { changePassword, updateProfile, uploadAvatar } from "../api/users";
 import { normalizePhone } from "../utils/phone";
+import { useDialog } from "../hooks/useDialog";
 
 interface Props {
   onClose: () => void;
@@ -35,6 +36,7 @@ function blurStyle(el: HTMLInputElement | HTMLTextAreaElement, hasError = false)
 
 export function UserProfileModal({ onClose }: Props) {
   const { user, refetch } = useUser();
+  const dialogRef = useDialog(onClose);
   const [tab, setTab] = useState<Tab>("perfil");
 
   // ── Perfil tab ──────────────────────────────────────────────────────────────
@@ -121,7 +123,7 @@ export function UserProfileModal({ onClose }: Props) {
         display: "flex", alignItems: "center", justifyContent: "center", padding: 24,
       }}
     >
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Mi perfil" style={{
         background: C.surface, borderRadius: 18, width: "100%", maxWidth: 480,
         maxHeight: "90vh", overflow: "hidden", display: "flex", flexDirection: "column",
         boxShadow: "0 24px 64px -12px rgba(0,0,0,0.30)", border: `1px solid ${C.line}`,

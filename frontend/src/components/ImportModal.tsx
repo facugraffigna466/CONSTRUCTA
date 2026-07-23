@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { confirmImport, detectMapping, previewImport, type AiMappingResult, type ImportPreviewRow } from "../api/imports";
 import { downloadTemplateExcel } from "../api/exports";
+import { useDialog } from "../hooks/useDialog";
 import { Sparkles, Database, Zap } from "lucide-react";
 
 interface Props {
@@ -34,15 +35,8 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
   const [showRemap, setShowRemap] = useState(false);
   const [remap, setRemap] = useState<Record<string, string>>({});
 
-  // Esc cierra el modal
-  useEffect(() => {
-    function onKey(e: globalThis.KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Esc + foco atrapado + role=dialog (reemplaza el listener manual de Esc).
+  const dialogRef = useDialog(onClose);
 
   async function handleFile(file: File, columnMap?: Record<string, string>) {
     setLoading(true);
@@ -141,7 +135,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
       display: "flex", alignItems: "center", justifyContent: "center",
       background: "rgba(15,22,28,0.55)", backdropFilter: "blur(3px)", padding: 16,
     }}>
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Importar tareas" style={{
         background: "#fff", borderRadius: 18, width: "100%", maxWidth: 620,
         boxShadow: "0 32px 64px -16px rgba(15,22,28,0.30), 0 8px 24px -8px rgba(15,22,28,0.12)",
         maxHeight: "90vh", display: "flex", flexDirection: "column",
