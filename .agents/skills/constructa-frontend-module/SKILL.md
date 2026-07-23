@@ -119,13 +119,14 @@ Deactivate/delete flows must show a confirmation modal that describes side effec
 
 ### Adding a new tab to ObraDetailPage
 
-1. Add tab ID to `ObraTab` type and `TABS` array in `ObraDetailPage.tsx`
+1. Add the tab ID to the `ObraTab` type in `frontend/src/types/index.ts` (no hay un array `TABS`; el tipo vive en types, no en ObraDetailPage)
 2. Create `frontend/src/components/<NuevaTab>.tsx`
    - Props: only what `ObraDetailPage` already has in state
    - Never fetch inside the tab component
 3. Add the `case` to `renderTab()` in `ObraDetailPage.tsx`
-4. After mutation: call `onRefresh()` → `loadData(true)` in parent
-5. If new data is needed: add the fetch call to `loadData()` in `ObraDetailPage.tsx`
+4. Add a `NavItem` in `frontend/src/components/layout/Sidebar.tsx` (obra section) → `onClick={() => onTabChange("nueva_tab")}`
+5. After mutation: call `onRefresh()` → `loadData(true)` in parent
+6. If new data is needed: add the fetch call to `loadData()` in `ObraDetailPage.tsx`
 
 ### Adding a new component
 
