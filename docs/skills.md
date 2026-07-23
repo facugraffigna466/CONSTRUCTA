@@ -559,7 +559,7 @@ Use this before changing any existing service method, model field, or component 
 
 For a backend change:
 - Which routes call this service method? Check `backend/app/api/routes/`.
-- Does the chatbot pipeline call this? Check `backend/app/services/message_service.py` and `message_interpreter.py`.
+- Does the chatbot pipeline call this? Check `backend/app/services/message_service.py` and `conversation_service.py`.
 - Does this method log historial? If yes, changing its behavior changes the audit log.
 - Does this method create alerts? If yes, alert generation may change.
 
@@ -581,7 +581,7 @@ For a frontend change:
 
 **Step 3 — The chatbot pipeline is the most fragile path.**
 
-The message interpreter in `message_interpreter.py` identifies tasks by index or keyword.
+`ConversationService` (`conversation_service.py`) is a state machine that identifies tasks by index/page or keyword (MENU/INICIO/HOLA). (El `message_interpreter.py` basado en reglas fue reemplazado por esto y eliminado.)
 `message_service.py` calls `TaskService.apply_status_update`, which is the only place status transitions happen.
 Do not change `VALID_TRANSITIONS` in `task_service.py` without testing the webhook manually:
 ```bash
@@ -680,7 +680,7 @@ If running on a different port, update `BASE_URL` in `client.ts`.
 **Symptom: webhook receives the message but task status does not update.**
 1. Check the Evolution API / Twilio logs — did the message actually reach the endpoint?
 2. Check `POST /api/v1/webhook` in the FastAPI logs — is the responsible's `whatsapp_number` recognized?
-3. Add a temporary `print()` in `message_interpreter.py` to see what the normalized message looks like.
+3. Add a temporary `print()` in `conversation_service.py` (`handle_inbound`) to see what the normalized message looks like.
 4. The interpreter uses regex rules — test the normalized message string against each pattern manually.
 5. Verify `VALID_TRANSITIONS` in `task_service.py` allows the attempted transition from the task's current status.
 This is intentional — the historial must reflect who was responsible when the task was completed.
