@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { X, AlertTriangle, Calendar, Loader2, GitBranch } from "lucide-react";
 import { fetchCascadePreview, updateTask } from "../api/tasks";
+import { useDialog } from "../hooks/useDialog";
 import type { CascadeAffectedTask, TaskUpdatePayload } from "../api/tasks";
 import { Button } from "./ui/Button";
 import type { Task } from "../types";
@@ -45,15 +46,8 @@ export function ReschedulingModal({
   const [affected, setAffected] = useState<CascadeAffectedTask[]>([]);
   const [loadingPreview, setLoadingPreview] = useState(true);
 
-  // Esc cierra (cancela la reprogramación)
-  useEffect(() => {
-    function onKey(e: globalThis.KeyboardEvent) {
-      if (e.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Esc cierra + foco atrapado + role=dialog (reemplaza el listener manual de Esc).
+  const dialogRef = useDialog(onClose);
 
   const oldStart = task.start_date;
   const oldDue   = task.due_date;
@@ -106,7 +100,7 @@ export function ReschedulingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded shadow-card-md w-full max-w-md">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={modalTitle} className="bg-white rounded shadow-card-md w-full max-w-md">
         {/* Header */}
         <div className="bg-constructa-dark px-6 py-4 rounded-t flex items-center justify-between">
           <div>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Trash2, Loader2 } from "lucide-react";
 import { deleteTask } from "../api/tasks";
+import { useDialog } from "../hooks/useDialog";
 import { Button } from "./ui/Button";
 import type { Task } from "../types";
 
@@ -17,6 +18,7 @@ export function TaskDeleteConfirm({
 }: TaskDeleteConfirmProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useDialog(onClose);
 
   async function handleConfirm() {
     setLoading(true);
@@ -32,7 +34,7 @@ export function TaskDeleteConfirm({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded shadow-card-md w-full max-w-sm">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Eliminar tarea" className="bg-white rounded shadow-card-md w-full max-w-sm">
         <div className="px-6 py-5">
           <div className="flex items-start gap-3 mb-4">
             <div className="w-9 h-9 rounded bg-red-50 flex items-center justify-center flex-shrink-0 mt-0.5">

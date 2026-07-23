@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { X, AlertTriangle, Loader2 } from "lucide-react";
 import { updateTask } from "../api/tasks";
+import { useDialog } from "../hooks/useDialog";
 import type { TaskUpdatePayload } from "../api/tasks";
 import { Button } from "./ui/Button";
 import type { Responsible, Task } from "../types";
@@ -89,6 +90,7 @@ export function SchedulingModal({
   onClose,
   onSaved,
 }: SchedulingModalProps) {
+  const dialogRef = useDialog(onClose);
   const activeResponsibles = responsibles.filter((r) => r.is_active);
 
   // Preselect existing responsible only if still active
@@ -150,7 +152,7 @@ export function SchedulingModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded shadow-card-md w-full max-w-lg">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Programar tarea" className="bg-white rounded shadow-card-md w-full max-w-lg">
         {/* Header */}
         <div className="bg-constructa-dark px-6 py-4 rounded-t flex items-center justify-between">
           <div>

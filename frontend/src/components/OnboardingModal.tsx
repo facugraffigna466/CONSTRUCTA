@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Building2, Users, ClipboardList, ArrowRight, X } from "lucide-react";
+import { useDialog } from "../hooks/useDialog";
 
 const STORAGE_KEY = "onboarding_done";
 
@@ -36,6 +37,7 @@ export function OnboardingModal({ onClose, onCreateObra }: { onClose: () => void
   const [step, setStep] = useState(0);
   const isLast = step === STEPS.length - 1;
   const current = STEPS[step];
+  const dialogRef = useDialog(onClose);
 
   function finish() {
     markDone();
@@ -54,7 +56,7 @@ export function OnboardingModal({ onClose, onCreateObra }: { onClose: () => void
       display: "flex", alignItems: "center", justifyContent: "center",
       background: "rgba(15,22,28,0.55)", backdropFilter: "blur(4px)", padding: 16,
     }}>
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Bienvenida a CONSTRUCTA" style={{
         background: "#fff", borderRadius: 20, width: "100%", maxWidth: 460,
         boxShadow: "0 32px 64px -16px rgba(15,22,28,0.35)",
         fontFamily: "'Plus Jakarta Sans', sans-serif",
