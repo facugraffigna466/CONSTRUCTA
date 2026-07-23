@@ -23,7 +23,7 @@ Este documento **no reemplaza** los análisis por módulo: los consolida. El det
 | 🟠 **P1 — Robustez / Negocio** | ~28 | Sin tests/CI, billing incompleto, recuperación de cuenta, rate limiting, multi-worker |
 | 🟡 **P2 — Pulido / UX / Deuda** | ~27 | Paginación, accesibilidad, routing por URL, copy, memoización, código muerto, diálogos nativos |
 
-> **Adenda 2026-07-18 (§9):** la pasada por pantalla del frontend no sumó P0. Sí sumó **~4 P1** (dato incorrecto en `AdminPage`, errores en silencio en `EquipoPage`, `BACKEND_URL` localhost en Bitácora, a11y en Gantt/planilla) y **~7 P2** (destacan **~2.229 líneas de código muerto** en 7 archivos y diálogos nativos `confirm()`/`alert()` en 8 pantallas).
+> **Adenda 2026-07-18 (§9):** la pasada por pantalla del frontend no sumó P0. Sí sumó **~4 P1** (dato incorrecto en `AdminPage`, errores en silencio en `EquipoPage`, `BACKEND_URL` localhost en Bitácora, a11y en Gantt/planilla) y **~7 P2** (destacan **~2.791 líneas de código muerto** en 15 archivos (✅ eliminadas) y diálogos nativos `confirm()`/`alert()` en 8 pantallas).
 
 **Prioridad #1 absoluta — ✅ HECHA (2026-07-18):** el cluster de aislamiento por tenant está **cerrado y mergeado**. **14 de 15 P0 resueltos**; el único abierto es la punta de diseño de #14 (`whatsapp_number` per-tenant, ver §4). Era lo que separaba "app de demo" de "SaaS multi-empresa que puede vender".
 
@@ -188,7 +188,7 @@ Agrupados por área. Detalle y solución en el doc del módulo.
 ### 🟡 P2 — Pulido, UX y deuda técnica
 
 - **Frontend:** sin enrutamiento por URL (todo es estado en `App.tsx`, no hay deep-links ni back del navegador); prop-drilling de navegación desde `App.tsx`; accesibilidad mínima (foco, roles ARIA, teclado); desktop-first sin responsive real (matizado: el *chrome* sí tiene drawer responsive); componentes pesados sin memoizar.
-- **Frontend — pantallas (§9):** ~2.229 líneas de **código muerto** (7 archivos, 4 páginas nunca montadas); diálogos nativos `confirm()`/`alert()` en 8 pantallas (inconsistente con los modales estilados); afford muertos en el Sidebar (workspace switcher, % de "Fijadas" hardcodeado); Tailwind usado en producción contra la regla del `CLAUDE.md`; mega-componentes (`ComprasTab` 2578, `TaskSheetView` 1923, `GanttTimeline` 1858); `fetchAlerts()` trae todas las alertas y filtra en el cliente; `AcceptInvitePage` acepta a ciegas.
+- **Frontend — pantallas (§9):** ~2.791 líneas de **código muerto** ✅ eliminadas (15 archivos; reachability desde main.tsx); diálogos nativos `confirm()`/`alert()` en 8 pantallas (inconsistente con los modales estilados); afford muertos en el Sidebar (workspace switcher, % de "Fijadas" hardcodeado); Tailwind usado en producción contra la regla del `CLAUDE.md`; mega-componentes (`ComprasTab` 2578, `TaskSheetView` 1923, `GanttTimeline` 1858); `fetchAlerts()` trae todas las alertas y filtra en el cliente; `AcceptInvitePage` acepta a ciegas.
 - **Cronograma:** tareas sin fechas quedan fuera del cálculo de ruta crítica sin aviso claro; la ruta crítica se recalcula en el front bajo demanda sin caché.
 - **Planilla/Gantt:** no se pueden reordenar columnas (selección atada al índice); el reorden de filas solo persiste en `localStorage`; la columna "Costo/Materiales" hace ida y vuelta al modal.
 - **Settings:** `ConfiguracionPage` concentra varias responsabilidades sin auditar como flujo.
@@ -230,7 +230,7 @@ Agrupados por área. Detalle y solución en el doc del módulo.
 | Base de datos | 2 | 🔴 P0 | `tenant_id` no denormalizado / nullable |
 | Tests / CI / Observabilidad | 6 | P1 | Sin tests, sin CI, sin tracking |
 | Frontend (transversal) | 6 | P2 | Funcional; deuda de routing/a11y/responsive |
-| Frontend — pantallas (§9) | 11 | 🟠 P1 | Alta calidad por pantalla; dato incorrecto en `AdminPage`, errores en silencio en `EquipoPage`, `BACKEND_URL` localhost; ~2.229 líneas muertas |
+| Frontend — pantallas (§9) | 11 | 🟠 P1 | Alta calidad por pantalla; dato incorrecto en `AdminPage`, errores en silencio en `EquipoPage`, `BACKEND_URL` localhost; ~2.791 líneas muertas (✅ eliminadas) |
 
 ---
 
@@ -300,7 +300,7 @@ Solo **8 de las 12 páginas están montadas** en `App.tsx` (routing por estado, 
 | `components/AlertsPanel.tsx` (108) | Componente | Solo lo usaba `DashboardPage` (muerta) |
 | `components/StatCard.tsx` (79) | Componente | Solo lo usaba `DashboardPage` (muerta) |
 
-**Total: ~2.229 líneas de código muerto en 7 archivos.** Verificado por grep de imports; borrarlos es un PR de limpieza de bajo riesgo (antes de borrar `ResponsablesPage`/`PresupuestosPage`, confirmar que su función está cubierta por `ObraResponsablesTab`/`ComprasTab` — lo está).
+**Total: ~2.791 líneas de código muerto en 15 archivos — ✅ ELIMINADAS (2026-07-18).** El primer barrido (grep de imports) encontró los 7 de arriba; un **análisis de alcanzabilidad transitiva desde `main.tsx`** (parseando los imports reales, incluidos los dinámicos) encontró **8 más** que el grep había pasado por alto: `ResponsibleFormModal`/`ResponsibleDeactivateConfirm`/`ResponsibleReactivateConfirm` (reemplazados por forms inline en `ObraResponsablesTab`), `ui/Card`, `ui/SectionTitle`, `ui/StatusBadge`, `api/budgets.ts` y `utils/calendar.ts`. Tras removerlos, el análisis da **0 módulos inalcanzables** (los 82 restantes se usan todos). **Lección:** el grep de imports subestima el código muerto — para detectarlo de verdad hay que usar reachability desde el entry point.
 
 Pantallas vivas: `LoginPage`, `AcceptInvitePage`, `PortfolioPage`, `ObraDetailPage` (+ tabs), `BitacoraPage`, `EquipoPage`, `AdminPage`, `ConfiguracionPage`.
 
@@ -327,7 +327,7 @@ Pantallas vivas: `LoginPage`, `AcceptInvitePage`, `PortfolioPage`, `ObraDetailPa
 | F4 | Gantt / planilla / modales | Accesibilidad casi nula: `GanttTimeline` (1858 líneas) **0** `aria`/`role`; `TaskSheetView` 1; modales sin foco atrapado / `Esc` consistente | 🟠 P1 |
 | F5 | `ObraDetailPage`, `AppLayout` | `fetchAlerts()` trae **todas** las alertas del tenant y filtra por obra en el cliente → costo en escala | 🟡 P2 |
 | F6 | 8 pantallas | Diálogos nativos `confirm()`/`alert()` para acciones destructivas conviviendo con modales estilados → inconsistencia (`PortfolioPage`, `TaskSheetView`, `ComprasTab`, `PlanosTab`, `ObraSetupWizard`, `BitacoraPage`, `InviteModal`) | 🟡 P2 |
-| F7 | Todas | **~2.229 líneas de código muerto** (§9.1) | 🟡 P2 |
+| F7 | Todas | **~2.791 líneas de código muerto** en 15 archivos (§9.1) — ✅ **eliminadas** | 🟡 P2 |
 | F8 | `Sidebar` | Afford muertos: "workspace switcher" con chevron que **no cambia de workspace**; obras "Fijadas" con % **hardcodeado** por estado, no avance real | 🟡 P2 |
 | F9 | `LoginPage`, `AcceptInvitePage` | Sin "olvidé mi contraseña" (ya en P1 auth); `AcceptInvitePage` **acepta a ciegas** (no muestra quién invitó ni a qué empresa/email) | 🟡 P2 |
 | F10 | `CLAUDE.md` vs código | El front **sí usa Tailwind en producción** (`LoginPage`, `AppLayout`, clases `constructa-*`), contra la regla documentada "NO Tailwind" → doc y código no coinciden | 🟡 P2 |

@@ -216,7 +216,7 @@ On partial failure, fall back to `loadData(true)` to re-sync state.
 
 ### AR-04 — Unread Count Badge
 The "Alertas" tab always shows an unread badge when `alerts.filter(a => !a.is_read).length > 0`.
-The Resumen tab shows a StatCard "Alertas activas" with this count.
+The Resumen tab shows a KPI tile "Alertas activas" with this count.
 Both must stay in sync — they read from the same `alerts` state in `ObraDetailPage`.
 
 ---
@@ -543,9 +543,8 @@ All repositories share the same session injected at service construction. No ext
 **Adding a new alert type:**
 1. Add the value to `AlertType` enum in `backend/app/models/alert.py`
 2. Add the DB enum value via Alembic migration (enum changes require explicit migration)
-3. Add `type_label` and `TYPE_STYLE` entries in `frontend/src/components/AlertasTab.tsx`
-4. Add the same entry to `AlertsPanel.tsx` (used in the Resumen tab preview)
-5. Add the type to `AlertType` in `frontend/src/types/index.ts`
+3. Add `type_label` and `TYPE_STYLE` entries in `frontend/src/components/AlertasTab.tsx` (única fuente del estilo por tipo; ResumenTab solo muestra el conteo)
+4. Add the type to `AlertType` in `frontend/src/types/index.ts`
 
 **Reflecting in frontend:**
 After any mutation that triggers this rule, the frontend calls `loadData(true)`, which re-fetches `fetchAlerts()`. The new alert appears automatically. No frontend code change needed unless you added a new `AlertType`.
@@ -560,7 +559,7 @@ Use this before changing any existing service method, model field, or component 
 
 For a backend change:
 - Which routes call this service method? Check `backend/app/api/routes/`.
-- Does the chatbot pipeline call this? Check `backend/app/services/message_service.py` and `message_interpreter.py`.
+- Does the chatbot pipeline call this? Check `backend/app/services/message_service.py` and `conversation_service.py`.
 - Does this method log historial? If yes, changing its behavior changes the audit log.
 - Does this method create alerts? If yes, alert generation may change.
 
@@ -575,14 +574,14 @@ For a frontend change:
 |---|---|---|
 | `TaskService.apply_status_update` | Chatbot pipeline, historial, alerts | Test full WhatsApp → webhook → DB → alert flow |
 | `ResponsibleService.deactivate` | Task unassignment cascade, historial | Verify tasks become `responsible_id = null`, events logged |
-| `loadData` in `ObraDetailPage` | All 5 tabs, StatCards, unread badge | Open each tab and verify counts after mutation |
+| `loadData` in `ObraDetailPage` | All 5 tabs, KPI tiles, unread badge | Open each tab and verify counts after mutation |
 | `TaskFormModal` responsible dropdown | Inactive responsible guard (FS-06) | Deactivate responsible, reopen edit modal, verify warning |
-| `AlertType` enum | DB migration required, frontend badge styles | Check `AlertasTab.tsx` and `AlertsPanel.tsx` TYPE_STYLE |
+| `AlertType` enum | DB migration required, frontend badge styles | Check `AlertasTab.tsx` TYPE_STYLE |
 | `Task` or `Responsible` schema `Read` | All API responses, frontend `types/index.ts` | Align `TaskRead` fields with `Task` type in `types/index.ts` |
 
 **Step 3 — The chatbot pipeline is the most fragile path.**
 
-The message interpreter in `message_interpreter.py` identifies tasks by index or keyword.
+`ConversationService` (`conversation_service.py`) is a state machine that identifies tasks by index/page or keyword (MENU/INICIO/HOLA). (El `message_interpreter.py` basado en reglas fue reemplazado por esto y eliminado.)
 `message_service.py` calls `TaskService.apply_status_update`, which is the only place status transitions happen.
 Do not change `VALID_TRANSITIONS` in `task_service.py` without testing the webhook manually:
 ```bash
@@ -681,7 +680,7 @@ If running on a different port, update `BASE_URL` in `client.ts`.
 **Symptom: webhook receives the message but task status does not update.**
 1. Check the Evolution API / Twilio logs — did the message actually reach the endpoint?
 2. Check `POST /api/v1/webhook` in the FastAPI logs — is the responsible's `whatsapp_number` recognized?
-3. Add a temporary `print()` in `message_interpreter.py` to see what the normalized message looks like.
+3. Add a temporary `print()` in `conversation_service.py` (`handle_inbound`) to see what the normalized message looks like.
 4. The interpreter uses regex rules — test the normalized message string against each pattern manually.
 5. Verify `VALID_TRANSITIONS` in `task_service.py` allows the attempted transition from the task's current status.
 This is intentional — the historial must reflect who was responsible when the task was completed.

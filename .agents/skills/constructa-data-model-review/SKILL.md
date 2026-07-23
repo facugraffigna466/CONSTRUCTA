@@ -147,8 +147,8 @@ Change: Add `priority` field to Task
 - Action: Add to Task model, TaskRead schema, TaskUpdate schema (optional), frontend Task interface
 
 Change: Remove `estimated_progress` from Task
-- Current: used in ResumenTab for progress bar, populated by AI pipeline
-- Classification: REJECTED (breaks frontend StatCard, breaks Phase 2 pipeline)
+- Current: used in ResumenTab/TaskTable for the progress bar, populated by AI pipeline
+- Classification: REJECTED (breaks the progress UI in ResumenTab/TaskTable, breaks Phase 2 pipeline)
 - Action: Keep as-is
 ```
 

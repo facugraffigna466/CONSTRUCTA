@@ -197,7 +197,7 @@ if await self.alert_repo.exists_unread_for_task(task_id, AlertType.DELAY_RISK, m
 2. Is the responsible's `whatsapp_number` in the database? `SELECT * FROM responsibles WHERE whatsapp_number = '+...'`
 3. Is the responsible active? `is_active = true`?
 4. Does the responsible have an active task? Check `TaskRepository.list_by_responsible()`
-5. Add `print()` to `message_interpreter.py` to see what the interpreter receives
+5. Add `print()` to `conversation_service.py` (`handle_inbound`) to see what the state machine receives
 6. Check `VALID_TRANSITIONS` in `task_service.py` — is the attempted transition allowed from the task's current status?
 7. Check `messages` table: `SELECT processing_status, ai_interpretation FROM messages ORDER BY created_at DESC LIMIT 5`
 
