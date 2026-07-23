@@ -1,4 +1,5 @@
 import { Rocket, X } from "lucide-react";
+import { useDialog } from "../hooks/useDialog";
 
 export interface PlanLimitInfo {
   message: string;
@@ -27,13 +28,14 @@ const PLAN_LABEL: Record<string, string> = {
 
 export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: () => void }) {
   const nextPlan = info.plan === "basico" ? "Pro" : "Enterprise";
+  const dialogRef = useDialog(onClose);
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 95,
       display: "flex", alignItems: "center", justifyContent: "center",
       background: "rgba(15,22,28,0.55)", backdropFilter: "blur(3px)", padding: 16,
     }}>
-      <div style={{
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Mejorar plan" style={{
         background: "#fff", borderRadius: 18, width: "100%", maxWidth: 420,
         boxShadow: "0 32px 64px -16px rgba(15,22,28,0.35)",
         fontFamily: "'Plus Jakarta Sans', sans-serif", overflow: "hidden",
