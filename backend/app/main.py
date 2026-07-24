@@ -108,9 +108,36 @@ async def serve_uploaded_file(filename: str, exp: str | None = None, sig: str | 
     return _FileResponse(str(fp))
 
 
+import logging as _logging
+from fastapi import Request as _Request
+from fastapi.responses import JSONResponse as _JSONResponse
+from sqlalchemy import text as _sql_text
+from app.core.deps import DbSession as _DbSession
+
+_logger = _logging.getLogger("constructa")
+
+
 @fastapi_app.get("/health", tags=["health"])
-async def health():
-    return {"status": "ok", "app": settings.APP_NAME}
+async def health(db: _DbSession):
+    """Liveness + readiness: verifica que la base de datos responde."""
+    try:
+        await db.execute(_sql_text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        _logger.exception("Health check: la base de datos no responde")
+        db_ok = False
+    return _JSONResponse(
+        status_code=200 if db_ok else 503,
+        content={"status": "ok" if db_ok else "degraded", "app": settings.APP_NAME, "db": "ok" if db_ok else "down"},
+    )
+
+
+@fastapi_app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: _Request, exc: Exception):
+    """Última red ante errores inesperados: loguea con contexto y devuelve un 500 limpio
+    (sin filtrar stack traces ni internals al cliente). Las HTTPException se manejan aparte."""
+    _logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return _JSONResponse(status_code=500, content={"detail": "Error interno del servidor"})
 
 
 
