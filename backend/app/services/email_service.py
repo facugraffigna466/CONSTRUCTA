@@ -183,3 +183,28 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> bool:
         html=_build_reset_html(reset_url),
         text=f"Restablecé tu contraseña de Constructa en: {reset_url}\n\nEl enlace expira en 1 hora.",
     )
+
+
+def _build_verification_html(verify_url: str) -> str:
+    return f"""\
+<div style="font-family:'Helvetica Neue',Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#1A2329;">
+  <h1 style="font-size:20px;margin:0 0 8px;">Confirmá tu email</h1>
+  <p style="font-size:14px;line-height:1.5;color:#5B6770;margin:0 0 20px;">
+    ¡Bienvenido a Constructa! Confirmá tu dirección de email para activar del todo tu cuenta.
+  </p>
+  <a href="{verify_url}" style="display:inline-block;background:#FF6B35;color:#fff;text-decoration:none;
+     font-weight:600;padding:12px 22px;border-radius:10px;font-size:14px;">Confirmar mi email</a>
+  <p style="font-size:12px;color:#8E97A0;margin:20px 0 0;">
+    O copiá este enlace: <a href="{verify_url}" style="color:#FF6B35;word-break:break-all;">{verify_url}</a><br>
+    El enlace expira en 48 horas.
+  </p>
+</div>"""
+
+
+async def send_verification_email(to_email: str, verify_url: str) -> bool:
+    return await send_email(
+        to_email,
+        subject="Confirmá tu email — Constructa",
+        html=_build_verification_html(verify_url),
+        text=f"Confirmá tu email de Constructa en: {verify_url}\n\nEl enlace expira en 48 horas.",
+    )

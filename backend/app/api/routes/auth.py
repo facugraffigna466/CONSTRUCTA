@@ -11,9 +11,10 @@ from app.schemas.user import (
     TokenResponse,
     UserCreate,
     UserRead,
+    VerifyEmailRequest,
 )
 from app.services.auth_service import AuthService
-from app.services.email_service import send_password_reset_email
+from app.services.email_service import send_password_reset_email, send_verification_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -25,7 +26,11 @@ _reset_limit  = rate_limit("reset",  max_hits=10, window_secs=60)
 
 @router.post("/register", response_model=UserRead, status_code=201)
 async def register(data: UserCreate, db: DbSession):
-    return await AuthService(db).register(data)
+    user = await AuthService(db).register(data)
+    if user.verification_token:
+        verify_url = f"{settings.FRONTEND_URL}/verify-email/{user.verification_token}"
+        await send_verification_email(user.email, verify_url)
+    return user
 
 
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(_login_limit)])
@@ -57,3 +62,10 @@ async def reset_password(data: ResetPasswordRequest, db: DbSession):
     """Valida el token y setea la nueva contraseña; deja al usuario logueado."""
     token = await AuthService(db).reset_password(data.token, data.new_password)
     return TokenResponse(access_token=token)
+
+
+@router.post("/verify-email")
+async def verify_email(data: VerifyEmailRequest, db: DbSession) -> dict[str, str]:
+    """Marca el email como verificado a partir del token del enlace."""
+    await AuthService(db).verify_email(data.token)
+    return {"message": "Email verificado."}

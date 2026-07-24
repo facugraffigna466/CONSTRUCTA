@@ -16,6 +16,7 @@ class UserRead(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    is_verified: bool = True
     avatar_url: str | None = None
     whatsapp_number: str | None = None
     tenant_name: str | None = None  # solo poblado en /users/me
@@ -68,6 +69,10 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8)
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
 
 
 class RoleUpdateRequest(BaseModel):
