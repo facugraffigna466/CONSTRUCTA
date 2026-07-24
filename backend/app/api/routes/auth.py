@@ -1,7 +1,8 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.config import settings
 from app.core.deps import DbSession
+from app.core.rate_limit import rate_limit
 from app.schemas.user import (
     AcceptInviteRequest,
     ForgotPasswordRequest,
@@ -16,13 +17,18 @@ from app.services.email_service import send_password_reset_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Límites por IP (in-memory) contra fuerza bruta / abuso.
+_login_limit  = rate_limit("login",  max_hits=10, window_secs=60)
+_forgot_limit = rate_limit("forgot", max_hits=5,  window_secs=300)
+_reset_limit  = rate_limit("reset",  max_hits=10, window_secs=60)
+
 
 @router.post("/register", response_model=UserRead, status_code=201)
 async def register(data: UserCreate, db: DbSession):
     return await AuthService(db).register(data)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(_login_limit)])
 async def login(data: LoginRequest, db: DbSession):
     token = await AuthService(db).login(data.email, data.password)
     return TokenResponse(access_token=token)
@@ -34,7 +40,7 @@ async def accept_invite(data: AcceptInviteRequest, db: DbSession):
     return TokenResponse(access_token=token)
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(_forgot_limit)])
 async def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> dict[str, str]:
     """Envía un email con el link de recuperación. Siempre responde igual (200) para no
     revelar si el email existe."""
@@ -46,7 +52,7 @@ async def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> dict[st
     return {"message": "Si el email existe, te enviamos un enlace para recuperar tu contraseña."}
 
 
-@router.post("/reset-password", response_model=TokenResponse)
+@router.post("/reset-password", response_model=TokenResponse, dependencies=[Depends(_reset_limit)])
 async def reset_password(data: ResetPasswordRequest, db: DbSession):
     """Valida el token y setea la nueva contraseña; deja al usuario logueado."""
     token = await AuthService(db).reset_password(data.token, data.new_password)

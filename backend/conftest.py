@@ -12,6 +12,7 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-para-tests")
 
 import tempfile
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -57,3 +58,11 @@ async def client():
     transport = ASGITransport(app=fastapi_app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    """Limpia el estado del rate limiter (in-memory) antes de cada test para aislarlos."""
+    from app.core.rate_limit import _hits
+    _hits.clear()
+    yield
