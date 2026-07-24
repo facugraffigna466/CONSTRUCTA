@@ -25,6 +25,7 @@ import {
 import { fetchSuppliers } from "../api/suppliers";
 import { createMaterial } from "../api/taskMaterials";
 import { fetchObraTeam } from "../api/obraTeam";
+import { useConfirm } from "./ConfirmProvider";
 import type {
   AnalisisComparativo,
   AnalisisHistoricoCompras,
@@ -1320,6 +1321,7 @@ function SolicitudAllModal({
 // ─── Tab principal ────────────────────────────────────────────────────────────
 
 export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; obraName: string; tasks?: Task[] }) {
+  const { confirm } = useConfirm();
   const [data, setData]                 = useState<PresupuestoResponse | null>(null);
   const [orders, setOrders]             = useState<PurchaseOrder[]>([]);
   const [solicitudes, setSolicitudes]   = useState<SolicitudCotizacion[]>([]);
@@ -1448,7 +1450,7 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
   }
 
   async function handleDeleteSolicitud(solicitudId: number) {
-    if (!window.confirm("¿Borrar esta solicitud? Esta acción no se puede deshacer.")) return;
+    if (!(await confirm({ title: "Borrar solicitud", message: "¿Borrar esta solicitud? Esta acción no se puede deshacer.", confirmLabel: "Borrar", danger: true }))) return;
     setDeletingSol(solicitudId);
     try { await deleteSolicitud(solicitudId); setSolicitudes(prev => prev.filter(s => s.id !== solicitudId)); }
     catch { setActionError("No se pudo eliminar la solicitud."); }

@@ -8,6 +8,7 @@ import { userAvatarColor } from "../context/UserContext";
 import { Spinner } from "../components/Spinner";
 import { usePermission } from "../hooks/usePermission";
 import type { Obra, ObraStatus } from "../types";
+import { useConfirm } from "../components/ConfirmProvider";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -358,6 +359,7 @@ interface PortfolioPageProps {
 }
 
 export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePin }: PortfolioPageProps) {
+  const { confirm, alert } = useConfirm();
   const canCreateObra = usePermission("obra.create");
   const [obras,      setObras]      = useState<Obra[]>([]);
   const [members,    setMembers]    = useState<Map<number, ApiUser>>(new Map());
@@ -595,12 +597,20 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                         } catch { loadData(true); }
                       }}
                       onDelete={async () => {
-                        if (!confirm(`¿Eliminar la obra «${obra.name}»?\n\nSe borran también todas sus tareas y el equipo asignado. Esta acción no se puede deshacer.`)) return;
+                        if (!(await confirm({
+                          title: "Eliminar obra",
+                          message: `¿Eliminar la obra «${obra.name}»?\n\nSe borran también todas sus tareas y el equipo asignado. Esta acción no se puede deshacer.`,
+                          confirmLabel: "Eliminar",
+                          danger: true,
+                        }))) return;
                         try {
                           await deleteObra(obra.id);
                           setObras(prev => prev.filter(o => o.id !== obra.id));
                         } catch {
-                          alert("No se pudo eliminar la obra. Puede tener datos asociados (alertas, bitácora o presupuestos) que impiden el borrado.");
+                          await alert({
+                            title: "No se pudo eliminar la obra",
+                            message: "Puede tener datos asociados (alertas, bitácora o presupuestos) que impiden el borrado.",
+                          });
                         }
                       }}
                     />

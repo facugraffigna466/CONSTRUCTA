@@ -4,13 +4,16 @@ import "./index.css";
 import App from "./App.tsx";
 import { UserProvider } from "./context/UserContext.tsx";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
+import { ConfirmProvider } from "./components/ConfirmProvider.tsx";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
       <UserProvider>
         <ErrorBoundary>
-          <App />
+          <ConfirmProvider>
+            <App />
+          </ConfirmProvider>
         </ErrorBoundary>
       </UserProvider>
     </ErrorBoundary>

@@ -5,6 +5,7 @@ import { usePermission } from "../hooks/usePermission";
 import { useDialog } from "../hooks/useDialog";
 import { fetchMembers, inviteMember, removeMember } from "../api/users";
 import type { ApiUser } from "../api/users";
+import { useConfirm } from "./ConfirmProvider";
 
 interface Props {
   onClose: () => void;
@@ -34,6 +35,7 @@ export function InviteModal({ onClose }: Props) {
   const canInvite = usePermission("miembro.invite");
   const canRemove = usePermission("miembro.remove");
   const dialogRef = useDialog(onClose);
+  const { alert } = useConfirm();
 
   const [members, setMembers]     = useState<ApiUser[]>([]);
   const [loadingM, setLoadingM]   = useState(true);
@@ -95,7 +97,7 @@ export function InviteModal({ onClose }: Props) {
       setMembers(prev => prev.filter(m => m.id !== memberId));
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      alert(msg ?? "No se pudo eliminar el miembro");
+      await alert({ title: "No se pudo quitar al miembro", message: msg ?? "Intentá nuevamente." });
     }
   }
 
