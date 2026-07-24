@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "CONSTRUCTA"
-    DEBUG: bool = False
+    APP_DEBUG: bool = False
 
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
