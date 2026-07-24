@@ -7,6 +7,7 @@ import { ActivityToast } from "./components/ActivityToast";
 import { ObraSetupWizard } from "./components/ObraSetupWizard";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { BitacoraPage } from "./pages/BitacoraPage";
 import { AdminPage } from "./pages/AdminPage";
 import { ConfiguracionPage } from "./pages/ConfiguracionPage";
@@ -30,6 +31,12 @@ function getInviteToken(): string | null {
 // Extract reset token from URL if present: /reset-password/{token}
 function getResetToken(): string | null {
   const match = window.location.pathname.match(/^\/reset-password\/(.+)$/);
+  return match ? match[1] : null;
+}
+
+// Extract email-verification token from URL if present: /verify-email/{token}
+function getVerifyToken(): string | null {
+  const match = window.location.pathname.match(/^\/verify-email\/(.+)$/);
   return match ? match[1] : null;
 }
 
@@ -84,6 +91,17 @@ function App() {
 
   const inviteToken                     = getInviteToken();
   const resetToken                      = getResetToken();
+  const verifyToken                     = getVerifyToken();
+
+  // Email-verification flow — intercept before anything else
+  if (verifyToken) {
+    return (
+      <VerifyEmailPage
+        token={verifyToken}
+        onDone={() => { window.location.href = "/"; }}
+      />
+    );
+  }
 
   // Reset-password flow — intercept before anything else
   if (resetToken) {

@@ -12,6 +12,7 @@ from app.schemas.user import AcceptInviteRequest, InviteRequest, UserCreate
 
 INVITE_TTL_HOURS = 72
 RESET_TTL_HOURS = 1
+VERIFY_TTL_HOURS = 48
 
 
 class AuthService:
@@ -29,6 +30,9 @@ class AuthService:
             full_name=data.full_name,
             role="admin",
             is_active=True,
+            is_verified=False,
+            verification_token=secrets.token_urlsafe(32),
+            verification_expires=datetime.now(timezone.utc) + timedelta(hours=VERIFY_TTL_HOURS),
         )
         user = await self.repo.create(user)
 
@@ -129,3 +133,20 @@ class AuthService:
             reset_token_expires=None,
         )
         return create_access_token(user.id)
+
+    async def verify_email(self, token: str) -> None:
+        user = await self.repo.get_by_verification_token(token)
+        if not user:
+            raise HTTPException(status_code=400, detail="El enlace de verificación es inválido")
+        exp = user.verification_expires
+        if exp is not None:
+            if exp.tzinfo is None:  # SQLite devuelve naive
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="El enlace de verificación expiró")
+        await self.repo.update_fields(
+            user.id,
+            is_verified=True,
+            verification_token=None,
+            verification_expires=None,
+        )

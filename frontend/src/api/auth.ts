@@ -30,3 +30,8 @@ export async function resetPassword(token: string, newPassword: string): Promise
   });
   return data.access_token;
 }
+
+/** Confirma el email a partir del token del enlace de verificación. */
+export async function verifyEmail(token: string): Promise<void> {
+  await apiClient.post("/auth/verify-email", { token });
+}
