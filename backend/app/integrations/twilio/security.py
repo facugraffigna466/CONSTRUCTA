@@ -33,11 +33,11 @@ async def verify_twilio_signature(request: Request, params: dict) -> None:
 
     Both cases are safe for development; always configure the token in production.
     """
-    if settings.DEBUG or not settings.TWILIO_AUTH_TOKEN:
+    if settings.APP_DEBUG or not settings.TWILIO_AUTH_TOKEN:
         logger.warning(
             "Twilio signature validation SKIPPED "
             "(DEBUG=%s, auth_token_set=%s)",
-            settings.DEBUG,
+            settings.APP_DEBUG,
             bool(settings.TWILIO_AUTH_TOKEN),
         )
         return
