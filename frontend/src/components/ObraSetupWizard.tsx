@@ -14,6 +14,7 @@ import { addObraTeamMember } from "../api/obraTeam";
 import { createTask } from "../api/tasks";
 import { normalizePhone, PHONE_ERROR_HINT } from "../utils/phone";
 import type { Obra } from "../types";
+import { useConfirm } from "./ConfirmProvider";
 
 // ─── Local draft types ────────────────────────────────────────────────────────
 
@@ -840,6 +841,7 @@ export interface ObraSetupWizardProps {
 export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
   // foco atrapado + role=dialog; Esc cierra con la guarda de "descartar cambios" (safeClose, hoisted).
   const dialogRef = useDialog(safeClose);
+  const { confirm } = useConfirm();
   useEffect(() => {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
@@ -986,7 +988,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
   const tasksWithoutResp = tasks.filter(t => !t.responsible_key).length;
 
   // No perder datos: si hay algo cargado y la obra no se creó, confirmar antes de cerrar
-  function safeClose() {
+  async function safeClose() {
     // tras crear, cerrar con X equivale a "Ir a la obra": si solo cerráramos,
     // el portfolio de atrás quedaría sin la obra nueva (lista stale)
     if (done) { createdObra ? onCreated(createdObra) : onClose(); return; }
@@ -997,7 +999,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
       responsibles.length > 0 && `${responsibles.length} responsable${responsibles.length !== 1 ? "s" : ""}`,
       tasks.length > 0 && `${tasks.length} tarea${tasks.length !== 1 ? "s" : ""}`,
     ].filter(Boolean).join(", ");
-    if (confirm(`¿Cerrar el asistente? Se va a descartar ${detalle}.`)) onClose();
+    if (await confirm({ title: "Cerrar el asistente", message: `Se va a descartar ${detalle}.`, confirmLabel: "Descartar", cancelLabel: "Seguir editando", danger: true })) onClose();
   }
 
   function handleBackdropClick(e: React.MouseEvent<HTMLDivElement>) {

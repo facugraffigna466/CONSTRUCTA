@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { fetchPlanos, uploadPlano, deletePlano } from "../api/planos";
 import type { Plano } from "../types";
+import { useConfirm } from "./ConfirmProvider";
 
 const C = {
   text: "#1A2329", text2: "#5B6770", text3: "#8E97A0",
@@ -209,6 +210,7 @@ function UploadModal({
 
 // ── Componente principal ──────────────────────────────────────────────────────
 export function PlanosTab({ obraId }: { obraId: number }) {
+  const { confirm } = useConfirm();
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -249,7 +251,7 @@ export function PlanosTab({ obraId }: { obraId: number }) {
   }
 
   async function remove(p: Plano) {
-    if (!confirm(`¿Eliminar "${p.name || labelOf(p.discipline)}" v${p.version}?`)) return;
+    if (!(await confirm({ title: "Eliminar plano", message: `¿Eliminar "${p.name || labelOf(p.discipline)}" v${p.version}?`, confirmLabel: "Eliminar", danger: true }))) return;
     try { await deletePlano(p.id); await load(); }
     catch { /* noop */ }
   }

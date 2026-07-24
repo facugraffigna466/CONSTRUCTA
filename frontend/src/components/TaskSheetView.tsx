@@ -13,6 +13,7 @@ import { bulkCreateTasks, createTask, deleteTask, reorderTasks, updateTask, upda
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import type { Responsible, Task, TaskStatus } from "../types";
 import { parseClipboardRows, type ParsedRow } from "../utils/clipboardParser";
+import { useConfirm } from "./ConfirmProvider";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -379,6 +380,7 @@ function ResponsableCombobox({ currentId, options, autoFocus, onSelect, onKeyDow
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
   ({ tasks, responsibles, obraId, onTaskSaved, onTaskDeleted, onBulkImported, onOpenTask }, ref) => {
+    const { confirm } = useConfirm();
     const activeResponsibles = responsibles.filter((r) => r.is_active);
 
     function makeEdit(task: Task, field: Field): EditState {
@@ -693,7 +695,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(
     }, [pastePreview, obraId, matchResponsible, onBulkImported]);
 
     async function handleDeleteRow(task: Task) {
-      if (!confirm(`¿Eliminar la tarea «${task.title}»?`)) return;
+      if (!(await confirm({ title: "Eliminar tarea", message: `¿Eliminar la tarea «${task.title}»?`, confirmLabel: "Eliminar", danger: true }))) return;
       setDeletingId(task.id);
       try {
         await deleteTask(task.id);

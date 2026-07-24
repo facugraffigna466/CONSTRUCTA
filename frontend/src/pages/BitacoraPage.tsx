@@ -11,6 +11,7 @@ import {
 } from "../api/bitacora";
 import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
+import { useConfirm } from "../components/ConfirmProvider";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const BACKEND_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -236,6 +237,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
   onUpdated: (e: BitacoraEntry) => void;
   onDeleted: (id: number) => void;
 }) {
+  const { confirm } = useConfirm();
   const [showTranscript, setShowTranscript] = useState(false);
   const [manualText, setManualText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -282,7 +284,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
         )}
         <ChevronDown style={{ width: 15, height: 15, color: "#9AA0A6", flexShrink: 0, transition: "transform 0.2s", transform: expanded ? "none" : "rotate(-90deg)" }} />
         <button
-          onClick={async (e) => { e.stopPropagation(); if (confirm("¿Eliminar esta entrada de la bitácora?")) { await deleteEntry(entry.id); onDeleted(entry.id); } }}
+          onClick={async (e) => { e.stopPropagation(); if (await confirm({ title: "Eliminar entrada", message: "¿Eliminar esta entrada de la bitácora?", confirmLabel: "Eliminar", danger: true })) { await deleteEntry(entry.id); onDeleted(entry.id); } }}
           title="Eliminar"
           style={{ width: 26, height: 26, borderRadius: 7, border: "none", background: "transparent", cursor: "pointer", color: "#C4C0B8", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
           onMouseEnter={e => { e.currentTarget.style.color = "#D03A3A"; }}
