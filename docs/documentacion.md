@@ -1718,3 +1718,138 @@ El IDOR de responsables se cerró. El `whatsapp_number` **único-global** NO se 
 
 ### Validation
 `import app.main` ✓ · **pytest 16/16** ✓ · build del front ✓ (CI en verde). Migraciones 0040/0041 se validan con `alembic upgrade` sobre Postgres (los tests usan `create_all`). Doc de auditoría (`auditoria-sistema-consolidada.md`) actualizado con el estado de resolución (§1/§4/§7).
+
+---
+
+## 2026-07-23 — Fix de arranque del backend por colisión de variable DEBUG
+
+### Objective
+Restaurar la carga de obras en el frontend: la aplicación de Vite abría en `localhost:5173`, pero el backend no iniciaba correctamente y la vista mostraba “No se pudieron cargar las obras”.
+
+### Changes made
+- Se reemplazó la variable de configuración genérica `DEBUG` por `APP_DEBUG` para evitar colisiones con variables heredadas del entorno.
+- Se actualizaron los consumidores de la configuración y los archivos de entorno.
+- Se aplicaron las migraciones pendientes de PostgreSQL, desde `0037` hasta `0041`.
+
+### Files modified
+- `backend/app/core/config.py` — renombra el campo de configuración a `APP_DEBUG`.
+- `backend/app/core/database.py` — usa `APP_DEBUG` para controlar el log SQL.
+- `backend/app/integrations/twilio/security.py` — usa `APP_DEBUG` para el bypass de validación en desarrollo.
+- `backend/.env` — migra la configuración local a `APP_DEBUG=false`.
+- `backend/.env.example` — documenta la nueva variable.
+- `docs/documentacion.md` — registra la sesión de debugging.
+
+### Problems found
+- El entorno del proceso definía `DEBUG=release`; esa variable sobrescribía el valor booleano del `.env` y Pydantic abortaba con `ValidationError: Input should be a valid boolean`.
+- La base local estaba en la revisión Alembic `0037`, mientras el código requería `0041`.
+
+### Solutions applied
+- Se adoptó el nombre específico `APP_DEBUG`, eliminando la colisión que impedía importar `app.main`.
+- Se ejecutó `alembic upgrade head`, aplicando correctamente las revisiones `0038`, `0039`, `0040` y `0041`.
+
+### Validation
+- `./.venv/bin/python -c "from app.main import app; print('imports OK')"` — OK.
+- `GET http://127.0.0.1:8000/health` — `200 OK`, `{"status":"ok","app":"CONSTRUCTA"}`.
+- `GET /api/v1/obras` sin token y con origen `http://localhost:5173` — `403 Not authenticated` esperado y encabezado CORS correcto.
+- `./.venv/bin/alembic current` — `0041 (head)`.
+- `cd frontend && npm run build` — build completado sin errores; solo advertencia no bloqueante por tamaño del bundle.
+
+### Pending / next steps
+Recargar `http://localhost:5173`; si la sesión fue invalidada durante la caída, iniciar sesión nuevamente para que el listado de obras envíe el token.
+
+---
+
+## 2026-07-23 — Auditoría de avance para la primera entrega de agosto
+
+### Objective
+Determinar el estado real de CONSTRUCTA frente al Anteproyecto, el documento de módulos, el Gantt, la plantilla IPI v2.1–2026 y la evidencia del repositorio, para estimar la completitud del producto y del informe y priorizar el cierre de la primera entrega de agosto.
+
+### Changes made
+- Se creó un diagnóstico consolidado con porcentajes separados de implementación, evidencia, documentación y preparación de entrega.
+- Se construyó una matriz de 17 compromisos originales y se contrastó contra el código y las pruebas existentes.
+- Se comparó `docs/IPI-CONSTRUCTA.md` contra la plantilla oficial y contra los objetivos aprobados en el Anteproyecto.
+- Se documentó la imposibilidad de leer la hoja online por autenticación y se analizó provisionalmente la copia local del Gantt.
+- No se modificó código de producto; los riesgos encontrados quedaron documentados para una remediación posterior explícita.
+
+### Files modified
+- `docs/estado-proyecto-agosto-2026.md` — informe consolidado, porcentajes, brechas y plan de cierre.
+- `docs/documentacion.md` — registro de la sesión de auditoría.
+
+### Problems found
+- El Gantt local tiene 48 actividades con fechas hasta el 2026-06-01, pero no registra estado, porcentaje real, responsables ni evidencia; la hoja de Google devolvió HTTP 401.
+- El IPI tiene estructura avanzada, pero reemplaza los 12 objetivos aprobados por 9 nuevos, omite compromisos originales y agrega compras/costos pese a que el Anteproyecto los excluía.
+- El IPI mantiene datos obsoletos (`0038` frente a `0041`), ocho bloques `[COMPLETAR]`, cuatro capturas faltantes, un Resumen de aproximadamente 320 palabras y bibliografía sin correspondencia completa de citas.
+- Los 16 tests automatizados pasan, pero cubren un subconjunto de seguridad/archivos; no existen tests de frontend, E2E ni cobertura, y los 20 casos manuales no registran resultados ejecutados.
+- La afirmación previa de “cluster P0 cerrado” no coincide con el código: siguen faltando guards de tenant en usuarios, proveedores, compras, export de presupuesto, lookup de responsables, presencia, carga de planos, presupuestos y equipo de obra.
+- La plantilla IPI no define el contenido, porcentaje, fecha ni rúbrica de la primera entrega de agosto.
+
+### Solutions applied
+- Se separaron los indicadores para evitar un porcentaje engañoso: 78% de implementación funcional, 35% de evidencia, 94% de estructura IPI y 55–60% de preparación del IPI para una entrega final.
+- Se estimó una preparación global aproximada de 68% (±5 puntos), condicionada a la consigna real de agosto.
+- Se propuso rebaselinar el Gantt y un plan de cierre fechado entre el 2026-07-24 y el 2026-08-07.
+- No se aplicaron correcciones de producto durante esta auditoría; el alcance solicitado fue diagnosticar y priorizar.
+
+### Validation
+- Lectura completa de los dos DOCX aportados y de las 21 páginas de la plantilla IPI — completada.
+- Revisión de `docs/IPI-CONSTRUCTA.md` — 431 líneas, 8.279 palabras, ocho marcadores `[COMPLETAR]` y siete figuras previstas.
+- Revisión de `/Users/agustinllancaman/Downloads/Gantt_Final_Constructa.xlsx` — 48 actividades en 10 fases.
+- Export de la hoja online — HTTP 401; no se pudo validar si existe una versión posterior.
+- `pytest` — 16/16 tests aprobados.
+- `npm run build` — TypeScript y Vite completados; advertencia no bloqueante por bundle superior a 500 kB.
+- `alembic current` — `0041 (head)`.
+
+### Pending / next steps
+- Obtener la consigna y fecha exactas de la primera entrega de agosto.
+- Compartir/exportar la versión vigente del Gantt y rebaselinarla con avance real.
+- Remediar y probar los guards multi-tenant abiertos.
+- Alinear el IPI con los 12 objetivos originales, explicar la evolución del alcance y completar evidencias, citas, costos y figuras.
+- Consolidar en `main` una versión única y etiquetada para la entrega.
+
+---
+
+## 2026-07-23 — Recalibración del alcance para la defensa del 15 de agosto
+
+### Objective
+Recalcular el estado de CONSTRUCTA usando el Gantt completo aportado por el equipo y delimitar exactamente qué funcionalidades, evidencia y documentación deben defenderse el 2026-08-15, sin mezclar ese corte parcial con la entrega final de 2027.
+
+### Changes made
+- Se analizó `Gantt_Proyecto.xlsx`, compuesto por 97 actividades y una planificación entre el 2026-04-07 y el 2027-02-01.
+- Se identificaron 64 actividades planificadas como finalizadas, dos en curso y 31 futuras al 2026-08-15.
+- Se cruzaron las 66 actividades del corte contra código, documentación y pruebas.
+- Se generó un informe específico de alcance, estado, faltantes y guion de defensa.
+- Se marcó el diagnóstico preliminar anterior como reemplazado para este corte académico.
+
+### Files modified
+- `docs/alcance-defensa-2026-08-15.md` — diagnóstico específico de la defensa, alcance incluido/excluido, porcentajes y plan de cierre.
+- `docs/estado-proyecto-agosto-2026.md` — aviso de reemplazo de la estimación preliminar para el corte del 2026-08-15.
+- `docs/documentacion.md` — registro de la recalibración.
+
+### Problems found
+- El Gantt no contiene estado real, porcentaje completado, responsables, evidencia ni fechas reales; sus colores representan fases.
+- El 2026-08-15 no figura como hito. El corte atraviesa “Extracción de eventos y estados”, cuya finalización está planificada para el 2026-08-16.
+- Las entrevistas con expertos y la preparación de la presentación no tienen evidencia suficiente.
+- Las pruebas funcionales, de integración y de escenarios están parcialmente documentadas, pero los casos manuales no registran resultados ejecutados.
+- La interpretación de mensajes puede confundirse con NLP de texto libre; el alcance implementado combina respuestas estructuradas del chatbot con análisis de audios/textos de bitácora.
+- El IPI debe alinearse con los 12 objetivos aprobados y expresar estado al corte, no cierre final.
+
+### Solutions applied
+- Se descartó la cifra preliminar de 68% para esta presentación.
+- Se calculó 51,9% como avance funcional planificado del proyecto global al corte.
+- Se estimó 89,6% de implementación técnica del alcance que debe defenderse y 73–76% de preparación del paquete completo.
+- Se delimitó como último entregable completamente exigible el parser de mensajes, planificado hasta el 2026-08-10.
+- Se separaron expresamente fases posteriores, ampliaciones y requisitos de producción que no bloquean la defensa de agosto.
+- Se propuso un plan fechado del 2026-07-24 al 2026-08-15 y un guion de demostración con contingencia para WhatsApp e IA.
+
+### Validation
+- Lectura de las hojas `Gantt`, `Leyenda` y `Datos` — 121, 22 y 119 filas respectivamente.
+- Cálculo de calendario — día 1: 2026-04-07; día 131: 2026-08-15; día 301: 2027-02-01.
+- Conteo del corte — 64 actividades finalizadas según plan, dos en curso y 31 posteriores.
+- Cruce de evidencia — 50 completas, 14 parciales y dos pendientes entre las 66 actividades del corte.
+- Revisión de consistencia documental — informe nuevo guardado, fecha absoluta correcta y próximos pasos completos.
+
+### Pending / next steps
+- Incorporar el 2026-08-15 como hito y agregar estado/evidencia al tablero operativo.
+- Documentar entrevistas y un corpus de 10–15 mensajes con resultados esperados y reales.
+- Ejecutar y registrar el flujo crítico completo de MVP, WhatsApp y bitácora.
+- Preparar y ensayar la presentación antes del 2026-08-15.
+- Actualizar el IPI con los objetivos aprobados, estado al corte y evidencia.
