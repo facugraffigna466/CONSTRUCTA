@@ -17,7 +17,8 @@ import logging
 from datetime import date, datetime, timezone
 
 import requests
-from sqlalchemy import and_, or_, select
+from fastapi import HTTPException, status
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -31,6 +32,16 @@ from app.schemas.task import TaskCreate, TaskStatusUpdate, TaskUpdate
 from app.services.task_service import TaskService
 
 logger = logging.getLogger(__name__)
+
+# Control de costo de IA: cota mensual de análisis de bitácora por tenant, según
+# el plan. Cada entrada procesada dispara transcripción (Whisper) + análisis
+# (Claude), que cuestan; sin cota, un usuario podría gastar sin límite.
+_BITACORA_MONTHLY_LIMITS: dict[str, int | None] = {
+    "basico": 50,
+    "pro": 300,
+    "enterprise": None,  # ilimitado
+}
+_BITACORA_DEFAULT_LIMIT = 20  # tenant sin plan asignado
 
 # Schema de salida estricto para el análisis (structured outputs → JSON garantizado)
 _ANALYSIS_SCHEMA = {
@@ -79,6 +90,49 @@ class BitacoraService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.historial = HistorialRepository(session)
+
+    # ── Control de costo de IA ────────────────────────────────────────────────
+
+    async def assert_within_ai_quota(self, tenant_id: int | None) -> None:
+        """Cota mensual de análisis de bitácora por tenant (control de costo de IA).
+
+        Cuenta las entradas creadas este mes por usuarios del tenant. Si se
+        alcanzó el límite del plan, lanza 429. `enterprise` (o límite None) es
+        ilimitado. Se chequea al CREAR una entrada nueva (audio/texto), que es el
+        vector de crecimiento no acotado; reprocesar existentes está acotado por
+        la cantidad de entradas ya creadas."""
+        if tenant_id is None:
+            return
+
+        from app.models.plan import Plan
+        from app.models.tenant import Tenant
+        from app.models.user import User
+
+        limit: int | None = _BITACORA_DEFAULT_LIMIT
+        tenant = await self.session.get(Tenant, tenant_id)
+        if tenant and tenant.plan_id:
+            plan = await self.session.get(Plan, tenant.plan_id)
+            if plan:
+                limit = _BITACORA_MONTHLY_LIMITS.get(plan.name, _BITACORA_DEFAULT_LIMIT)
+        if limit is None:
+            return  # plan ilimitado
+
+        month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        used = (await self.session.execute(
+            select(func.count())
+            .select_from(BitacoraEntry)
+            .join(User, BitacoraEntry.created_by == User.id)
+            .where(User.tenant_id == tenant_id, BitacoraEntry.created_at >= month_start)
+        )).scalar_one()
+
+        if used >= limit:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Alcanzaste el límite de {limit} análisis de bitácora con IA de este mes. "
+                    "Podés seguir cargando texto a mano o subir de plan para más."
+                ),
+            )
 
     # ── CRUD básico ───────────────────────────────────────────────────────────
 
