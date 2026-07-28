@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
-from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.deps import CurrentUser, DbSession
 from app.models.alert import AlertType
 from app.models.obra import Obra
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
@@ -36,9 +36,13 @@ from app.services.email_service import send_email
 router = APIRouter(tags=["purchase-orders"])
 
 
-async def _get_obra_or_404(obra_id: int, db: DbSession) -> Obra:
+async def _get_obra_scoped(obra_id: int, db: DbSession, current_user: User) -> Obra:
+    """Obra de la obra_id, verificando que pertenezca al tenant del usuario.
+    Colapsa el caso cross-tenant en el mismo 404 para no filtrar existencia."""
     obra = (await db.execute(select(Obra).where(Obra.id == obra_id))).scalar_one_or_none()
-    if not obra:
+    if not obra or (
+        current_user.tenant_id is not None and obra.tenant_id != current_user.tenant_id
+    ):
         raise HTTPException(404, "Obra no encontrada")
     return obra
 
@@ -64,8 +68,8 @@ async def _order_to_read(order: PurchaseOrder, db: DbSession) -> PurchaseOrderRe
 # ─── Presupuesto ──────────────────────────────────────────────────────────────
 
 @router.get("/obras/{obra_id}/presupuesto", response_model=PresupuestoResponse)
-async def get_presupuesto(obra_id: int, db: DbSession, _: CurrentUserId):
-    await _get_obra_or_404(obra_id, db)
+async def get_presupuesto(obra_id: int, db: DbSession, current_user: CurrentUser):
+    await _get_obra_scoped(obra_id, db, current_user)
 
     ResponsibleAlias = Responsible
     UserAlias = User
@@ -118,8 +122,8 @@ async def get_presupuesto(obra_id: int, db: DbSession, _: CurrentUserId):
 # ─── Pedidos ──────────────────────────────────────────────────────────────────
 
 @router.get("/obras/{obra_id}/purchase-orders", response_model=list[PurchaseOrderRead])
-async def list_orders(obra_id: int, db: DbSession, _: CurrentUserId):
-    await _get_obra_or_404(obra_id, db)
+async def list_orders(obra_id: int, db: DbSession, current_user: CurrentUser):
+    await _get_obra_scoped(obra_id, db, current_user)
     result = await db.execute(
         select(PurchaseOrder)
         .where(PurchaseOrder.obra_id == obra_id)
@@ -131,7 +135,7 @@ async def list_orders(obra_id: int, db: DbSession, _: CurrentUserId):
 
 @router.post("/obras/{obra_id}/purchase-orders", response_model=PurchaseOrderRead, status_code=status.HTTP_201_CREATED)
 async def create_order(obra_id: int, data: PurchaseOrderCreate, db: DbSession, current_user: CurrentUser):
-    await _get_obra_or_404(obra_id, db)
+    await _get_obra_scoped(obra_id, db, current_user)
 
     materials = (await db.execute(
         select(TaskMaterial)
@@ -191,14 +195,22 @@ def _build_order_message(order: PurchaseOrder, obra_name: str, supplier_name: st
 
 
 @router.post("/purchase-orders/{order_id}/send", response_model=PurchaseOrderRead)
-async def send_order(order_id: int, data: PurchaseOrderSendRequest, db: DbSession, _: CurrentUserId):
+async def send_order(order_id: int, data: PurchaseOrderSendRequest, db: DbSession, current_user: CurrentUser):
     order = (await db.execute(
         select(PurchaseOrder).where(PurchaseOrder.id == order_id)
     )).scalar_one_or_none()
     if not order:
         raise HTTPException(404, "Pedido no encontrado")
-    if order.status == "recibido":
-        raise HTTPException(422, "El pedido ya fue recibido.")
+
+    # Aislamiento por tenant: verificar ANTES de tocar el pedido (404 si es de otra empresa).
+    obra = await _get_obra_scoped(order.obra_id, db, current_user)
+
+    # Idempotencia: solo un pedido en 'borrador' se envía. Un segundo click / reintento
+    # (ya 'enviado' o 'recibido') no dispara un mensaje duplicado al proveedor.
+    if order.status != "borrador":
+        detail = "El pedido ya fue recibido." if order.status == "recibido" else "El pedido ya fue enviado."
+        raise HTTPException(409, detail)
+
     if not order.supplier_id:
         raise HTTPException(422, "El pedido no tiene proveedor asignado.")
 
@@ -206,7 +218,6 @@ async def send_order(order_id: int, data: PurchaseOrderSendRequest, db: DbSessio
     if not supplier:
         raise HTTPException(422, "El proveedor del pedido ya no existe.")
 
-    obra = await _get_obra_or_404(order.obra_id, db)
     body = _build_order_message(order, obra.name, supplier.name)
 
     delivered = False
@@ -239,12 +250,16 @@ async def send_order(order_id: int, data: PurchaseOrderSendRequest, db: DbSessio
 
 
 @router.post("/purchase-orders/{order_id}/receive", response_model=PurchaseOrderRead)
-async def receive_order(order_id: int, db: DbSession, _: CurrentUserId):
+async def receive_order(order_id: int, db: DbSession, current_user: CurrentUser):
     order = (await db.execute(
         select(PurchaseOrder).where(PurchaseOrder.id == order_id)
     )).scalar_one_or_none()
     if not order:
         raise HTTPException(404, "Pedido no encontrado")
+
+    # Aislamiento por tenant: 404 si el pedido es de una obra de otra empresa.
+    await _get_obra_scoped(order.obra_id, db, current_user)
+
     if order.status == "recibido":
         return await _order_to_read(order, db)
 

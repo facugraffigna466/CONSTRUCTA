@@ -6,6 +6,8 @@ import pytest_asyncio
 
 from app.core.security import create_access_token
 from app.models.obra import Obra
+from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
+from app.models.supplier import Supplier
 from app.models.task import Task
 from app.models.tenant import Tenant
 from app.models.user import User
@@ -49,6 +51,17 @@ async def two_tenants(db):
     task_a = Task(obra_id=obra_a.id, tenant_id=ta.id, title="Tarea de A")
     db.add(task_a)
     await db.flush()
+
+    # Pedido de compra en 'borrador' de la empresa A (con proveedor) para probar
+    # el aislamiento y la idempotencia del envío externo.
+    supplier_a = Supplier(tenant_id=ta.id, name="Proveedor A", phone="+540000000000", email="prov-a@x.com")
+    db.add(supplier_a)
+    await db.flush()
+    order_a = PurchaseOrder(obra_id=obra_a.id, supplier_id=supplier_a.id, status="borrador")
+    db.add(order_a)
+    await db.flush()
+    db.add(PurchaseOrderItem(order_id=order_a.id, name="Cemento", quantity=10, unit="bolsa"))
+    await db.flush()
     await db.commit()
 
     return {
@@ -56,6 +69,7 @@ async def two_tenants(db):
         "task_a": task_a.id,
         "user_b": ub.id,
         "collab_b": collab_b.id,
+        "order_a": order_a.id,
         "token_a": create_access_token(ua.id),
         "token_b": create_access_token(ub.id),
     }
@@ -79,6 +93,8 @@ def _cross_tenant_urls(ids: dict) -> list[str]:
         f"{API}/obras/{o}/baseline",
         f"{API}/tasks/{t}/materials",
         f"{API}/obras/{o}/solicitudes-cotizacion",
+        f"{API}/obras/{o}/presupuesto",
+        f"{API}/obras/{o}/purchase-orders",
     ]
 
 
@@ -178,3 +194,44 @@ async def test_same_tenant_role_change_still_works(client, two_tenants):
         json={"role": "admin"},
     )
     assert r.status_code == 200, f"Cambio de rol legítimo roto: {r.status_code} — {r.text[:200]}"
+
+
+# --- Compras: aislamiento de tenant + idempotencia del envío externo ---
+
+async def test_cross_tenant_order_send_blocked(client, two_tenants):
+    """B no puede enviar al proveedor un pedido de A → 404 (no dispara WhatsApp/email ajeno)."""
+    ids = two_tenants
+    r = await client.post(
+        f"{API}/purchase-orders/{ids['order_a']}/send",
+        headers=_auth(ids["token_b"]),
+        json={"channel": "whatsapp"},
+    )
+    assert r.status_code == 404, f"Envío cross-tenant permitido: {r.status_code}"
+
+
+async def test_cross_tenant_order_receive_blocked(client, two_tenants):
+    """B no puede marcar recibido un pedido de A → 404."""
+    ids = two_tenants
+    r = await client.post(
+        f"{API}/purchase-orders/{ids['order_a']}/receive",
+        headers=_auth(ids["token_b"]),
+    )
+    assert r.status_code == 404, f"Recepción cross-tenant permitida: {r.status_code}"
+
+
+async def test_order_send_is_idempotent(client, two_tenants):
+    """A envía su pedido (200); un segundo envío (doble click / reintento) → 409, sin duplicar."""
+    ids = two_tenants
+    r1 = await client.post(
+        f"{API}/purchase-orders/{ids['order_a']}/send",
+        headers=_auth(ids["token_a"]),
+        json={"channel": "whatsapp"},
+    )
+    assert r1.status_code == 200, f"Envío legítimo roto: {r1.status_code} — {r1.text[:200]}"
+    assert r1.json()["status"] == "enviado"
+    r2 = await client.post(
+        f"{API}/purchase-orders/{ids['order_a']}/send",
+        headers=_auth(ids["token_a"]),
+        json={"channel": "whatsapp"},
+    )
+    assert r2.status_code == 409, f"Reenvío no bloqueado (no idempotente): {r2.status_code}"
