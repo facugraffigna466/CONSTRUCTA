@@ -66,7 +66,11 @@ async def update_member_role(user_id: int, data: RoleUpdateRequest, current_user
         raise HTTPException(status_code=400, detail="No podés cambiar tu propio rol")
     repo = UserRepository(db)
     target = await repo.get(user_id)
-    if not target:
+    # Aislamiento por tenant: un admin solo opera sobre miembros de SU empresa.
+    # Se colapsa el caso cross-tenant en el mismo 404 para no filtrar existencia.
+    if not target or (
+        current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id
+    ):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     updated = await repo.update_fields(user_id, role=data.role)
     return updated
@@ -78,7 +82,10 @@ async def remove_member(user_id: int, current_user: AdminUser, db: DbSession):
         raise HTTPException(status_code=400, detail="No podés eliminarte a vos mismo")
     repo = UserRepository(db)
     target = await repo.get(user_id)
-    if not target:
+    # Aislamiento por tenant: un admin solo opera sobre miembros de SU empresa.
+    if not target or (
+        current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id
+    ):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if target.role == "admin":
         raise HTTPException(status_code=400, detail="No se puede eliminar a otro administrador")
