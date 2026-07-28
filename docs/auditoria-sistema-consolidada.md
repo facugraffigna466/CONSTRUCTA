@@ -1,7 +1,7 @@
 # Auditoría del sistema — Informe consolidado
 
 **Fecha:** 2026-07-17 (actualizado 2026-07-18: auditoría de frontend pantalla por pantalla — §9 — y **estado de resolución de los P0**, ver §1/§4/§7).
-**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 16 tests + CI lo sostienen.
+**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 27 tests + CI lo sostienen.
 **Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
 **Alcance:** todo el sistema — autenticación, planes/tenants, obras, tareas, cronograma, comunicación de campo (WhatsApp/alertas/presencia), compras y documentos, bitácora con IA, infraestructura transversal, frontend, y modelo de datos/integraciones.
 
@@ -117,7 +117,7 @@ Todo lo que permite que **la Empresa B vea o toque datos de la Empresa A**, o qu
 > - **#5 (`INTERNAL_API_KEY` vacío)** → el código ya fallaba cerrado (401 si está vacío); no requería fix.
 > - **#15 (SSE sin tenant + JWT en query)** → se removió el endpoint SSE, que era **código muerto** (el front usa Socket.IO); elimina el vector entero.
 > - **#2 (causa raíz — `tenant_id` no denormalizado)** → **Fase 1** (columna + backfill + keep-in-sync) **+ Fase 2** (`NOT NULL` en obras y 6 hijas + guard por columna, single-`WHERE`), con `tests/test_tenant_denorm.py`.
-> - Todo protegido por **CI** (GitHub Actions) que corre los **16 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
+> - Todo protegido por **CI** (GitHub Actions) que corre los **27 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
 >
 > **Único punto abierto — #14 (parcial):** el IDOR de responsables se cerró (guard de tenant). Lo que **NO** se cerró es el `whatsapp_number` **único-global**: volverlo per-tenant haría ambiguo el ruteo del mensaje entrante de WhatsApp (con un número de Twilio compartido, el `From` del remitente es la única señal de a qué empresa pertenece). Cerrarlo exige un **número de WhatsApp por tenant** → es una **decisión de arquitectura de producto**, no un bug de código. Queda documentado como limitación conocida.
 
@@ -254,7 +254,7 @@ La recomendación era hacer **ambos** — y **ambos están hechos y mergeados** 
 2. ✅ **Autenticar el serving de documentos** (`/uploads`, planos): URLs firmadas (HMAC + expiración). — **hecho.**
 3. ✅ **`INTERNAL_API_KEY`:** ya falla cerrado (401 si está vacío). — **verificado, sin cambio necesario.**
 4. ✅ **Denormalizar `tenant_id`** (migraciones 0040/0041): columna + backfill + keep-in-sync + `NOT NULL` + guard por columna. — **hecho (Fase 1 + 2).**
-5. ✅ **CI mínimo** que corre los 16 tests en cada push (GitHub Actions). — **hecho.**
+5. ✅ **CI mínimo** que corre los 27 tests en cada push (GitHub Actions). — **hecho.**
 6. ⬜ **Ciclo de vida de cuenta** (recuperación de contraseña, verificación de email, refresh token). — pendiente (P1).
 7. ⬜ **Monetización real** (billing, verificación de `active_until`, trial). — pendiente (P1).
 8. ⬜ **Robustez operativa** (multi-worker para presencia, rate limiting, manejo global de errores, Sentry). — pendiente (P1).

@@ -20,12 +20,12 @@ async def _mk_tenant(db, name: str) -> Tenant:
     return t
 
 
-async def _mk_user(db, tenant_id: int, email: str) -> User:
+async def _mk_user(db, tenant_id: int, email: str, role: str = "admin") -> User:
     u = User(
         email=email,
         hashed_password="x",
         full_name="Test User",
-        role="admin",
+        role=role,
         is_active=True,
         tenant_id=tenant_id,
     )
@@ -41,6 +41,7 @@ async def two_tenants(db):
     tb = await _mk_tenant(db, "Empresa B")
     ua = await _mk_user(db, ta.id, "a@empresa-a.com")
     ub = await _mk_user(db, tb.id, "b@empresa-b.com")
+    collab_b = await _mk_user(db, tb.id, "collab-b@empresa-b.com", role="collaborator")
 
     obra_a = Obra(name="Obra A", manager_id=ua.id, tenant_id=ta.id)
     db.add(obra_a)
@@ -53,6 +54,8 @@ async def two_tenants(db):
     return {
         "obra_a": obra_a.id,
         "task_a": task_a.id,
+        "user_b": ub.id,
+        "collab_b": collab_b.id,
         "token_a": create_access_token(ua.id),
         "token_b": create_access_token(ub.id),
     }
@@ -141,3 +144,37 @@ async def test_same_tenant_writes_still_work(client, two_tenants):
         json={"name": "Cemento"},
     )
     assert r.status_code == 201, f"Escritura legítima rota: {r.status_code} — {r.text[:200]}"
+
+
+# --- Gestión de miembros: un admin solo opera sobre usuarios de SU empresa ---
+
+async def test_cross_tenant_role_change_blocked(client, two_tenants):
+    """Admin de A no puede cambiar el rol de un miembro de B → 404 (no filtra existencia)."""
+    ids = two_tenants
+    r = await client.patch(
+        f"{API}/users/{ids['collab_b']}/role",
+        headers=_auth(ids["token_a"]),
+        json={"role": "admin"},
+    )
+    assert r.status_code == 404, f"Cambio de rol cross-tenant permitido: {r.status_code}"
+
+
+async def test_cross_tenant_member_delete_blocked(client, two_tenants):
+    """Admin de A no puede eliminar a un miembro de B; el miembro sigue existiendo para B."""
+    ids = two_tenants
+    r = await client.delete(f"{API}/users/{ids['collab_b']}", headers=_auth(ids["token_a"]))
+    assert r.status_code == 404, f"Borrado cross-tenant de usuario permitido: {r.status_code}"
+    r2 = await client.get(f"{API}/users", headers=_auth(ids["token_b"]))
+    assert r2.status_code == 200
+    assert any(u["id"] == ids["collab_b"] for u in r2.json()), "Admin de A borró un usuario de B"
+
+
+async def test_same_tenant_role_change_still_works(client, two_tenants):
+    """No sobre-restringimos: admin de B sí puede promover a su propio colaborador."""
+    ids = two_tenants
+    r = await client.patch(
+        f"{API}/users/{ids['collab_b']}/role",
+        headers=_auth(ids["token_b"]),
+        json={"role": "admin"},
+    )
+    assert r.status_code == 200, f"Cambio de rol legítimo roto: {r.status_code} — {r.text[:200]}"
