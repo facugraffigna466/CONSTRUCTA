@@ -15,6 +15,10 @@ import openpyxl
 
 from app.schemas.imports import ImportDepLink, ImportPreview, ImportPreviewRow
 
+# Tope de filas por archivo: evita que un archivo patológico (o un XML expandido)
+# genere una cantidad ilimitada de tareas / consuma memoria.
+MAX_IMPORT_ROWS = 5000
+
 # ── Column alias maps ─────────────────────────────────────────────────────────
 
 _TITLE_ALIASES       = {"nombre", "name", "task name", "tarea", "título", "titulo", "actividad", "task"}
@@ -147,7 +151,17 @@ def is_msproject_xml(file_bytes: bytes) -> bool:
 
 def parse_msproject_xml(file_bytes: bytes) -> ImportPreview:
     """Parsea el XML de MS Project: tareas + WBS + dependencias + recursos."""
-    root = ET.fromstring(file_bytes)
+    # Defensa contra archivos maliciosos: xml.etree usa expat, que expande
+    # entidades internas ("billion laughs") y puede resolver DTDs. MS Project no
+    # emite DOCTYPE/ENTITY, así que rechazamos cualquier XML que los declare
+    # antes de parsear (mitigación sin dependencias externas).
+    prefix = file_bytes[:16384].lower()
+    if b"<!doctype" in prefix or b"<!entity" in prefix:
+        raise ValueError("El XML contiene declaraciones DOCTYPE/ENTITY no permitidas.")
+    try:
+        root = ET.fromstring(file_bytes)
+    except ET.ParseError as exc:
+        raise ValueError(f"XML mal formado: {exc}") from exc
     if _strip_ns(root.tag) != "Project":
         raise ValueError("El XML no tiene el formato de MS Project (falta el nodo <Project>).")
 
@@ -214,6 +228,11 @@ def parse_msproject_xml(file_bytes: bytes) -> ImportPreview:
                 "parent_uid": _find_text(task_el, "ParentTaskUID"),
                 "deps": deps,
             })
+
+    if len(raw_tasks) > MAX_IMPORT_ROWS:
+        raise ValueError(
+            f"El archivo tiene {len(raw_tasks)} tareas; el máximo por importación es {MAX_IMPORT_ROWS}."
+        )
 
     # Índices de fila por UID (orden del archivo = orden de outline)
     for i, t in enumerate(raw_tasks):
@@ -288,7 +307,14 @@ def parse_excel(
     else:
         wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
         ws = wb.active
+        if ws is None:
+            raise ValueError("El archivo no tiene ninguna hoja de cálculo activa.")
         headers, data_rows = _rows_from_sheet(ws)
+
+    if len(data_rows) > MAX_IMPORT_ROWS:
+        raise ValueError(
+            f"El archivo tiene {len(data_rows)} filas; el máximo por importación es {MAX_IMPORT_ROWS}."
+        )
 
     col_map = _detect_column_map(headers)
     if column_overrides:

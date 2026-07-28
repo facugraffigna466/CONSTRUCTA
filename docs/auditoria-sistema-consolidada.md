@@ -1,7 +1,7 @@
 # Auditoría del sistema — Informe consolidado
 
 **Fecha:** 2026-07-17 (actualizado 2026-07-18: auditoría de frontend pantalla por pantalla — §9 — y **estado de resolución de los P0**, ver §1/§4/§7).
-**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 30 tests + CI lo sostienen.
+**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 37 tests + CI lo sostienen.
 **Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
 **Alcance:** todo el sistema — autenticación, planes/tenants, obras, tareas, cronograma, comunicación de campo (WhatsApp/alertas/presencia), compras y documentos, bitácora con IA, infraestructura transversal, frontend, y modelo de datos/integraciones.
 
@@ -63,7 +63,7 @@ Verificación de que **cada** módulo del sistema quedó auditado (respuesta dir
 | `critical_path.py` | obras-tareas | Tareas sin fecha caen sin aviso (P2) |
 | `calendar.py` | obras-tareas / complementos | Endpoints sin scope de tenant (P0) |
 | `exports.py` | complementos | Export de tareas sin verificar tenant → exfiltración (P0) |
-| `imports.py` | obras-tareas | Robustez ante archivos malformados (P1) |
+| `imports.py` | obras-tareas | ✅ Robustez ante archivos malformados (#18) — **resuelto 2026-07-28** (guard XML anti-DoS, tope de filas, crash de filename, fail-fast de obra + 7 tests) |
 | `alerts.py` | comunicacion-campo | `PATCH /alerts/{id}/read` no valida tenant (P0) |
 | `events.py` (SSE) | complementos | SSE sin scope de tenant + token en query string (P0) |
 | `notifications.py` | complementos | Sin push offline para alertas críticas (P1) |
@@ -117,13 +117,15 @@ Todo lo que permite que **la Empresa B vea o toque datos de la Empresa A**, o qu
 > - **#5 (`INTERNAL_API_KEY` vacío)** → el código ya fallaba cerrado (401 si está vacío); no requería fix.
 > - **#15 (SSE sin tenant + JWT en query)** → se removió el endpoint SSE, que era **código muerto** (el front usa Socket.IO); elimina el vector entero.
 > - **#2 (causa raíz — `tenant_id` no denormalizado)** → **Fase 1** (columna + backfill + keep-in-sync) **+ Fase 2** (`NOT NULL` en obras y 6 hijas + guard por columna, single-`WHERE`), con `tests/test_tenant_denorm.py`.
-> - Todo protegido por **CI** (GitHub Actions) que corre los **30 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
+> - Todo protegido por **CI** (GitHub Actions) que corre los **37 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
 >
 > **Único punto abierto — #14 (parcial):** el IDOR de responsables se cerró (guard de tenant). Lo que **NO** se cerró es el `whatsapp_number` **único-global**: volverlo per-tenant haría ambiguo el ruteo del mensaje entrante de WhatsApp (con un número de Twilio compartido, el `From` del remitente es la única señal de a qué empresa pertenece). Cerrarlo exige un **número de WhatsApp por tenant** → es una **decisión de arquitectura de producto**, no un bug de código. Queda documentado como limitación conocida.
 
 > **➕ Adenda 2026-07-28 — #16 (IDOR en gestión de miembros, hallado en revisión posterior y RESUELTO).** El barrido P0 original cubrió los endpoints por obra/tarea pero **omitió `users.py`**: `PATCH /users/{id}/role` y `DELETE /users/{id}` hacían `repo.get(user_id)` por PK **sin verificar tenant**. Un admin de la empresa A podía **cambiar el rol o eliminar a un usuario de la empresa B** (escalada/tampering cross-tenant). `list_members`/`invite` sí estaban scopeados; estos dos no. **Fix:** guard de tenant en ambos endpoints (colapsa el caso cross-tenant en el mismo `404` para no filtrar existencia), siguiendo la convención de `get_for_manager`. Cubierto por 3 tests nuevos en `tests/test_tenant_isolation.py` (cambio de rol cross-tenant → 404, borrado cross-tenant → 404 + el usuario sigue vivo, y el caso legítimo mismo-tenant → 200). No había lockout del último admin: el guard de auto-rol/auto-borrado (`user_id == current_user.id`) ya lo impedía.
 
 > **➕ Adenda 2026-07-28 — #17 (`purchase_orders.py`: IDOR de módulo completo + envío sin idempotencia, RESUELTO).** El módulo de Compras/Presupuesto **no tenía aislamiento de tenant en ninguna ruta**: `_get_obra_or_404` traía la obra por id sin verificar tenant, y `send`/`receive` resolvían el pedido por PK. Un usuario de la empresa A podía **leer el presupuesto/pedidos de la empresa B, crear pedidos en obras ajenas, y enviar/recibir pedidos de otro tenant** (fuga + mutación cross-tenant, incluido un envío externo de WhatsApp/email en nombre de otra empresa). Además, `send` no era idempotente: un segundo click / reintento re-disparaba el mensaje al proveedor (solo bloqueaba si el pedido ya estaba `recibido`). **Fix:** helper `_get_obra_scoped` con guard de tenant aplicado en las 5 rutas (`presupuesto`, `list`, `create`, `send`, `receive`), verificando el tenant **antes** de tocar el pedido; y guard de idempotencia en `send` (solo un pedido en `borrador` se envía → `409` si ya está `enviado`/`recibido`, sin mensaje duplicado). El front ya solo muestra "Enviar" en `borrador`, así que no rompe el flujo legítimo. Cubierto por 4 tests en `tests/test_tenant_isolation.py`.
+
+> **➕ Adenda 2026-07-28 — #18 (`imports.py`: robustez ante archivos malformados, RESUELTO).** Endurecimiento del import de cronograma (Excel/CSV/MS Project XML) para que un archivo malformado o malicioso devuelva un `4xx` claro en vez de un `500` o un cuelgue. **Fixes:** (a) **XML anti-DoS** — `parse_msproject_xml` rechaza cualquier XML con `DOCTYPE`/`ENTITY` antes de parsear (mitiga "billion laughs" sin agregar `defusedxml`) y convierte `ParseError` en un mensaje limpio; (b) **tope de filas** `MAX_IMPORT_ROWS=5000` en el parseo y en `confirm` (`413`) → evita creación ilimitada de tareas; (c) **crash de `filename` None** en `preview` (`file.filename.endswith` → `AttributeError`/500) ahora protegido; (d) **fail-fast de obra** en `confirm` (`_get_obra_and_assert_access` → `404` si la obra no existe o es de otro tenant, en vez de N intentos fallidos); (e) el parser ya no filtra la excepción cruda al cliente (log interno + mensaje genérico) y valida archivo vacío / hoja activa nula. Cubierto por 7 tests nuevos en `tests/test_imports.py` (no había ninguno).
 
 ### 🟠 P1 — Robustez operativa y features de negocio
 
@@ -258,7 +260,7 @@ La recomendación era hacer **ambos** — y **ambos están hechos y mergeados** 
 2. ✅ **Autenticar el serving de documentos** (`/uploads`, planos): URLs firmadas (HMAC + expiración). — **hecho.**
 3. ✅ **`INTERNAL_API_KEY`:** ya falla cerrado (401 si está vacío). — **verificado, sin cambio necesario.**
 4. ✅ **Denormalizar `tenant_id`** (migraciones 0040/0041): columna + backfill + keep-in-sync + `NOT NULL` + guard por columna. — **hecho (Fase 1 + 2).**
-5. ✅ **CI mínimo** que corre los 30 tests en cada push (GitHub Actions). — **hecho.**
+5. ✅ **CI mínimo** que corre los 37 tests en cada push (GitHub Actions). — **hecho.**
 6. ⬜ **Ciclo de vida de cuenta** (recuperación de contraseña, verificación de email, refresh token). — pendiente (P1).
 7. ⬜ **Monetización real** (billing, verificación de `active_until`, trial). — pendiente (P1).
 8. ⬜ **Robustez operativa** (multi-worker para presencia, rate limiting, manejo global de errores, Sentry). — pendiente (P1).

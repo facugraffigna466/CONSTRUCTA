@@ -4,6 +4,8 @@ Import endpoints for MS Project / Excel integration.
 POST /api/v1/imports/project-excel        → parse file, return preview
 POST /api/v1/imports/project-excel/confirm → create tasks from confirmed preview
 """
+import logging
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.core.deps import CurrentUserId, DbSession
@@ -11,8 +13,10 @@ from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.imports import ImportConfirmPayload, ImportPreview
 from app.schemas.task import DependencyLinkInput, TaskCreate
-from app.services.import_service import parse_excel, detect_column_mapping_ai
+from app.services.import_service import MAX_IMPORT_ROWS, parse_excel, detect_column_mapping_ai
 from app.services.task_service import TaskService
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_MIME = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -34,12 +38,15 @@ async def preview_import(
     column_map: str | None = Form(default=None),
 ) -> ImportPreview:
     mime = file.content_type or ""
-    if mime not in ALLOWED_MIME and not file.filename.endswith((".xlsx", ".xls", ".csv", ".xml")):  # type: ignore[union-attr]
+    filename = file.filename or ""
+    if mime not in ALLOWED_MIME and not filename.endswith((".xlsx", ".xls", ".csv", ".xml")):
         raise HTTPException(400, "Solo se aceptan archivos .xlsx, .csv o .xml (MS Project).")
 
     content = await file.read()
     if len(content) > MAX_BYTES:
         raise HTTPException(400, "El archivo no puede superar 10 MB.")
+    if not content:
+        raise HTTPException(400, "El archivo está vacío.")
 
     overrides = None
     if column_map:
@@ -51,8 +58,15 @@ async def preview_import(
 
     try:
         return parse_excel(content, mime, column_overrides=overrides)
+    except ValueError as exc:
+        # Errores esperados de archivo malformado → mensaje claro para el usuario.
+        raise HTTPException(422, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(422, f"No se pudo procesar el archivo: {exc}") from exc
+        # Fallo inesperado del parser (archivo corrupto, etc.): log interno, mensaje genérico.
+        logger.exception("Error inesperado al parsear import (mime=%s, name=%s)", mime, filename)
+        raise HTTPException(
+            422, "No se pudo procesar el archivo. Verificá que sea un .xlsx, .csv o .xml válido."
+        ) from exc
 
 
 @router.post("/project-excel/confirm")
@@ -61,7 +75,16 @@ async def confirm_import(
     db: DbSession,
     manager_id: CurrentUserId,
 ) -> dict:
+    if len(payload.rows) > MAX_IMPORT_ROWS:
+        raise HTTPException(
+            413, f"Demasiadas filas ({len(payload.rows)}); el máximo por importación es {MAX_IMPORT_ROWS}."
+        )
+
     service = TaskService(db)
+    # Fail-fast: la obra debe existir y pertenecer al tenant del usuario (404 si no).
+    # Evita N intentos de creación fallidos contra una obra ajena/inexistente.
+    await service._get_obra_and_assert_access(payload.obra_id, manager_id)
+
     resp_repo = ResponsibleRepository(db)
     task_repo = TaskRepository(db)
 
