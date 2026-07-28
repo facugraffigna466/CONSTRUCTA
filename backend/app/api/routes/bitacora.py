@@ -37,6 +37,7 @@ UPLOADS_DIR = Path(__file__).parent.parent.parent.parent / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 AUDIO_TYPES = {"audio/ogg", "audio/mpeg", "audio/mp4", "audio/wav", "audio/webm", "audio/x-m4a", "audio/aac"}
+AUDIO_EXTS = {"ogg", "oga", "mp3", "mpeg", "m4a", "mp4", "wav", "webm", "aac"}
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB (límite de Whisper)
 
 
@@ -94,10 +95,16 @@ async def create_audio_entry(
 ):
     # 404 si la obra no existe o pertenece a otro tenant
     await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
+    # Control de costo de IA: cota mensual por tenant (falla rápido, antes de leer el audio)
+    await BitacoraService(db).assert_within_ai_quota(current_user.tenant_id)
+
     ctype = (file.content_type or "").split(";")[0].strip()
     raw_name = file.filename or "audio.ogg"
     ext = raw_name.rsplit(".", 1)[-1].lower() if "." in raw_name else "ogg"
-    if ctype and ctype not in AUDIO_TYPES and not ctype.startswith("audio/"):
+    # Aceptamos por content-type de audio O por extensión conocida (WhatsApp/web a
+    # veces mandan content-type genérico o vacío). Rechazamos si ninguno da audio.
+    ctype_ok = ctype.startswith("audio/") or ctype in AUDIO_TYPES
+    if not ctype_ok and ext not in AUDIO_EXTS:
         raise HTTPException(400, "Solo se aceptan archivos de audio (ogg, mp3, m4a, wav, webm).")
 
     content = await file.read()
@@ -106,6 +113,9 @@ async def create_audio_entry(
     if not content:
         raise HTTPException(400, "El archivo está vacío.")
 
+    # No persistir extensiones arbitrarias en disco.
+    if ext not in AUDIO_EXTS:
+        ext = "ogg"
     filename = f"bitacora_{uuid.uuid4().hex}.{ext}"
     (UPLOADS_DIR / filename).write_bytes(content)
 
@@ -129,6 +139,8 @@ async def create_text_entry(
     if not data.text.strip():
         raise HTTPException(400, "El texto está vacío.")
     service = BitacoraService(db)
+    # Control de costo de IA: cota mensual por tenant
+    await service.assert_within_ai_quota(current_user.tenant_id)
     entry = await service.create_entry(
         obra_id=obra_id,
         source="web",
