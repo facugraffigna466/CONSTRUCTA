@@ -43,7 +43,13 @@ async def get_tenant_usage(current_user: AdminUser, db: DbSession):
         select(func.count()).where(User.tenant_id == tenant_id, User.is_active == True) if tenant_id
         else select(func.count(User.id)).where(User.is_active == True)
     )
-    tasks_q = await db.execute(select(func.count(Task.id)))
+    # Consistente con obras/users: contar SOLO las tareas de este tenant. Antes
+    # contaba todas las del sistema (número equivocado en el panel del tenant +
+    # fuga del total global de tareas de otras empresas).
+    tasks_q = await db.execute(
+        select(func.count(Task.id)).where(Task.tenant_id == tenant_id) if tenant_id
+        else select(func.count(Task.id))
+    )
 
     return PlanUsage(
         tenant=tenant_read,
