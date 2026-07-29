@@ -154,13 +154,23 @@ class AlertRepository(BaseRepository[Alert]):
         await self.session.flush()
         return alerts
 
-    async def list_all(self, unread_only: bool = False, tenant_id: int | None = None) -> list[Alert]:
+    async def list_all(
+        self,
+        unread_only: bool = False,
+        tenant_id: int | None = None,
+        obra_id: int | None = None,
+        limit: int | None = None,
+    ) -> list[Alert]:
         stmt = select(Alert)
         if unread_only:
             stmt = stmt.where(Alert.is_read == False)  # noqa: E712
+        if obra_id is not None:
+            stmt = stmt.where(Alert.obra_id == obra_id)
         if tenant_id is not None:
             from app.models.obra import Obra
             stmt = stmt.join(Obra, Alert.obra_id == Obra.id).where(Obra.tenant_id == tenant_id)
         stmt = stmt.order_by(Alert.created_at.desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

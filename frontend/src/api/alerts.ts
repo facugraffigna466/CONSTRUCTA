@@ -1,10 +1,15 @@
 import type { Alert } from "../types";
 import { apiClient } from "./client";
 
-export async function fetchAlerts(unreadOnly = false): Promise<Alert[]> {
-  const { data } = await apiClient.get<Alert[]>("/alerts", {
-    params: { unread_only: unreadOnly },
-  });
+export async function fetchAlerts(
+  unreadOnly = false,
+  obraId?: number,
+  limit?: number,
+): Promise<Alert[]> {
+  const params: Record<string, unknown> = { unread_only: unreadOnly };
+  if (obraId != null) params.obra_id = obraId;   // filtra por obra en el servidor
+  if (limit != null) params.limit = limit;
+  const { data } = await apiClient.get<Alert[]>("/alerts", { params });
   return data;
 }
 
