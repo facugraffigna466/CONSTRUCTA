@@ -14,8 +14,17 @@ async def list_alerts(
     db: DbSession,
     current_user: CurrentUser,
     unread_only: Annotated[bool, Query()] = False,
+    obra_id: Annotated[int | None, Query()] = None,
+    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
 ):
-    return await AlertService(db).list_all(unread_only=unread_only, tenant_id=current_user.tenant_id)
+    """Filtra por obra en el servidor (obra_id) para no traer todas las alertas
+    del tenant y filtrar en el cliente. `limit` acota el volumen a escala."""
+    return await AlertService(db).list_all(
+        unread_only=unread_only,
+        tenant_id=current_user.tenant_id,
+        obra_id=obra_id,
+        limit=limit,
+    )
 
 
 @router.patch("/mark-all-read", response_model=list[AlertRead])

@@ -18,8 +18,16 @@ class AlertService:
 
     # ── Public API ────────────────────────────────────────────────────────────
 
-    async def list_all(self, unread_only: bool = False, tenant_id: int | None = None) -> list[Alert]:
-        return await self.repo.list_all(unread_only=unread_only, tenant_id=tenant_id)
+    async def list_all(
+        self,
+        unread_only: bool = False,
+        tenant_id: int | None = None,
+        obra_id: int | None = None,
+        limit: int | None = None,
+    ) -> list[Alert]:
+        return await self.repo.list_all(
+            unread_only=unread_only, tenant_id=tenant_id, obra_id=obra_id, limit=limit
+        )
 
     async def mark_read(self, alert_id: int, tenant_id: int | None = None) -> Alert:
         alert = await self.repo.get(alert_id)

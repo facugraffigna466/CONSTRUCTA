@@ -1,7 +1,7 @@
 # Auditoría del sistema — Informe consolidado
 
 **Fecha:** 2026-07-17 (actualizado 2026-07-18: auditoría de frontend pantalla por pantalla — §9 — y **estado de resolución de los P0**, ver §1/§4/§7).
-**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 44 tests + CI lo sostienen.
+**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 47 tests + CI lo sostienen.
 **Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
 **Alcance:** todo el sistema — autenticación, planes/tenants, obras, tareas, cronograma, comunicación de campo (WhatsApp/alertas/presencia), compras y documentos, bitácora con IA, infraestructura transversal, frontend, y modelo de datos/integraciones.
 
@@ -117,7 +117,7 @@ Todo lo que permite que **la Empresa B vea o toque datos de la Empresa A**, o qu
 > - **#5 (`INTERNAL_API_KEY` vacío)** → el código ya fallaba cerrado (401 si está vacío); no requería fix.
 > - **#15 (SSE sin tenant + JWT en query)** → se removió el endpoint SSE, que era **código muerto** (el front usa Socket.IO); elimina el vector entero.
 > - **#2 (causa raíz — `tenant_id` no denormalizado)** → **Fase 1** (columna + backfill + keep-in-sync) **+ Fase 2** (`NOT NULL` en obras y 6 hijas + guard por columna, single-`WHERE`), con `tests/test_tenant_denorm.py`.
-> - Todo protegido por **CI** (GitHub Actions) que corre los **44 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
+> - Todo protegido por **CI** (GitHub Actions) que corre los **47 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
 >
 > **Único punto abierto — #14 (parcial):** el IDOR de responsables se cerró (guard de tenant). Lo que **NO** se cerró es el `whatsapp_number` **único-global**: volverlo per-tenant haría ambiguo el ruteo del mensaje entrante de WhatsApp (con un número de Twilio compartido, el `From` del remitente es la única señal de a qué empresa pertenece). Cerrarlo exige un **número de WhatsApp por tenant** → es una **decisión de arquitectura de producto**, no un bug de código. Queda documentado como limitación conocida.
 
@@ -132,6 +132,8 @@ Todo lo que permite que **la Empresa B vea o toque datos de la Empresa A**, o qu
 > **➕ Adenda 2026-07-28 — #20 (`critical_path.py`: tareas sin fecha caen sin aviso, RESUELTO).** El CPM decía en su docstring "sobre las tareas con fecha", pero el código las procesaba **todas**: a las tareas sin fecha les asignaba `duración=1` y `ES=0` en silencio, distorsionando la ruta crítica, y nadie avisaba al usuario. **Fix:** el cálculo ahora opera **solo** sobre tareas con ambas fechas (las que no las tienen no se pueden ubicar en el tiempo) y devuelve la lista de excluidas en `tasks_without_dates` para que el front avise que el resultado es parcial (el tipo `CriticalPathResult` del front ya expone el campo). Los links de dependencia hacia/desde tareas sin fecha se ignoran naturalmente (no están en el `task_map`). Cubierto por 2 tests nuevos en `tests/test_critical_path.py` (la sin fecha se reporta y no entra al cálculo; con todo fechado la lista queda vacía).
 
 > **➕ Adenda 2026-07-28 — #21 (`admin.py`: conteos de uso inconsistentes, RESUELTO).** El panel `/admin/usage` (uso del tenant contra su plan) mezclaba criterios: `obras_count` y `users_count` filtraban por `tenant_id` (users además por `is_active`, consistente con el límite del plan), pero **`tasks_count` contaba `func.count(Task.id)` sin scope de tenant** → devolvía el total de tareas de **todas las empresas** (número equivocado en el panel + fuga del volumen global de otros tenants). Obra y Task no tienen `is_active` (se borran en duro), así que no hay inconsistencia de "activo" ahí. **Fix:** `tasks_count` ahora filtra `Task.tenant_id == tenant_id` (Task ya tiene `tenant_id` denormalizado), consistente con los otros dos conteos; la etiqueta del front ("Tareas totales (todas las obras)") pasa a coincidir con el número. Cubierto por 1 test nuevo en `tests/test_admin_usage.py` (empresa A con 2 tareas + empresa B con 3 → A ve 2, no 5).
+
+> **➕ Adenda 2026-07-28 — #22 (F5 — `GET /alerts` filtrado en el servidor, RESUELTO).** `ObraDetailPage` llamaba a `fetchAlerts()` (todas las alertas del tenant) y filtraba por obra en el cliente → costo en escala. **Fix:** el endpoint `GET /alerts` ahora acepta `obra_id` (filtra en el servidor, con el mismo join de tenant que ya aislaba, así que un `obra_id` de otra empresa devuelve vacío) y `limit` (1–500, guarda de volumen); `fetchAlerts(unreadOnly, obraId?, limit?)` los propaga y `ObraDetailPage` pide solo las de su obra (se eliminó el `.filter` cliente). El bell global (`useGlobalAlerts`/`AppLayout`) se deja tenant-wide a propósito (necesita el conteo y la vista cruzada). Cubierto por 3 tests nuevos en `tests/test_alerts_filter.py` (por obra → solo esas; sin filtro → todas las del tenant; `limit` acota). Type-check del front limpio.
 
 ### 🟠 P1 — Robustez operativa y features de negocio
 
@@ -266,7 +268,7 @@ La recomendación era hacer **ambos** — y **ambos están hechos y mergeados** 
 2. ✅ **Autenticar el serving de documentos** (`/uploads`, planos): URLs firmadas (HMAC + expiración). — **hecho.**
 3. ✅ **`INTERNAL_API_KEY`:** ya falla cerrado (401 si está vacío). — **verificado, sin cambio necesario.**
 4. ✅ **Denormalizar `tenant_id`** (migraciones 0040/0041): columna + backfill + keep-in-sync + `NOT NULL` + guard por columna. — **hecho (Fase 1 + 2).**
-5. ✅ **CI mínimo** que corre los 44 tests en cada push (GitHub Actions). — **hecho.**
+5. ✅ **CI mínimo** que corre los 47 tests en cada push (GitHub Actions). — **hecho.**
 6. ⬜ **Ciclo de vida de cuenta** (recuperación de contraseña, verificación de email, refresh token). — pendiente (P1).
 7. ⬜ **Monetización real** (billing, verificación de `active_until`, trial). — pendiente (P1).
 8. ⬜ **Robustez operativa** (multi-worker para presencia, rate limiting, manejo global de errores, Sentry). — pendiente (P1).
@@ -337,7 +339,7 @@ Pantallas vivas: `LoginPage`, `AcceptInvitePage`, `PortfolioPage`, `ObraDetailPa
 | F2 | `EquipoPage` | Cambio de rol y baja de miembro **fallan en silencio** (`catch { /* silent */ }`); la baja se ejecuta **sin confirmación** | 🟠 P1 |
 | F3 | `BitacoraPage` | `BACKEND_URL` cae a `http://localhost:8000` si falta `VITE_API_URL` → **audios rotos en producción** (`BitacoraPage:16`) | 🟠 P1 |
 | F4 | Gantt / planilla / modales | Accesibilidad casi nula: `GanttTimeline` (1858 líneas) **0** `aria`/`role`; `TaskSheetView` 1; modales sin foco atrapado / `Esc` consistente | 🟠 P1 |
-| F5 | `ObraDetailPage`, `AppLayout` | `fetchAlerts()` trae **todas** las alertas del tenant y filtra por obra en el cliente → costo en escala | 🟡 P2 |
+| F5 | `ObraDetailPage`, `AppLayout` | ✅ **Resuelto 2026-07-28 (#22)** — `GET /alerts` acepta `obra_id` (filtra en el servidor) y `limit`; `ObraDetailPage` pide solo las de su obra. El bell global sigue tenant-wide a propósito. | 🟢 P2 ✅ |
 | F6 | 8 pantallas | Diálogos nativos `confirm()`/`alert()` para acciones destructivas conviviendo con modales estilados → inconsistencia (`PortfolioPage`, `TaskSheetView`, `ComprasTab`, `PlanosTab`, `ObraSetupWizard`, `BitacoraPage`, `InviteModal`) | 🟡 P2 |
 | F7 | Todas | **~2.791 líneas de código muerto** en 15 archivos (§9.1) — ✅ **eliminadas** | 🟡 P2 |
 | F8 | `Sidebar` | Afford muertos: "workspace switcher" con chevron que **no cambia de workspace**; obras "Fijadas" con % **hardcodeado** por estado, no avance real | 🟡 P2 |

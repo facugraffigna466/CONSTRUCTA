@@ -108,13 +108,13 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     setError(null);
     try {
       const tasksData = await fetchTasksByObra(obra.id);
-      const [allAlerts, historialData, obraTeam] = await Promise.all([
-        fetchAlerts(),
+      const [obraAlerts, historialData, obraTeam] = await Promise.all([
+        fetchAlerts(false, obra.id),   // filtrado por obra en el servidor (no traer todo el tenant)
         fetchHistorial(obra.id),
         fetchObraTeam(obra.id),
       ]);
       setTasks(tasksData);
-      setAlerts(allAlerts.filter((a) => a.obra_id === obra.id));
+      setAlerts(obraAlerts);
       setHistorial(historialData);
       // Convertir ObraTeamMember[] → Responsible[] para compatibilidad con componentes hijos
       setResponsibles(obraTeam.map(m => ({
