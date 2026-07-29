@@ -1,7 +1,7 @@
 # Auditoría del sistema — Informe consolidado
 
 **Fecha:** 2026-07-17 (actualizado 2026-07-18: auditoría de frontend pantalla por pantalla — §9 — y **estado de resolución de los P0**, ver §1/§4/§7).
-**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 41 tests + CI lo sostienen.
+**Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 43 tests + CI lo sostienen.
 **Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
 **Alcance:** todo el sistema — autenticación, planes/tenants, obras, tareas, cronograma, comunicación de campo (WhatsApp/alertas/presencia), compras y documentos, bitácora con IA, infraestructura transversal, frontend, y modelo de datos/integraciones.
 
@@ -60,7 +60,7 @@ Verificación de que **cada** módulo del sistema quedó auditado (respuesta dir
 | `obras.py` | obras-tareas | `GET /obras/{id}/historial` fuga cross-tenant (P0) + editar/borrar exige manager (P1) |
 | `tasks.py` | obras-tareas | Chequeo de acceso es no-op → IDOR (P0) |
 | `baseline.py` | obras-tareas | Hereda el acceso de tareas (P0 vía tasks) |
-| `critical_path.py` | obras-tareas | Tareas sin fecha caen sin aviso (P2) |
+| `critical_path.py` | obras-tareas | ✅ Tareas sin fecha caen sin aviso (#20) — **resuelto 2026-07-28** (se excluyen del CPM y se reportan en `tasks_without_dates` + 2 tests) |
 | `calendar.py` | obras-tareas / complementos | Endpoints sin scope de tenant (P0) |
 | `exports.py` | complementos | Export de tareas sin verificar tenant → exfiltración (P0) |
 | `imports.py` | obras-tareas | ✅ Robustez ante archivos malformados (#18) — **resuelto 2026-07-28** (guard XML anti-DoS, tope de filas, crash de filename, fail-fast de obra + 7 tests) |
@@ -117,7 +117,7 @@ Todo lo que permite que **la Empresa B vea o toque datos de la Empresa A**, o qu
 > - **#5 (`INTERNAL_API_KEY` vacío)** → el código ya fallaba cerrado (401 si está vacío); no requería fix.
 > - **#15 (SSE sin tenant + JWT en query)** → se removió el endpoint SSE, que era **código muerto** (el front usa Socket.IO); elimina el vector entero.
 > - **#2 (causa raíz — `tenant_id` no denormalizado)** → **Fase 1** (columna + backfill + keep-in-sync) **+ Fase 2** (`NOT NULL` en obras y 6 hijas + guard por columna, single-`WHERE`), con `tests/test_tenant_denorm.py`.
-> - Todo protegido por **CI** (GitHub Actions) que corre los **41 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
+> - Todo protegido por **CI** (GitHub Actions) que corre los **43 tests** en cada push → ningún endpoint nuevo reintroduce un IDOR.
 >
 > **Único punto abierto — #14 (parcial):** el IDOR de responsables se cerró (guard de tenant). Lo que **NO** se cerró es el `whatsapp_number` **único-global**: volverlo per-tenant haría ambiguo el ruteo del mensaje entrante de WhatsApp (con un número de Twilio compartido, el `From` del remitente es la única señal de a qué empresa pertenece). Cerrarlo exige un **número de WhatsApp por tenant** → es una **decisión de arquitectura de producto**, no un bug de código. Queda documentado como limitación conocida.
 
@@ -128,6 +128,8 @@ Todo lo que permite que **la Empresa B vea o toque datos de la Empresa A**, o qu
 > **➕ Adenda 2026-07-28 — #18 (`imports.py`: robustez ante archivos malformados, RESUELTO).** Endurecimiento del import de cronograma (Excel/CSV/MS Project XML) para que un archivo malformado o malicioso devuelva un `4xx` claro en vez de un `500` o un cuelgue. **Fixes:** (a) **XML anti-DoS** — `parse_msproject_xml` rechaza cualquier XML con `DOCTYPE`/`ENTITY` antes de parsear (mitiga "billion laughs" sin agregar `defusedxml`) y convierte `ParseError` en un mensaje limpio; (b) **tope de filas** `MAX_IMPORT_ROWS=5000` en el parseo y en `confirm` (`413`) → evita creación ilimitada de tareas; (c) **crash de `filename` None** en `preview` (`file.filename.endswith` → `AttributeError`/500) ahora protegido; (d) **fail-fast de obra** en `confirm` (`_get_obra_and_assert_access` → `404` si la obra no existe o es de otro tenant, en vez de N intentos fallidos); (e) el parser ya no filtra la excepción cruda al cliente (log interno + mensaje genérico) y valida archivo vacío / hoja activa nula. Cubierto por 7 tests nuevos en `tests/test_imports.py` (no había ninguno).
 
 > **➕ Adenda 2026-07-28 — #19 (`bitacora.py`: control de costo de IA + validación de audio, RESUELTO).** El pipeline de bitácora dispara transcripción (Whisper) + análisis (Claude) por cada entrada, **sin ninguna cota** → un usuario podía gastar en IA sin límite. Además la validación de audio tenía huecos: si el `content-type` venía vacío el chequeo de tipo se salteaba entero, y la extensión no estaba en whitelist (se persistía cualquier extensión en disco). **Fixes:** (a) **cota mensual de IA por tenant según plan** (`_BITACORA_MONTHLY_LIMITS`: básico 50 / pro 300 / enterprise ilimitado; sin plan 20), chequeada al **crear** una entrada nueva (audio/texto) → `429` al alcanzarla, con mensaje claro (reprocesar existentes queda acotado por la cantidad ya creada); (b) **validación de audio** — se acepta por `content-type` de audio **o** por extensión en whitelist (WhatsApp/web a veces mandan tipo genérico), se rechaza si ninguno da audio, y la extensión guardada se normaliza a la whitelist (no se persisten extensiones arbitrarias). El aislamiento por tenant del módulo ya estaba cerrado en el barrido P0. Cubierto por 4 tests nuevos en `tests/test_bitacora.py` (audio no-audio → 400, audio vacío → 400, texto bajo cota → 201, cota alcanzada → 429).
+
+> **➕ Adenda 2026-07-28 — #20 (`critical_path.py`: tareas sin fecha caen sin aviso, RESUELTO).** El CPM decía en su docstring "sobre las tareas con fecha", pero el código las procesaba **todas**: a las tareas sin fecha les asignaba `duración=1` y `ES=0` en silencio, distorsionando la ruta crítica, y nadie avisaba al usuario. **Fix:** el cálculo ahora opera **solo** sobre tareas con ambas fechas (las que no las tienen no se pueden ubicar en el tiempo) y devuelve la lista de excluidas en `tasks_without_dates` para que el front avise que el resultado es parcial (el tipo `CriticalPathResult` del front ya expone el campo). Los links de dependencia hacia/desde tareas sin fecha se ignoran naturalmente (no están en el `task_map`). Cubierto por 2 tests nuevos en `tests/test_critical_path.py` (la sin fecha se reporta y no entra al cálculo; con todo fechado la lista queda vacía).
 
 ### 🟠 P1 — Robustez operativa y features de negocio
 
@@ -218,7 +220,7 @@ Agrupados por área. Detalle y solución en el doc del módulo.
 | Obras | 6 | 🔴 P0 | Historial cross-tenant + modelo manager-only |
 | Tareas | 4 | 🔴 P0 | **IDOR** (el gap más serio del módulo) |
 | Gantt / Planilla | 3 | P2 | Rico en features; deuda de UX/persistencia |
-| Ruta crítica CPM | 2 | P2 | Correcto; sin caché ni aviso de tareas sin fecha |
+| Ruta crítica CPM | 2 | P2 | Correcto; ✅ aviso de tareas sin fecha cerrado (2026-07-28); falta caché |
 | Baseline | — | (vía tareas) | Hereda el acceso de tareas |
 | Import / Export | 3 | 🔴 P0 | Export cross-tenant + robustez de parsing |
 | Chatbot / Webhooks | 2 | P1 | Reglas OK; falta rate limiting y limpieza de sesiones |
@@ -262,7 +264,7 @@ La recomendación era hacer **ambos** — y **ambos están hechos y mergeados** 
 2. ✅ **Autenticar el serving de documentos** (`/uploads`, planos): URLs firmadas (HMAC + expiración). — **hecho.**
 3. ✅ **`INTERNAL_API_KEY`:** ya falla cerrado (401 si está vacío). — **verificado, sin cambio necesario.**
 4. ✅ **Denormalizar `tenant_id`** (migraciones 0040/0041): columna + backfill + keep-in-sync + `NOT NULL` + guard por columna. — **hecho (Fase 1 + 2).**
-5. ✅ **CI mínimo** que corre los 41 tests en cada push (GitHub Actions). — **hecho.**
+5. ✅ **CI mínimo** que corre los 43 tests en cada push (GitHub Actions). — **hecho.**
 6. ⬜ **Ciclo de vida de cuenta** (recuperación de contraseña, verificación de email, refresh token). — pendiente (P1).
 7. ⬜ **Monetización real** (billing, verificación de `active_until`, trial). — pendiente (P1).
 8. ⬜ **Robustez operativa** (multi-worker para presencia, rate limiting, manejo global de errores, Sentry). — pendiente (P1).

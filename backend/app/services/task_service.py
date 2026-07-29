@@ -907,18 +907,23 @@ class TaskService:
     async def compute_critical_path(
         self, obra_id: int, manager_id: int
     ) -> dict:
-        """CPM: forward + backward pass over all tasks with dates.
-        Returns critical_task_ids (float == 0) and float_by_task (days)."""
+        """CPM: forward + backward pass sobre las tareas CON ambas fechas.
+        Las tareas sin fecha no se pueden ubicar en el tiempo: se excluyen del
+        cálculo (antes se colaban con duración=1 y ES=0, distorsionando la ruta
+        en silencio) y se devuelven en `tasks_without_dates` para que el front
+        avise. Devuelve critical_task_ids (float == 0) y float_by_task (días)."""
         await self._get_obra_and_assert_access(obra_id, manager_id)
-        tasks = await self.repo.list_by_obra(obra_id)
+        all_tasks = await self.repo.list_by_obra(obra_id)
         links_map = await self.repo.get_all_dependency_links_by_obra(obra_id)
+
+        # Solo las tareas con ambas fechas participan del CPM; el resto se reporta.
+        tasks = [t for t in all_tasks if t.start_date and t.due_date]
+        tasks_without_dates = [t.id for t in all_tasks if not (t.start_date and t.due_date)]
 
         task_map = {t.id: t for t in tasks}
 
         def duration(t) -> int:
-            if t.start_date and t.due_date:
-                return max(1, (t.due_date - t.start_date).days)
-            return 1
+            return max(1, (t.due_date - t.start_date).days)
 
         # Build successor list for backward pass
         successors: dict[int, list[dict]] = {t.id: [] for t in tasks}
@@ -1012,6 +1017,7 @@ class TaskService:
         return {
             "critical_task_ids": critical_ids,
             "float_by_task": {str(k): v for k, v in float_by_task.items()},
+            "tasks_without_dates": tasks_without_dates,
         }
 
     async def list_due_soon(
