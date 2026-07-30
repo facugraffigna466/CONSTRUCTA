@@ -27,6 +27,8 @@ from app.core.socket_manager import sio
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    from app.core.config import validate_startup
+    validate_startup(settings)
     start_scheduler()
     yield
     stop_scheduler()
@@ -43,12 +45,7 @@ fastapi_app = FastAPI(
 
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-    ],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
