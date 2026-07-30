@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     BREVO_SENDER_EMAIL: str = "noreply@constructa.com"
     BREVO_SENDER_NAME: str = "Constructa"
 
+    # Observabilidad
+    SENTRY_DSN: str = ""  # Si está vacío, Sentry no se inicializa.
+
     # IA — bitácora de obra (análisis con Claude + transcripción Whisper)
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-haiku-4-5-20251001"  # barato y suficiente para extraer acciones

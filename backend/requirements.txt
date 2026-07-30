@@ -22,6 +22,9 @@ twilio==9.3.4
 apscheduler==3.10.4
 python-socketio[asyncio_client]
 
+# ── Observabilidad ─────────────────────────────────────────────
+sentry-sdk[fastapi]>=2.0.0
+
 # ── Phase 3 (uncomment when implementing) ──────────────────────
 # anthropic==0.40.0
 # openai-whisper==20231117

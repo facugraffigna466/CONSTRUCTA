@@ -63,6 +63,28 @@ async def _job_remind_bitacora_obra() -> None:
     logger.info("Scheduler: remind_bitacora_obra → %d sent", count)
 
 
+async def _job_cleanup_expired_sessions() -> None:
+    """Borra conversation_sessions cuyo expires_at ya pasó.
+
+    Las sesiones vencidas no tienen utilidad funcional (el chatbot las ignora
+    porque valida expires_at al leerlas) pero acumulan filas indefinidamente.
+    Se corre una vez por día en un horario de bajo tráfico.
+    """
+    from datetime import datetime, timezone
+    from sqlalchemy import delete
+    from app.models.conversation_session import ConversationSession
+
+    logger.info("Scheduler: cleanup_expired_sessions")
+    async with _db() as db:
+        result = await db.execute(
+            delete(ConversationSession).where(
+                ConversationSession.expires_at < datetime.now(timezone.utc)
+            )
+        )
+        count = result.rowcount
+    logger.info("Scheduler: cleanup_expired_sessions → %d filas eliminadas", count)
+
+
 def _parse_hours() -> list[int]:
     raw = os.getenv("REMINDER_HOURS_AHEAD", "24,72")
     return [int(h.strip()) for h in raw.split(",") if h.strip().isdigit()]
@@ -108,6 +130,15 @@ def start_scheduler() -> None:
         id="remind_bitacora_obra",
         replace_existing=True,
         misfire_grace_time=300,
+    )
+
+    # Limpieza de sesiones de conversación de WhatsApp vencidas — 1 vez por día a las 3 AM.
+    scheduler.add_job(
+        _job_cleanup_expired_sessions,
+        CronTrigger(hour=3, minute=0),
+        id="cleanup_expired_sessions",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     scheduler.start()
