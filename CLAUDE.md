@@ -18,7 +18,7 @@ CONSTRUCTA es una app de gestión de obras de construcción con un chatbot de Wh
 | ORM | SQLAlchemy con `Mapped[]` typing |
 | Migraciones | Alembic |
 | Base de datos | PostgreSQL (local: `constructa`) / SQLite para dev rápido |
-| Frontend | React 19 + TypeScript + Vite + inline styles (NO Tailwind en producción) |
+| Frontend | React 19 + TypeScript + Vite + inline styles (predominan; también hay Tailwind heredado en algunas pantallas — LoginPage, AppLayout, clases `constructa-*`) |
 | Tipografías | Plus Jakarta Sans, JetBrains Mono |
 | Colores primarios | `#FF6B35` (naranja acción), `#1A2329` (texto), `#1F8A5B` (éxito) |
 | Tiempo real | Socket.IO (presencia, alertas, edición colaborativa) |
@@ -90,7 +90,7 @@ CONSTRUCTA/
 ### Frontend
 - Routing por estado (`App.tsx`): `selectedObra: Obra | null`, NO React Router
 - Datos de una obra se cargan UNA SOLA VEZ al montar `ObraDetailPage` con `Promise.all`
-- Inline styles (NO clases Tailwind en producción — el diseño usa CSS-in-JS inline)
+- Inline styles como estilo dominante (CSS-in-JS inline). **Nota:** hay Tailwind heredado en algunas pantallas (`LoginPage`, `AppLayout`, clases `constructa-*`); al tocar esas, respetar lo que ya existe. Para pantallas nuevas, preferir inline por consistencia con el grueso del código.
 - Familia tipográfica: `'Plus Jakarta Sans', sans-serif` (texto), `'JetBrains Mono', monospace` (código/IDs)
 - Colores en variables inline, no hardcodeados en múltiples lugares
 
