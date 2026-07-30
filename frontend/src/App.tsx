@@ -251,6 +251,7 @@ function App() {
         onLogout={() => { clearToken(); setAuthed(false); }}
         onAlertClick={handleAlertClick}
         pinnedObras={pinnedObras}
+        onSelectObra={handleSelectObra}
         currentUser={user}
         selectedObra={selectedObra}
         activeTab={activeTab}

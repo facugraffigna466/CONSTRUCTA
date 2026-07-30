@@ -8,7 +8,6 @@ import {
   UsersIcon,
   Cog6ToothIcon,
   ChatBubbleLeftEllipsisIcon,
-  ChevronDownIcon,
   ArrowRightStartOnRectangleIcon,
   ShieldCheckIcon,
   BanknotesIcon,
@@ -18,8 +17,11 @@ import type { Obra, ObraStatus, ObraTab, Page } from "../../types";
 import { useUser } from "../../context/UserContext";
 
 const HERO_DOT_COLORS = ["#FF8856","#3D8BFF","#2AC58A","#B07CF7","#8FA8B5","#E8B14A","#5DA8B5"];
-const STATUS_PCT: Record<ObraStatus, number> = {
-  planificada: 5, en_progreso: 50, pausada: 30, completada: 100, cancelada: 0,
+// Etiqueta real del estado de la obra (antes se mostraba un % hardcodeado por
+// estado que no reflejaba el avance real).
+const STATUS_LABEL: Record<ObraStatus, string> = {
+  planificada: "Planificada", en_progreso: "En progreso", pausada: "Pausada",
+  completada: "Completada", cancelada: "Cancelada",
 };
 
 const ICON_SIZE = { width: 15, height: 15 };
@@ -29,6 +31,7 @@ interface SidebarProps {
   onNavigate: (page: Page) => void;
   onLogout: () => void;
   pinnedObras?: Obra[];
+  onSelectObra?: (obra: Obra) => void;
   selectedObra?: Obra | null;
   activeTab?: ObraTab;
   onTabChange?: (tab: ObraTab) => void;
@@ -113,7 +116,7 @@ function NavItem({
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], selectedObra, activeTab, onTabChange, obraCounts, bitacoraPending, currentUser, workspaceName, collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], onSelectObra, selectedObra, activeTab, onTabChange, obraCounts, bitacoraPending, currentUser, workspaceName, collapsed = false, onToggle }: SidebarProps) {
   const wsName = workspaceName || "Mi empresa";
   const wsInitials = wsName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "ME";
   const { role } = useUser();
@@ -167,18 +170,14 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
         </button>
       </div>
 
-      {/* ── Workspace switcher ── */}
+      {/* ── Workspace (empresa actual — informativo, no hay multi-workspace) ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 9,
         background: "rgba(255,255,255,0.04)",
         border: "1px solid rgba(255,255,255,0.07)",
         borderRadius: 10, padding: "8px 10px",
-        margin: "0 2px 14px", cursor: "pointer",
-        transition: "background 0.15s",
-      }}
-        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
-        onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-      >
+        margin: "0 2px 14px",
+      }}>
         <div style={{
           width: 24, height: 24, borderRadius: 6, flexShrink: 0,
           background: "linear-gradient(135deg, #FF8856, #FF6B35)",
@@ -190,7 +189,6 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           <div style={{ color: "#fff", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wsName}</div>
           <div style={{ fontSize: 10.5, color: "#8C969C", letterSpacing: "0.04em" }}>Workspace</div>
         </div>
-        <ChevronDownIcon style={{ width: 12, height: 12, color: "#6B767E", flexShrink: 0 }} />
       </div>
 
       {/* ── WORKSPACE section ── */}
@@ -341,13 +339,15 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], se
           {pinnedObras.map(obra => (
             <div
               key={obra.id}
+              onClick={() => onSelectObra?.(obra)}
+              title={`Abrir ${obra.name} — ${STATUS_LABEL[obra.status]}`}
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 4px", fontSize: 12, color: "#CFD4D7", borderRadius: 6, cursor: "pointer" }}
               onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
               onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
             >
               <span style={{ width: 7, height: 7, borderRadius: 99, background: HERO_DOT_COLORS[obra.id % HERO_DOT_COLORS.length], flexShrink: 0 }} />
               <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{obra.name}</span>
-              <span style={{ fontSize: 10.5, color: "#8C969C", fontFamily: "'JetBrains Mono', monospace", flexShrink: 0 }}>{STATUS_PCT[obra.status]}%</span>
+              <span style={{ fontSize: 9.5, color: "#8C969C", flexShrink: 0, letterSpacing: "0.02em" }}>{STATUS_LABEL[obra.status]}</span>
             </div>
           ))}
         </div>
