@@ -6,6 +6,7 @@ from app.core.rate_limit import rate_limit
 from app.schemas.user import (
     AcceptInviteRequest,
     ForgotPasswordRequest,
+    InviteContextResponse,
     LoginRequest,
     ResetPasswordRequest,
     TokenResponse,
@@ -37,6 +38,12 @@ async def register(data: UserCreate, db: DbSession):
 async def login(data: LoginRequest, db: DbSession):
     token = await AuthService(db).login(data.email, data.password)
     return TokenResponse(access_token=token)
+
+
+@router.get("/invite/{token}", response_model=InviteContextResponse)
+async def invite_context(token: str, db: DbSession):
+    """Devuelve la empresa, email y rol de una invitación pendiente (no la consume)."""
+    return await AuthService(db).get_invite_context(token)
 
 
 @router.post("/accept-invite", response_model=TokenResponse)

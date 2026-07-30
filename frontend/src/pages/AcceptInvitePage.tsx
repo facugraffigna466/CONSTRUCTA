@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { acceptInvite } from "../api/users";
+import { useEffect, useState } from "react";
+import { acceptInvite, fetchInviteContext, type InviteContext } from "../api/users";
 
 interface Props {
   token: string;
@@ -13,6 +13,26 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [focused, setFocused]   = useState<string | null>(null);
+  const [context, setContext]         = useState<InviteContext | null>(null);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [contextError, setContextError]     = useState<string | null>(null);
+
+  // Traer el contexto de la invitación (empresa, email, rol) SIN consumir el token,
+  // para que la persona vea a qué se está uniendo antes de aceptar.
+  useEffect(() => {
+    let cancelled = false;
+    setContextLoading(true);
+    fetchInviteContext(token)
+      .then(ctx => { if (!cancelled) setContext(ctx); })
+      .catch((err: unknown) => {
+        const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+        if (!cancelled) setContextError(typeof detail === "string" ? detail : "El link de invitación es inválido o expiró");
+      })
+      .finally(() => { if (!cancelled) setContextLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const roleLabel = context?.role === "admin" ? "Administrador" : "Colaborador";
 
   const inputStyle = (field: string, hasError = false) => ({
     width: "100%", height: 42, padding: "0 14px",
@@ -78,13 +98,37 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
             margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif",
             fontSize: 22, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.025em",
           }}>
-            Activá tu cuenta
+            {contextError ? "Invitación no válida" : "Activá tu cuenta"}
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#6B7580" }}>
-            Completá tus datos para unirte al equipo
+            {contextError
+              ? contextError
+              : contextLoading
+                ? "Verificando invitación…"
+                : context?.company_name
+                  ? <>Te invitaron a unirte a <strong style={{ color: "#1A2329" }}>{context.company_name}</strong></>
+                  : "Completá tus datos para unirte al equipo"}
           </p>
         </div>
 
+        {!contextError && !contextLoading && (
+        <>
+        {context && (
+          <div style={{
+            marginBottom: 18, padding: "12px 14px", borderRadius: 10,
+            background: "#F7F8F7", border: "1px solid #E6E7E5",
+            display: "flex", flexDirection: "column", gap: 6,
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+              <span style={{ color: "#6B7580" }}>Email</span>
+              <span style={{ color: "#1A2329", fontWeight: 600, fontFamily: "'JetBrains Mono', monospace" }}>{context.email}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 13 }}>
+              <span style={{ color: "#6B7580" }}>Rol</span>
+              <span style={{ color: "#1A2329", fontWeight: 600 }}>{roleLabel}</span>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
@@ -161,6 +205,8 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
             {loading ? "Activando…" : "Activar cuenta"}
           </button>
         </form>
+        </>
+        )}
       </div>
     </div>
   );
