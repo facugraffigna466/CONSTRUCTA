@@ -23,6 +23,7 @@ interface AppLayoutProps {
   onLogout: () => void;
   onAlertClick?: (alert: import("../../types").Alert) => void;
   pinnedObras?: Obra[];
+  onSelectObra?: (obra: Obra) => void;
   currentUser?: { name: string; email: string; initials: string; color: string; avatar_url?: string | null };
   selectedObra?: Obra | null;
   activeTab?: ObraTab;
@@ -40,6 +41,7 @@ export function AppLayout({
   onLogout,
   onAlertClick,
   pinnedObras = [],
+  onSelectObra,
   currentUser,
   selectedObra,
   activeTab,
@@ -92,6 +94,7 @@ export function AppLayout({
         onNavigate={(p) => { if (isCompact) setSidebarCollapsed(true); onNavigate(p); }}
         onLogout={onLogout}
         pinnedObras={pinnedObras}
+        onSelectObra={(o) => { if (isCompact) setSidebarCollapsed(true); onSelectObra?.(o); }}
         selectedObra={selectedObra}
         activeTab={activeTab}
         onTabChange={(t) => { if (isCompact) setSidebarCollapsed(true); onTabChange?.(t); }}
