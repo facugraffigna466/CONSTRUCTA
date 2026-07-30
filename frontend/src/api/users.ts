@@ -27,6 +27,17 @@ export async function inviteMember(email: string, role: "admin" | "collaborator"
   return data;
 }
 
+export interface InviteContext {
+  email: string;
+  role: string;
+  company_name: string | null;
+}
+
+export async function fetchInviteContext(token: string): Promise<InviteContext> {
+  const { data } = await apiClient.get<InviteContext>(`/auth/invite/${token}`);
+  return data;
+}
+
 export async function acceptInvite(token: string, full_name: string, password: string): Promise<string> {
   const { data } = await apiClient.post<{ access_token: string }>("/auth/accept-invite", { token, full_name, password });
   return data.access_token;

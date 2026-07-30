@@ -87,6 +87,25 @@ class AuthService:
         created = await self.repo.create(user)
         return created, token
 
+    async def get_invite_context(self, token: str) -> dict:
+        """Contexto de una invitación pendiente (sin consumir el token): a qué
+        empresa, con qué email y rol se une el invitado. Lanza si es inválida/expiró."""
+        user = await self.repo.get_by_invitation_token(token)
+        if not user or user.is_active:
+            raise HTTPException(status_code=400, detail="Invitación inválida")
+        exp = user.invitation_expires_at
+        if exp is not None:
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=400, detail="La invitación expiró")
+        company_name = None
+        if user.tenant_id:
+            from app.models.tenant import Tenant
+            tenant = await self.repo.session.get(Tenant, user.tenant_id)
+            company_name = tenant.name if tenant else None
+        return {"email": user.email, "role": user.role, "company_name": company_name}
+
     async def accept_invite(self, data: AcceptInviteRequest) -> str:
         user = await self.repo.get_by_invitation_token(data.token)
         if not user:

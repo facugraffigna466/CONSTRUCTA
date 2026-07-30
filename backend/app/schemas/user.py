@@ -62,6 +62,13 @@ class AcceptInviteRequest(BaseModel):
     password: str = Field(..., min_length=8)
 
 
+class InviteContextResponse(BaseModel):
+    """Contexto de una invitación pendiente para mostrar antes de aceptarla."""
+    email: str
+    role: str
+    company_name: str | None = None
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
