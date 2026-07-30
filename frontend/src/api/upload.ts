@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const BACKEND = "http://localhost:8000";
+// Configurable para producción vía VITE_API_URL (mismo patrón que api/client.ts).
+// Antes estaba hardcodeado a localhost → la subida de imagen se rompía en prod.
+const BACKEND = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export async function uploadImage(file: File): Promise<string> {
   const token = localStorage.getItem("access_token");
