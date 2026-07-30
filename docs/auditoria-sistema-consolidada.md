@@ -275,12 +275,12 @@ La recomendación era hacer **ambos** — y **ambos están hechos y mergeados** 
 3. ✅ **`INTERNAL_API_KEY`:** ya falla cerrado (401 si está vacío). — **verificado, sin cambio necesario.**
 4. ✅ **Denormalizar `tenant_id`** (migraciones 0040/0041): columna + backfill + keep-in-sync + `NOT NULL` + guard por columna. — **hecho (Fase 1 + 2).**
 5. ✅ **CI mínimo** que corre los 50 tests en cada push (GitHub Actions). — **hecho.**
-6. ⬜ **Ciclo de vida de cuenta** (recuperación de contraseña, verificación de email, refresh token). — pendiente (P1).
-7. ⬜ **Monetización real** (billing, verificación de `active_until`, trial). — pendiente (P1).
-8. ⬜ **Robustez operativa** (multi-worker para presencia, rate limiting, manejo global de errores, Sentry). — pendiente (P1).
-9. ⬜ **P2** de UX/frontend según prioridad de producto (código muerto, `BACKEND_URL` localhost, a11y, etc.). — pendiente.
+6. 🟡 **Ciclo de vida de cuenta** — recuperación de contraseña ✅ + verificación de email ✅ **hechas**; **falta solo refresh token** (feature).
+7. ⬜ **Monetización real** (billing, verificación de `active_until`, trial, upgrade self-service). — pendiente (feature grande).
+8. 🟡 **Robustez operativa** — rate limiting (login/forgot/reset) ✅ + manejo global de errores ✅ **hechos**; **falta** multi-worker/Redis para presencia, rate-limit del webhook de WhatsApp, limpieza de sesiones, Sentry, validación de secretos y CORS por env (infra).
+9. 🟡 **P2 de UX/frontend** — código muerto ✅, `BACKEND_URL`/`upload.ts` localhost ✅, diálogos nativos (F6) ✅, alerts por obra (F5) ✅, contexto de invitación (F9) ✅, affords del Sidebar (F8) ✅, doc Tailwind (F10) ✅ **hechos**; **falta** a11y del Gantt/planilla (F4) y desglosar mega-componentes (F11) — refactors delicados.
 
-> **Resumen:** los pasos **1–5 (todo el bloque P0 de seguridad) están hechos y mergeados**; del 6 en adelante es robustez/negocio/pulido (P1/P2), aún abierto. Más el punto de diseño de #14 (WhatsApp per-tenant).
+> **Resumen (act. 2026-07-30):** el barrido de **defectos** del audit está **cerrado** — pasos 1–5 (P0) + los hallazgos #16–#25 (P1/P2 accionables) hechos y mergeados; **50 tests + CI**. Lo que queda (pasos 6–9 en su parte ⬜) **no son bugs**: son features (refresh token, monetización), infra (multi-worker, Sentry, CORS/secretos) y refactors de UI (F4, F11), más la decisión de producto #14 (WhatsApp per-tenant). El desglose accionable de cada uno está en `docs/handoff-remediacion-audit.md` §5.
 
 ---
 

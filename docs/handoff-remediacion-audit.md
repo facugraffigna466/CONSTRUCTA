@@ -1,11 +1,22 @@
-# Handoff — Cómo continuar la remediación del audit de CONSTRUCTA
+# Handoff — Remediación del audit de CONSTRUCTA (barrido CERRADO) + qué queda
 
-> **Para el próximo agente (Codex u otro).** Este documento describe **exactamente** el
-> trabajo en curso, **el proceso paso a paso** que se sigue en cada cambio, las
-> convenciones, los errores típicos ("gotchas") ya aprendidos, el **estado actual** y
-> el **backlog pendiente**. Seguí esto al pie de la letra para continuar idéntico.
+> **Para el próximo agente (Codex u otro).** Describe el **proceso paso a paso** de
+> remediación (§1, para reusarlo), las convenciones (§2), los gotchas (§3), el
+> **estado actual** (§4) y el **backlog** de lo que queda (§5).
 >
-> Fecha del handoff: 2026-07-18.
+> **⛳ 2026-07-30 — el barrido de remediación del audit está CERRADO.** No queda
+> ningún **bug** ni agujero de seguridad accionable. Se resolvieron, uno por PR
+> (rama→push→merge→adenda en el audit), los hallazgos **#16–#25**:
+> #16 users.py IDOR rol/borrado · #17 purchase_orders IDOR+idempotencia ·
+> #18 imports robustez (XML DoS, tope de filas) · #19 bitácora costo IA+audio ·
+> #20 critical_path tareas sin fecha · #21 admin tasks_count por tenant ·
+> #22 F5 alerts filtro en servidor · #23 F9 contexto de invitación ·
+> #24 F8 affords muertos del Sidebar · #25 upload.ts VITE_API_URL + F10 doc.
+> Suite: **50 tests** + CI. **Lo que sigue en §5 ya NO son bugs** — son features,
+> decisiones de infra/producto y refactors de UI. Priorizarlos es decisión del
+> usuario, no "corrección". El §1 (proceso) sigue vigente para cuando se encaren.
+>
+> Fecha del handoff original: 2026-07-18. Última actualización: 2026-07-30.
 
 ---
 
@@ -154,9 +165,14 @@ mergea → tag opcional). Esperá el "mergeado" y volvé al Paso 1.
 
 ---
 
-## 4. Estado actual (2026-07-18)
+## 4. Estado actual (act. 2026-07-30)
 
-**Mergeado a `main` (todo verificado con tests/build):**
+**➕ Cerrado en la 2ª tanda (2026-07-30), mergeado a `main`, todo con tests o tsc/build:**
+`#16`–`#25` (ver la lista en la cabecera de este doc). Con eso, **el barrido del audit
+quedó cerrado**: no hay bugs ni P0/P1/P2 de tipo *defecto* pendientes. `F6` también
+quedó mergeado. La suite pasó a **50 tests** en `backend/tests/` + CI.
+
+**Mergeado en la 1ª tanda (2026-07-18), verificado con tests/build:**
 - **P0 de seguridad — TODO cerrado** (14/15): los 13 IDOR cross-tenant (guards de tenant),
   `/uploads` + planos/audios con **URLs firmadas** (`app/core/signing.py`), Socket.IO con
   scope de tenant, `INTERNAL_API_KEY` (ya fallaba cerrado), SSE muerto removido.
@@ -173,35 +189,32 @@ mergea → tag opcional). Esperá el "mergeado" y volvé al Paso 1.
 - **Auth**: recuperación de contraseña, **rate limiting** (login/forgot/reset), **verificación
   de email**.
 - **Infra**: handler global de excepciones + health con ping a la DB.
-
-**PR abierto (pusheado, SIN mergear):**
-- **`fix/f6-confirm-dialog`** — F6: consolidar los 8 `confirm()`/`alert()` nativos en un
-  `ConfirmProvider` estilado (`useConfirm`). Verificado (tsc+build). Falta que el usuario
-  cree+mergee el PR:
-  `https://github.com/facugraffigna466/CONSTRUCTA/compare/main...fix/f6-confirm-dialog`
+- **F6** (mergeado): los 8 `confirm()`/`alert()` nativos consolidados en un
+  `ConfirmProvider` estilado (`useConfirm`).
 
 ---
 
-## 5. ⭐ Backlog pendiente — "qué queda por corregir"
+## 5. ⭐ Backlog — "qué queda" (NINGUNO es un bug)
 
-Ordenado por criterio sugerido (valor/verificabilidad/riesgo). Ninguno es un P0 de
-seguridad (ya están todos cerrados); son P1/P2 de robustez, features y pulido.
+> El barrido de defectos está cerrado (§4). Todo lo de acá es **trabajo nuevo**:
+> *features*, *infra/escala*, un *refactor* de UI o una *decisión de producto*.
+> No aplicar el proceso de "fix" a ciegas: cada uno arranca por **acordar el alcance
+> con el usuario**, no por abrir una rama. El §1 (proceso, tests, verificación) sí
+> aplica una vez decidido el alcance.
 
-| # | Ítem | Severidad | Notas para hacerlo |
-|---|------|-----------|--------------------|
-| 1 | **Mergear F6** (ver §4) | P2 | Ya está hecho y pusheado; solo falta el merge del usuario. |
-| 2 | **`whatsapp_number` per-tenant (#14)** | P0 (diseño) | NO es bug de código: necesita número de WhatsApp por tenant. Requiere decisión de producto — **plantearla al usuario**, no implementar a ciegas (rompería el ruteo del chatbot). |
-| 3 | **a11y Gantt/planilla (F4 fase 3)** | P1 | `GanttTimeline`/`TaskSheetView` tienen 0 `aria`. Agregar `role=grid/row/gridcell` + navegación por teclado. **DELICADO:** memoria del proyecto = *no romper el drag del Gantt*; verificar en navegador antes de mergear (y el preview no anda acá → coordinar con el usuario). |
-| 4 | **Recuperación de cuenta — refresh token** | P1 | Sesión que no expira abruptamente. Backend (endpoint refresh) + interceptor axios en el front (reintento en 401). El interceptor es delicado (loops) y difícil de verificar sin navegador. |
-| 5 | **Routing por URL** | P2 (grande) | Migrar el estado de navegación de `App.tsx` a un router (React Router/TanStack). Habilita deep-links, back/forward, compartir. Refactor grande pero acotado. |
-| 6 | **Robustez de infra restante** | P1 | Rate limiting por número en el webhook de WhatsApp; limpieza de sesiones de conversación vencidas; tracking de errores (Sentry); logging estructurado; validar secretos en el arranque (fallar si faltan en prod); CORS por env (hoy hardcodeado a localhost). |
-| 7 | **Presencia/edición colaborativa multi-worker** | P1 | Hoy es in-memory (se rompe con >1 worker). Necesita Redis/pub-sub. Infra. |
-| 8 | **Monetización real** | P1 (grande) | Billing, verificar `active_until` (un plan vencido hoy no bloquea nada), trial, self-service upgrade, página de precios. |
-| 9 | **Bitácora IA — control de costo** | P1 | Presupuesto de IA por tenant/plan; validación de tamaño/tipo del audio. |
-| 10 | **P2 varios del front (§9)** | P2 | `fetchAlerts()` trae todas y filtra en cliente (pedir por obra); afford muertos del Sidebar (workspace switcher, % de "Fijadas" hardcodeado); `AcceptInvitePage` acepta a ciegas (mostrar quién invita); desglosar mega-componentes (`ComprasTab` 2578, `TaskSheetView`, `GanttTimeline`); reconciliar Tailwind vs regla del `CLAUDE.md`. |
+| # | Ítem | Tipo | Por qué / cómo encararlo |
+|---|------|------|--------------------------|
+| 1 | **`whatsapp_number` per-tenant (#14)** | Decisión de producto | Único hallazgo del audit abierto, **por diseño**. Con un número de Twilio compartido, el `From` del remitente es la única señal de a qué empresa pertenece → dos empresas no pueden compartir el mismo número. Cerrarlo exige **un número de WhatsApp por tenant** (infra Twilio + onboarding). **Plantear al usuario**; no implementar a ciegas (rompe el ruteo del chatbot). |
+| 2 | **Refresh token** | Feature (auth) | Hoy el JWT expira y corta la sesión de golpe. Backend: endpoint `POST /auth/refresh` + rotación. Front: interceptor axios que reintenta en 401. **Delicado** (loops de refresh) y difícil de verificar sin navegador. Alto valor para "SaaS vendible". |
+| 3 | **Monetización real** | Feature (grande) | El aparato de planes/límites (402) existe, pero: `active_until` no se verifica (un plan vencido no bloquea nada), no hay billing, trial, upgrade self-service ni página de precios. Es varios PRs. Alto valor de negocio. |
+| 4 | **a11y Gantt/planilla (F4)** | Refactor UI (delicado) | `GanttTimeline` (1858 líneas) y `TaskSheetView` tienen ~0 `aria`. Agregar `role=grid/row/gridcell` + navegación por teclado. ⚠️ Memoria del proyecto: **no romper el drag del Gantt** ([[no-tocar-drag-gantt]]); verificar en navegador antes de mergear (el preview no bindea acá → coordinar con el usuario). |
+| 5 | **Robustez de infra restante** | Infra (P1) | Rate-limit por número en el **webhook de WhatsApp** (hoy valida HMAC de Twilio pero no acota volumen); limpieza de `conversation_session` vencidas; Sentry + logging estructurado; **validar secretos al arranque** (fallar si faltan en prod); **CORS por env** (hoy incluye localhost hardcodeado). Cada uno es chico e independiente. |
+| 6 | **Presencia multi-worker** | Infra (escala) | La presencia/edición colaborativa (Socket.IO) es **in-memory por proceso** → se rompe con >1 worker (mismo límite que el rate-limit in-memory). Necesita Redis/pub-sub. Solo importa al escalar horizontalmente. |
+| 7 | **Routing por URL** | Feature/refactor | Migrar el estado de navegación de `App.tsx` (hoy por estado, no React Router) a un router. Habilita deep-links, back/forward y compartir URLs. Refactor grande pero acotado; toca `App.tsx` y todas las intercepciones de token (`/invite`, `/reset-password`, `/verify-email`). |
+| 8 | **Mega-componentes (F11)** | Refactor (mantenibilidad) | `ComprasTab` (2578), `TaskSheetView` (1923), `GanttTimeline` (1858) mezclan render+estado+API+interacción sin `React.memo`. Desglosar para mantenibilidad y jank en obras grandes. No es urgente; hacerlo por partes y con cuidado (ver F4 para el Gantt). |
 
-Detalle de cada uno: `docs/auditoria-sistema-consolidada.md` (P1 §4, P2 §4, frontend §9)
-y los `docs/analisis-modulo-*.md`.
+Detalle histórico de cada uno: `docs/auditoria-sistema-consolidada.md` (P1/P2 en §4, frontend en §9)
+y los `docs/analisis-modulo-*.md`. Las adendas **#16–#25** en ese mismo doc registran lo ya cerrado.
 
 ---
 
