@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import Response
 
 from app.core.deps import DbSession
+from app.core.rate_limit import check_wa_limit
 from app.integrations.twilio.parser import parse_twilio_payload
 from app.integrations.twilio.security import verify_twilio_signature
 from app.services.message_service import MessageService
@@ -29,6 +30,11 @@ async def twilio_inbound(request: Request, db: DbSession) -> Response:
     params = dict(form_data)
 
     await verify_twilio_signature(request, params)
+
+    # Rate-limit por número de WhatsApp: evita que un remitente bombardee el sistema.
+    # Se aplica DESPUÉS de validar la firma de Twilio para no bloquear tráfico legítimo
+    # ante replays de atacantes con firma inválida (ya rechazados arriba).
+    check_wa_limit(params.get("From", ""))
 
     try:
         payload = parse_twilio_payload(params)

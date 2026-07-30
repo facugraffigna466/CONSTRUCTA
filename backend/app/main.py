@@ -21,8 +21,14 @@ from app.api.routes import budgets as budgets_router
 from app.api.routes import planos as planos_router
 from app.api.routes import solicitudes as solicitudes_router
 from app.core.config import settings
+from app.core.logging_config import setup_logging, setup_sentry
 from app.core.scheduler import start_scheduler, stop_scheduler
 from app.core.socket_manager import sio
+
+# Logging estructurado: JSON en producción, legible en dev. Se configura antes
+# de crear la app para que los loggers de FastAPI/SQLAlchemy ya usen este formato.
+setup_logging(debug=settings.APP_DEBUG)
+setup_sentry(dsn=settings.SENTRY_DSN, app_name=settings.APP_NAME, debug=settings.APP_DEBUG)
 
 
 @asynccontextmanager
