@@ -1,5 +1,12 @@
+import sys
 from functools import lru_cache
 from pydantic_settings import BaseSettings
+
+# Valores conocidos débiles que no deben usarse en producción
+_WEAK_SECRET_KEYS = {
+    "secret", "changeme", "insecure", "dev", "development",
+    "test", "testing", "password", "12345678", "constructa",
+}
 
 
 class Settings(BaseSettings):
@@ -11,6 +18,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24h
 
     DATABASE_URL: str
+
+    # CORS — lista de orígenes permitidos (separados por coma en el .env)
+    # Default cubre dev local; en producción setear solo el dominio real.
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174"
 
     # Phase 2 — Twilio
     TWILIO_ACCOUNT_SID: str = ""
@@ -38,6 +49,41 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+
+def validate_startup(s: Settings) -> None:
+    """Valida secretos críticos al arranque. Aborta con mensaje claro si algo está mal."""
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # SECRET_KEY débil — riesgo de seguridad en cualquier entorno
+    if s.SECRET_KEY.lower() in _WEAK_SECRET_KEYS or len(s.SECRET_KEY) < 32:
+        if s.APP_DEBUG:
+            warnings.append("SECRET_KEY es débil o corta (< 32 chars). Aceptable en dev, NO en prod.")
+        else:
+            errors.append("SECRET_KEY es débil o demasiado corta (< 32 chars). Generá una con: openssl rand -hex 32")
+
+    # En producción, advertir sobre integraciones vacías que degradan funcionalidad
+    if not s.APP_DEBUG:
+        if not s.BREVO_API_KEY:
+            warnings.append("BREVO_API_KEY no configurada — los emails (invitaciones, reseteo) no se enviarán.")
+        if not s.TWILIO_AUTH_TOKEN:
+            warnings.append("TWILIO_AUTH_TOKEN no configurado — el chatbot de WhatsApp estará inactivo.")
+        if "localhost" in s.ALLOWED_ORIGINS:
+            warnings.append("ALLOWED_ORIGINS incluye localhost — no recomendado en producción.")
+
+    if warnings:
+        for w in warnings:
+            print(f"[CONSTRUCTA] ⚠️  {w}", file=sys.stderr)
+    if errors:
+        for e in errors:
+            print(f"[CONSTRUCTA] ❌ {e}", file=sys.stderr)
+        print("[CONSTRUCTA] Corregí los errores anteriores antes de arrancar.", file=sys.stderr)
+        sys.exit(1)
 
 
 @lru_cache
