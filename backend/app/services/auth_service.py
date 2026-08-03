@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ConflictError
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, create_refresh_token, hash_password, verify_password
 from app.models.user import User
 from app.repositories.user import UserRepository
 from app.schemas.user import AcceptInviteRequest, InviteRequest, UserCreate
@@ -55,7 +55,7 @@ class AuthService:
         await self.repo.session.flush()
         return user
 
-    async def login(self, email: str, password: str) -> str:
+    async def login(self, email: str, password: str) -> tuple[str, str]:
         user = await self.repo.get_by_email(email)
         if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(
@@ -67,7 +67,13 @@ class AuthService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is inactive",
             )
-        return create_access_token(user.id)
+        refresh_token, refresh_expires = create_refresh_token()
+        await self.repo.update_fields(
+            user.id,
+            refresh_token=refresh_token,
+            refresh_token_expires_at=refresh_expires,
+        )
+        return create_access_token(user.id), refresh_token
 
     async def invite(self, data: InviteRequest, tenant_id: int | None = None) -> tuple[User, str]:
         if await self.repo.get_by_email(data.email):
@@ -106,12 +112,13 @@ class AuthService:
             company_name = tenant.name if tenant else None
         return {"email": user.email, "role": user.role, "company_name": company_name}
 
-    async def accept_invite(self, data: AcceptInviteRequest) -> str:
+    async def accept_invite(self, data: AcceptInviteRequest) -> tuple[str, str]:
         user = await self.repo.get_by_invitation_token(data.token)
         if not user:
             raise HTTPException(status_code=400, detail="Invitación inválida")
         if user.invitation_expires_at and user.invitation_expires_at < datetime.now(timezone.utc):
             raise HTTPException(status_code=400, detail="La invitación expiró")
+        refresh_token, refresh_expires = create_refresh_token()
         await self.repo.update_fields(
             user.id,
             full_name=data.full_name,
@@ -119,8 +126,10 @@ class AuthService:
             is_active=True,
             invitation_token=None,
             invitation_expires_at=None,
+            refresh_token=refresh_token,
+            refresh_token_expires_at=refresh_expires,
         )
-        return create_access_token(user.id)
+        return create_access_token(user.id), refresh_token
 
     async def request_password_reset(self, email: str) -> tuple[User, str] | None:
         """Genera un token de reset para un usuario activo. Devuelve (user, token) o None
@@ -133,8 +142,8 @@ class AuthService:
         await self.repo.update_fields(user.id, reset_token=token, reset_token_expires=expires)
         return user, token
 
-    async def reset_password(self, token: str, new_password: str) -> str:
-        """Valida el token, setea la nueva contraseña y devuelve un access token (login)."""
+    async def reset_password(self, token: str, new_password: str) -> tuple[str, str]:
+        """Valida el token, setea la nueva contraseña y devuelve access + refresh token."""
         user = await self.repo.get_by_reset_token(token)
         if not user:
             raise HTTPException(status_code=400, detail="El enlace de recuperación es inválido")
@@ -145,13 +154,45 @@ class AuthService:
                 exp = exp.replace(tzinfo=timezone.utc)
             if exp < datetime.now(timezone.utc):
                 raise HTTPException(status_code=400, detail="El enlace de recuperación expiró")
+        refresh_token, refresh_expires = create_refresh_token()
         await self.repo.update_fields(
             user.id,
             hashed_password=hash_password(new_password),
             reset_token=None,
             reset_token_expires=None,
+            refresh_token=refresh_token,
+            refresh_token_expires_at=refresh_expires,
         )
-        return create_access_token(user.id)
+        return create_access_token(user.id), refresh_token
+
+    async def refresh(self, token: str) -> tuple[str, str]:
+        """Rota el refresh token: invalida el viejo, emite access + nuevo refresh token."""
+        user = await self.repo.get_by_refresh_token(token)
+        if not user or not user.is_active:
+            raise HTTPException(status_code=401, detail="Refresh token inválido")
+        exp = user.refresh_token_expires_at
+        if exp is not None:
+            if exp.tzinfo is None:
+                exp = exp.replace(tzinfo=timezone.utc)
+            if exp < datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="Refresh token expirado")
+        new_refresh, new_expires = create_refresh_token()
+        await self.repo.update_fields(
+            user.id,
+            refresh_token=new_refresh,
+            refresh_token_expires_at=new_expires,
+        )
+        return create_access_token(user.id), new_refresh
+
+    async def logout(self, token: str) -> None:
+        """Invalida el refresh token en DB. Si no existe, no hace nada (idempotente)."""
+        user = await self.repo.get_by_refresh_token(token)
+        if user:
+            await self.repo.update_fields(
+                user.id,
+                refresh_token=None,
+                refresh_token_expires_at=None,
+            )
 
     async def verify_email(self, token: str) -> None:
         user = await self.repo.get_by_verification_token(token)

@@ -8,6 +8,8 @@ from app.schemas.user import (
     ForgotPasswordRequest,
     InviteContextResponse,
     LoginRequest,
+    LogoutRequest,
+    RefreshRequest,
     ResetPasswordRequest,
     TokenResponse,
     UserCreate,
@@ -36,8 +38,19 @@ async def register(data: UserCreate, db: DbSession):
 
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(_login_limit)])
 async def login(data: LoginRequest, db: DbSession):
-    token = await AuthService(db).login(data.email, data.password)
-    return TokenResponse(access_token=token)
+    access_token, refresh_token = await AuthService(db).login(data.email, data.password)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(data: RefreshRequest, db: DbSession):
+    access_token, refresh_token = await AuthService(db).refresh(data.refresh_token)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/logout", status_code=204)
+async def logout(data: LogoutRequest, db: DbSession):
+    await AuthService(db).logout(data.refresh_token)
 
 
 @router.get("/invite/{token}", response_model=InviteContextResponse)
@@ -48,8 +61,8 @@ async def invite_context(token: str, db: DbSession):
 
 @router.post("/accept-invite", response_model=TokenResponse)
 async def accept_invite(data: AcceptInviteRequest, db: DbSession):
-    token = await AuthService(db).accept_invite(data)
-    return TokenResponse(access_token=token)
+    access_token, refresh_token = await AuthService(db).accept_invite(data)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/forgot-password", dependencies=[Depends(_forgot_limit)])
@@ -67,8 +80,8 @@ async def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> dict[st
 @router.post("/reset-password", response_model=TokenResponse, dependencies=[Depends(_reset_limit)])
 async def reset_password(data: ResetPasswordRequest, db: DbSession):
     """Valida el token y setea la nueva contraseña; deja al usuario logueado."""
-    token = await AuthService(db).reset_password(data.token, data.new_password)
-    return TokenResponse(access_token=token)
+    access_token, refresh_token = await AuthService(db).reset_password(data.token, data.new_password)
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post("/verify-email")

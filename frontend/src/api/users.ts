@@ -38,9 +38,16 @@ export async function fetchInviteContext(token: string): Promise<InviteContext> 
   return data;
 }
 
-export async function acceptInvite(token: string, full_name: string, password: string): Promise<string> {
-  const { data } = await apiClient.post<{ access_token: string }>("/auth/accept-invite", { token, full_name, password });
-  return data.access_token;
+export async function acceptInvite(
+  token: string,
+  full_name: string,
+  password: string
+): Promise<{ access_token: string; refresh_token: string }> {
+  const { data } = await apiClient.post<{ access_token: string; refresh_token: string }>(
+    "/auth/accept-invite",
+    { token, full_name, password }
+  );
+  return data;
 }
 
 export async function removeMember(userId: number): Promise<void> {

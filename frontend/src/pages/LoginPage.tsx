@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { login, register, requestPasswordReset } from "../api/auth";
-import { setToken } from "../lib/tokenStorage";
+import { setRefreshToken, setToken } from "../lib/tokenStorage";
 import { EnvelopeIcon, LockClosedIcon, EyeIcon, EyeSlashIcon, ArrowRightIcon, UserIcon, BuildingOffice2Icon } from "@heroicons/react/24/outline";
 import { MessageCircle, BarChart2, Bell, FileUp } from "lucide-react";
 
@@ -66,8 +66,9 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
       }
-      const token = await login(email, password);
-      setToken(token);
+      const tokens = await login(email, password);
+      setToken(tokens.access_token);
+      setRefreshToken(tokens.refresh_token);
       onLogin();
     } catch {
       setError(

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { resetPassword } from "../api/auth";
+import { setRefreshToken, setToken } from "../lib/tokenStorage";
 
 interface Props {
   token: string;
-  onDone: (accessToken: string) => void;
+  onDone: () => void;
 }
 
 export function ResetPasswordPage({ token, onDone }: Props) {
@@ -30,8 +31,10 @@ export function ResetPasswordPage({ token, onDone }: Props) {
 
     setLoading(true);
     try {
-      const accessToken = await resetPassword(token, password);
-      onDone(accessToken);
+      const tokens = await resetPassword(token, password);
+      setToken(tokens.access_token);
+      setRefreshToken(tokens.refresh_token);
+      onDone();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
       setError(typeof detail === "string" ? detail : "El enlace de recuperación es inválido o expiró");

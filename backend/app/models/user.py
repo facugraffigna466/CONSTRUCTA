@@ -20,6 +20,8 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verification_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     verification_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    refresh_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    refresh_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # E.164 — habilita al staff (arquitecto/jefe/admin) a usar el chatbot de WhatsApp
     whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)

@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -28,3 +29,10 @@ def create_access_token(subject: Any, expires_delta: timedelta | None = None) ->
 
 def decode_access_token(token: str) -> dict:
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+
+
+def create_refresh_token() -> tuple[str, datetime]:
+    """Devuelve (token_opaco, expires_at). El token se almacena en DB, no es un JWT."""
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    return token, expires_at

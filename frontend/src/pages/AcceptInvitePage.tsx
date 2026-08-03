@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { acceptInvite, fetchInviteContext, type InviteContext } from "../api/users";
+import { setRefreshToken, setToken } from "../lib/tokenStorage";
 
 interface Props {
   token: string;
-  onAccepted: (accessToken: string) => void;
+  onAccepted: () => void;
 }
 
 export function AcceptInvitePage({ token, onAccepted }: Props) {
@@ -53,8 +54,10 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
 
     setLoading(true);
     try {
-      const accessToken = await acceptInvite(token, fullName.trim(), password);
-      onAccepted(accessToken);
+      const tokens = await acceptInvite(token, fullName.trim(), password);
+      setToken(tokens.access_token);
+      setRefreshToken(tokens.refresh_token);
+      onAccepted();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
       const msg = typeof detail === "string"
