@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { clearToken, getToken, setToken } from "./lib/tokenStorage";
+import { clearRefreshToken, clearToken, getToken } from "./lib/tokenStorage";
 import { fetchObra } from "./api/obras";
 import { fetchBitacoraPendingCount } from "./api/bitacora";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -108,8 +108,7 @@ function App() {
     return (
       <ResetPasswordPage
         token={resetToken}
-        onDone={(accessToken) => {
-          setToken(accessToken);
+        onDone={() => {
           window.location.href = "/"; // limpia la URL /reset-password/... y entra a la app
         }}
       />
@@ -121,8 +120,7 @@ function App() {
     return (
       <AcceptInvitePage
         token={inviteToken}
-        onAccepted={(accessToken) => {
-          setToken(accessToken);
+        onAccepted={() => {
           window.location.href = "/"; // clean the /invite/... URL and enter the app
         }}
       />
@@ -248,7 +246,7 @@ function App() {
         pageSubtitle={pageSubtitle}
         activePage={activePage}
         onNavigate={handleNavigate}
-        onLogout={() => { clearToken(); setAuthed(false); }}
+        onLogout={() => { clearToken(); clearRefreshToken(); setAuthed(false); }}
         onAlertClick={handleAlertClick}
         pinnedObras={pinnedObras}
         onSelectObra={handleSelectObra}
