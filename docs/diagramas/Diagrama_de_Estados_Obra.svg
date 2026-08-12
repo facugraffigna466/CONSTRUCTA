@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="1680" viewBox="0 0 2200 1680">
+<defs>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+    <path d="M0,0 L12,6 L0,12 Z" fill="#8c98a2"/>
+  </marker>
+  <marker id="arrowDark" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+    <path d="M0,0 L12,6 L0,12 Z" fill="#6e7b86"/>
+  </marker>
+  <style>
+    .title {font-family:Arial,Helvetica,sans-serif;font-size:34px;font-weight:700;fill:#202830}
+    .subtitle {font-family:Arial,Helvetica,sans-serif;font-size:20px;fill:#5c6872}
+    .heading {font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;fill:#52606b}
+    .headingGreen {font-family:Arial,Helvetica,sans-serif;font-size:20px;font-weight:700;fill:#16744f}
+    .body {font-family:Arial,Helvetica,sans-serif;font-size:17px;fill:#56636d}
+    .state {font-family:Arial,Helvetica,sans-serif;font-size:23px;font-weight:700}
+    .stateBody {font-family:Arial,Helvetica,sans-serif;font-size:16px;fill:#56636d}
+    .note {font-family:Arial,Helvetica,sans-serif;font-size:17px;fill:#56636d}
+    .line {stroke:#89959f;stroke-width:2.5;fill:none;marker-end:url(#arrow)}
+    .dash {stroke:#aeb9c1;stroke-width:2.2;stroke-dasharray:9 8;fill:none}
+  </style>
+</defs>
+<rect width="2200" height="1680" fill="#ffffff"/>
+
+<text x="1100" y="64" text-anchor="middle" class="title">Diagrama de estados — Obra</text>
+<text x="1100" y="105" text-anchor="middle" class="subtitle">ObraStatus (models/obra.py) · recompute_obra_status() — backend/app/services/task_service.py</text>
+<rect x="28" y="145" width="2144" height="935" rx="28" class="dash"/>
+<text x="62" y="190" class="heading">AUTOMÁTICO — recompute_obra_status(), tras cada cambio de tarea</text>
+<text x="62" y="219" class="body">recalcula el estado de la obra a partir de sus tareas activas (no canceladas)</text>
+<rect x="88" y="530" width="390" height="154" rx="22" fill="#f7f8f8" stroke="#9ca8b1" stroke-width="2.5"/>
+<text x="283" y="590" text-anchor="middle" class="state" fill="#46525b">Planificada</text>
+<text x="283" y="620" text-anchor="middle" class="stateBody">estado inicial</text>
+<circle cx="62" cy="607" r="12" fill="#1f2a31"/>
+<line x1="62" y1="607" x2="88" y2="607" class="line"/>
+<rect x="765" y="530" width="390" height="154" rx="22" fill="#eef4ff" stroke="#3167d7" stroke-width="2.5"/>
+<text x="960" y="590" text-anchor="middle" class="state" fill="#24539f">En progreso</text>
+<text x="960" y="620" text-anchor="middle" class="stateBody">al menos una tarea activa</text>
+<rect x="1475" y="273" width="390" height="154" rx="24" fill="#eaf7f0" stroke="#16885b" stroke-width="2.5"/>
+<rect x="1483" y="281" width="374" height="138" rx="20" fill="none" stroke="#16885b" stroke-width="2.5"/>
+<text x="1670" y="332" text-anchor="middle" class="state" fill="#16744f">Completada</text>
+<text x="1670" y="362" text-anchor="middle" class="stateBody">todas las tareas activas</text>
+<text x="1670" y="385" text-anchor="middle" class="stateBody">completadas · estado pegajoso</text>
+<line x1="478" y1="575" x2="765" y2="575" class="line"/>
+<text x="621" y="552" text-anchor="middle" class="note">alguna tarea activa avanza</text>
+<line x1="765" y1="640" x2="478" y2="640" class="line"/>
+<text x="620" y="672" text-anchor="middle" class="note">ninguna tarea activa avanzó</text>
+<path d="M1155 575 L1180 575 L1180 350 L1475 350" class="line"/>
+<text x="1315" y="325" text-anchor="middle" class="note">todas las tareas activas completadas</text>
+<line x1="1100" y1="1080" x2="1100" y2="1150" class="line"/>
+<line x1="1090" y1="1090" x2="1090" y2="1150" class="dash"/>
+<text x="1185" y="1120" class="note">el jefe de obra fija / reabre manualmente</text>
+<rect x="248" y="1150" width="1640" height="240" rx="26" class="dash"/>
+<text x="285" y="1195" class="heading">MANUAL — jefe de obra (backoffice), sin pasar por este flujo</text>
+<rect x="470" y="1230" width="390" height="155" rx="22" fill="#fff0e9" stroke="#ff7043" stroke-width="2.5"/>
+<text x="665" y="1290" text-anchor="middle" class="state" fill="#b94917">Pausada</text>
+<text x="665" y="1320" text-anchor="middle" class="stateBody">a la espera · estado pegajoso</text>
+<rect x="1155" y="1225" width="390" height="165" rx="24" fill="#f7f8f8" stroke="#9ca8b1" stroke-width="2.5"/>
+<rect x="1163" y="1233" width="374" height="149" rx="20" fill="none" stroke="#9ca8b1" stroke-width="2.5"/>
+<text x="1350" y="1290" text-anchor="middle" class="state" fill="#46525b">Cancelada</text>
+<text x="1350" y="1320" text-anchor="middle" class="stateBody">terminal · estado pegajoso</text>
+<text x="36" y="1435" class="heading">Notas</text>
+<text x="36" y="1465" class="body">Pausada, cancelada y completada son "pegajosas": una vez fijadas, recompute_obra_status() nunca las pisa (solo actúa mientras la obra está planificada/en progreso).</text>
+<text x="36" y="1494" class="body">Reabrir es una acción manual (allow_complete=False): recalcula planificada/en_progreso pero no vuelve a completar en el mismo acto.</text>
+</svg>

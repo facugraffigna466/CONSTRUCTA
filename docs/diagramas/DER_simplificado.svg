@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="3160" height="1844" viewBox="0 0 3160 1844">
+<defs>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+    <path d="M0,0 L12,6 L0,12 z" fill="#7d8991"/>
+  </marker>
+  <style>
+    .title { font-family: Arial, Helvetica, sans-serif; font-size: 42px; font-weight: 700; fill:#202830; }
+    .subtitle { font-family: Arial, Helvetica, sans-serif; font-size: 22px; fill:#56616a; }
+    .box-title { font-family: Arial, Helvetica, sans-serif; font-size: 20px; font-weight:700; fill:#fff; }
+    .body { font-family: Arial, Helvetica, sans-serif; font-size: 18px; fill:#34404a; }
+    .rel { font-family: Arial, Helvetica, sans-serif; font-size: 17px; fill:#53606a; }
+    .line { stroke:#7d8991; stroke-width:2.2; fill:none; }
+  </style>
+</defs>
+<rect width="3160" height="1844" fill="#ffffff"/>
+
+<text x="1580" y="75" text-anchor="middle" class="title">Modelo de datos (DER simplificado) — entidades principales</text>
+<text x="1580" y="116" text-anchor="middle" class="subtitle">Se muestran las entidades centrales y sus relaciones. Detalle completo de columnas en docs/database.md</text>
+<line x1="180" y1="363" x2="180" y2="540" class="line" marker-end="url(#arrow)"/>
+<line x1="602" y1="638" x2="1148" y2="638" class="line" marker-end="url(#arrow)"/>
+<line x1="1711" y1="602" x2="2150" y2="602" class="line" marker-end="url(#arrow)"/>
+<line x1="2150" y1="602" x2="2150" y2="327" class="line" marker-end="url(#arrow)"/>
+<line x1="2150" y1="327" x2="2438" y2="327" class="line" marker-end="url(#arrow)"/>
+<line x1="1240" y1="777" x2="1240" y2="820" class="line" marker-end="url(#arrow)"/>
+<line x1="1240" y1="820" x2="885" y2="820" class="line" marker-end="url(#arrow)"/>
+<line x1="885" y1="820" x2="885" y2="868" class="line" marker-end="url(#arrow)"/>
+<line x1="1435" y1="777" x2="1435" y2="830" class="line" marker-end="url(#arrow)"/>
+<line x1="1435" y1="830" x2="1809" y2="830" class="line" marker-end="url(#arrow)"/>
+<line x1="1809" y1="830" x2="1809" y2="925" class="line" marker-end="url(#arrow)"/>
+<line x1="2372" y1="925" x2="2438" y2="925" class="line" marker-end="url(#arrow)"/>
+<line x1="2703" y1="447" x2="2703" y2="540" class="line" marker-end="url(#arrow)"/>
+<line x1="2850" y1="540" x2="2850" y2="447" class="line" marker-end="url(#arrow)"/>
+<line x1="2968" y1="327" x2="3030" y2="327" class="line" marker-end="url(#arrow)"/>
+<line x1="3030" y1="327" x2="3030" y2="925" class="line" marker-end="url(#arrow)"/>
+<line x1="3030" y1="925" x2="2968" y2="925" class="line" marker-end="url(#arrow)"/>
+<line x1="2968" y1="387" x2="3090" y2="387" class="line" marker-end="url(#arrow)"/>
+<line x1="3090" y1="387" x2="3090" y2="1210" class="line" marker-end="url(#arrow)"/>
+<line x1="3090" y1="1210" x2="2968" y2="1210" class="line" marker-end="url(#arrow)"/>
+<line x1="360" y1="1024" x2="360" y2="1710" class="line" marker-end="url(#arrow)"/>
+<line x1="360" y1="1710" x2="2700" y2="1710" class="line" marker-end="url(#arrow)"/>
+<line x1="2700" y1="1710" x2="2700" y2="1309" class="line" marker-end="url(#arrow)"/>
+<line x1="1430" y1="777" x2="1430" y2="1116" class="line" marker-end="url(#arrow)"/>
+<line x1="1560" y1="777" x2="1560" y2="1060" class="line" marker-end="url(#arrow)"/>
+<line x1="1560" y1="1060" x2="2080" y2="1060" class="line" marker-end="url(#arrow)"/>
+<line x1="2080" y1="1060" x2="2080" y2="1116" class="line" marker-end="url(#arrow)"/>
+<line x1="1660" y1="777" x2="1740" y2="777" class="line" marker-end="url(#arrow)"/>
+<line x1="1740" y1="777" x2="1740" y2="1510" class="line" marker-end="url(#arrow)"/>
+<line x1="1740" y1="1510" x2="1711" y2="1510" class="line" marker-end="url(#arrow)"/>
+<text x="355" y="474" class="rel">1..N</text>
+<text x="850" y="610" class="rel">1..N</text>
+<text x="1780" y="570" class="rel">1..N</text>
+<text x="810" y="810" class="rel">1..N</text>
+<text x="1600" y="815" class="rel">1..N</text>
+<text x="2385" y="855" class="rel">N</text>
+<text x="2720" y="515" class="rel">M2M (pred./suc.)</text>
+<text x="2990" y="905" class="rel">N</text>
+<text x="2360" y="925" class="rel">N</text>
+<text x="1390" y="1090" class="rel">1..N</text>
+<text x="1750" y="1065" class="rel">1..N</text>
+<text x="1300" y="1700" class="rel">1..N</text>
+<rect x="112" y="207" width="490" height="156" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="112" y="207" width="490" height="52" rx="6" fill="#1d272e"/>
+<text x="136" y="241" class="box-title">tenant (empresa)</text>
+<text x="136" y="294" class="body">id (PK) · name</text>
+<text x="136" y="332" class="body">plan_id · owner_user_id</text>
+<rect x="112" y="540" width="490" height="196" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="112" y="540" width="490" height="52" rx="6" fill="#1d272e"/>
+<text x="136" y="574" class="box-title">user</text>
+<text x="136" y="627" class="body">id (PK) · email · role</text>
+<text x="136" y="665" class="body">whatsapp_number</text>
+<text x="136" y="703" class="body">tenant_id (FK)</text>
+<rect x="115" y="868" width="490" height="156" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="115" y="868" width="490" height="52" rx="6" fill="#1d272e"/>
+<text x="139" y="902" class="box-title">supplier</text>
+<text x="139" y="955" class="body">id (PK) · name</text>
+<text x="139" y="993" class="body">tenant_id (FK)</text>
+<rect x="640" y="868" width="490" height="156" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="640" y="868" width="490" height="52" rx="6" fill="#1d272e"/>
+<text x="664" y="902" class="box-title">alert</text>
+<text x="664" y="955" class="body">id · type · is_read</text>
+<text x="664" y="993" class="body">obra_id · task_id (FK)</text>
+<rect x="1148" y="539" width="563" height="238" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="1148" y="539" width="563" height="52" rx="6" fill="#1d272e"/>
+<text x="1172" y="573" class="box-title">obra (HUB)</text>
+<text x="1172" y="626" class="body">id (PK) · name · status</text>
+<text x="1172" y="664" class="body">manager_id (FK→user)</text>
+<text x="1172" y="702" class="body">tenant_id (FK)</text>
+<text x="1172" y="740" class="body">client_name · fechas</text>
+<rect x="2438" y="207" width="530" height="240" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="2438" y="207" width="530" height="52" rx="6" fill="#1d272e"/>
+<text x="2462" y="241" class="box-title">task</text>
+<text x="2462" y="294" class="body">id (PK) · title · status</text>
+<text x="2462" y="332" class="body">obra_id (FK)</text>
+<text x="2462" y="370" class="body">responsible_id (FK)</text>
+<text x="2462" y="408" class="body">parent_task_id (self)</text>
+<rect x="2438" y="540" width="530" height="112" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="2438" y="540" width="530" height="52" rx="6" fill="#1d272e"/>
+<text x="2462" y="574" class="box-title">task dependencies (M2M)</text>
+<text x="2462" y="627" class="body">tipo (FS/SS/FF/SF) · lag</text>
+<rect x="1809" y="868" width="563" height="113" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="1809" y="868" width="563" height="52" rx="6" fill="#1d272e"/>
+<text x="1833" y="902" class="box-title">obra_team_member (M2M)</text>
+<text x="1833" y="955" class="body">obra_id · responsible_id · role</text>
+<rect x="2438" y="868" width="530" height="156" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="2438" y="868" width="530" height="52" rx="6" fill="#1d272e"/>
+<text x="2462" y="902" class="box-title">responsible</text>
+<text x="2462" y="955" class="body">id (PK) · full_name</text>
+<text x="2462" y="993" class="body">whatsapp_number · tenant_id</text>
+<rect x="1148" y="1116" width="563" height="193" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="1148" y="1116" width="563" height="52" rx="6" fill="#1d272e"/>
+<text x="1172" y="1150" class="box-title">bitacora_entry</text>
+<text x="1172" y="1203" class="body">id · transcript · summary</text>
+<text x="1172" y="1241" class="body">suggestions (JSON)</text>
+<text x="1172" y="1279" class="body">obra_id · responsible_id</text>
+<rect x="1809" y="1116" width="563" height="193" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="1809" y="1116" width="563" height="52" rx="6" fill="#1d272e"/>
+<text x="1833" y="1150" class="box-title">budget (presupuesto)</text>
+<text x="1833" y="1203" class="body">id · supplier_name · total</text>
+<text x="1833" y="1241" class="body">data · inconsistencies</text>
+<text x="1833" y="1279" class="body">obra_id · tenant_id</text>
+<rect x="2438" y="1116" width="530" height="193" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="2438" y="1116" width="530" height="52" rx="6" fill="#1d272e"/>
+<text x="2462" y="1150" class="box-title">task_material</text>
+<text x="2462" y="1203" class="body">id · name · qty · price</text>
+<text x="2462" y="1241" class="body">task_id · supplier_id (FK)</text>
+<rect x="1148" y="1414" width="563" height="196" fill="#fff" stroke="#b9c2c8" stroke-width="2"/>
+<rect x="1148" y="1414" width="563" height="52" rx="6" fill="#1d272e"/>
+<text x="1172" y="1448" class="box-title">plano</text>
+<text x="1172" y="1501" class="body">id · discipline · version</text>
+<text x="1172" y="1539" class="body">is_latest · file_path</text>
+<text x="1172" y="1577" class="body">obra_id · tenant_id</text>
+<text x="112" y="1780" class="body" font-weight="700">Convención</text>
+<text x="112" y="1812" class="subtitle">Cada flecha va de la entidad referenciada (lado "1") hacia la tabla que contiene la clave foránea (lado "N"). M2M = tabla intermedia muchos-a-muchos.</text>
+</svg>
