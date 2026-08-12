@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1433" viewBox="0 0 2048 1433">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8d99a3"/>
+    </marker>
+    <marker id="arrow-dark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#26323a"/>
+    </marker>
+    <style>
+      .font{font-family:Arial,Helvetica,sans-serif;fill:#26323a}
+      .title{font-size:34px;font-weight:700}
+      .subtitle{font-size:22px;fill:#60707c}
+      .section{font-size:22px;font-weight:700;fill:#5c6973}
+      .small{font-size:18px;fill:#84909a}
+      .label{font-size:20px;fill:#5b6973}
+      .node-title{font-size:24px;font-weight:700}
+      .node-sub{font-size:18px;fill:#64717b}
+      .line{stroke:#8d99a3;stroke-width:3;fill:none;marker-end:url(#arrow)}
+      .box{stroke:#aab4bd;stroke-width:2.5;fill:#f7f8f8}
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="2048" height="1433" fill="#ffffff"/>
+
+  <!-- Header -->
+  <text x="1024" y="70" text-anchor="middle" class="font title">Diagrama de estados — Tarea</text>
+  <text x="1024" y="104" text-anchor="middle" class="font subtitle">VALID_TRANSITIONS — backend/app/services/task_service.py</text>
+
+  <!-- Automatic area -->
+  <rect x="28" y="174" width="1992" height="989" rx="27" fill="none" stroke="#c5cdd3" stroke-width="2.5" stroke-dasharray="11 9"/>
+  <text x="65" y="219" class="font section">AUTOMÁTICO — vía WhatsApp / IA (chatbot)</text>
+  <text x="65" y="249" class="font small">respeta estas reglas al interpretar la respuesta del responsable</text>
+
+  <!-- Initial node -->
+  <circle cx="65" cy="640" r="13" fill="#26323a"/>
+  <path d="M65 640 L88 640" stroke="#8d99a3" stroke-width="3" marker-end="url(#arrow)"/>
+
+  <rect x="92" y="559" width="410" height="163" rx="25" class="box" stroke="#9ba7b0"/>
+  <text x="297" y="625" text-anchor="middle" class="font node-title">Pendiente</text>
+  <text x="297" y="659" text-anchor="middle" class="font node-sub">estado inicial</text>
+
+  <!-- In progress -->
+  <rect x="795" y="559" width="410" height="163" rx="25" fill="#eaf1ff" stroke="#2f68d8" stroke-width="3"/>
+  <text x="1000" y="625" text-anchor="middle" class="font node-title" fill="#2457a9" style="fill:#2457a9">En progreso</text>
+  <text x="1000" y="659" text-anchor="middle" class="font node-sub">tarea en curso</text>
+
+  <!-- Blocked -->
+  <rect x="795" y="930" width="410" height="163" rx="25" fill="#fff1e9" stroke="#ff6a33" stroke-width="3"/>
+  <text x="1000" y="996" text-anchor="middle" class="font node-title" style="fill:#b83f13">Bloqueada</text>
+  <text x="1000" y="1030" text-anchor="middle" class="font node-sub">a la espera</text>
+
+  <!-- Completed -->
+  <rect x="1500" y="252" width="425" height="170" rx="27" fill="#e9f7f0" stroke="#15965f" stroke-width="3"/>
+  <rect x="1507" y="259" width="411" height="156" rx="23" fill="none" stroke="#15965f" stroke-width="2"/>
+  <text x="1712" y="325" text-anchor="middle" class="font node-title" style="fill:#16764f">Completada</text>
+  <text x="1712" y="360" text-anchor="middle" class="font node-sub">terminal</text>
+  <text x="1712" y="389" text-anchor="middle" class="font node-sub">sin transiciones salientes</text>
+
+  <!-- Cancelled -->
+  <rect x="1500" y="930" width="425" height="170" rx="27" fill="#f7f8f8" stroke="#9ca7b0" stroke-width="3"/>
+  <rect x="1507" y="937" width="411" height="156" rx="23" fill="none" stroke="#9ca7b0" stroke-width="2"/>
+  <text x="1712" y="1003" text-anchor="middle" class="font node-title">Cancelada</text>
+  <text x="1712" y="1038" text-anchor="middle" class="font node-sub">terminal</text>
+  <text x="1712" y="1067" text-anchor="middle" class="font node-sub">sin transiciones salientes</text>
+
+  <!-- Transitions -->
+  <path d="M502 640 H795" class="line"/>
+  <text x="648" y="617" text-anchor="middle" class="font label">iniciar tarea</text>
+
+  <path d="M1000 559 V338 H1500" class="line"/>
+  <text x="1265" y="315" text-anchor="middle" class="font label">completar</text>
+
+  <path d="M1000 722 V930" class="line"/>
+  <text x="970" y="815" text-anchor="end" class="font label">bloquear</text>
+
+  <path d="M1205 1011 H1500" class="line"/>
+  <text x="1353" y="987" text-anchor="middle" class="font label">cancelar</text>
+
+  <path d="M1130 930 V722" class="line"/>
+  <text x="1180" y="830" class="font label">desbloquear</text>
+
+  <path d="M1205 640 H1712 V930" class="line"/>
+  <text x="1605" y="800" text-anchor="middle" class="font label">cancelar</text>
+
+  <path d="M297 722 V1127 H1712 V1100" class="line"/>
+  <text x="1000" y="1108" text-anchor="middle" class="font label">cancelar</text>
+
+  <!-- Legend -->
+  <rect x="92" y="1202" width="27" height="27" rx="5" fill="#f7f8f8" stroke="#9ba7b0" stroke-width="2"/>
+  <text x="130" y="1223" class="font label">estado no activo</text>
+
+  <rect x="410" y="1202" width="27" height="27" rx="5" fill="#eaf1ff" stroke="#2f68d8" stroke-width="2"/>
+  <text x="448" y="1223" class="font label">en curso</text>
+
+  <rect x="631" y="1202" width="27" height="27" rx="5" fill="#fff1e9" stroke="#ff6a33" stroke-width="2"/>
+  <text x="669" y="1223" class="font label">detenida</text>
+
+  <rect x="865" y="1202" width="27" height="27" rx="5" fill="#e9f7f0" stroke="#15965f" stroke-width="2"/>
+  <text x="903" y="1223" class="font label">completada (terminal)</text>
+
+  <rect x="1248" y="1198" width="35" height="35" rx="7" fill="#f7f8f8" stroke="#9ca7b0" stroke-width="2"/>
+  <rect x="1254" y="1204" width="23" height="23" rx="5" fill="none" stroke="#9ca7b0" stroke-width="2"/>
+  <text x="1300" y="1223" class="font label">doble borde = terminal</text>
+
+  <!-- Manual section -->
+  <rect x="520" y="1280" width="1000" height="94" rx="22" fill="#ffffff" stroke="#9aa7b1" stroke-width="2.5" stroke-dasharray="9 7"/>
+  <text x="570" y="1321" class="font label" style="font-size:27px">↔</text>
+  <text x="1020" y="1319" text-anchor="middle" class="font section">MANUAL — jefe de obra (backoffice)</text>
+  <text x="1020" y="1349" text-anchor="middle" class="font label">puede fijar cualquier estado directamente, sin seguir este diagrama</text>
+</svg>

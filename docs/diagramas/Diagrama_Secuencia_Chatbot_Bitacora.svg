@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="2900" height="1960" viewBox="0 0 2900 1960">
+<defs>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+    <path d="M0,0 L12,6 L0,12 Z" fill="#5e6b76"/>
+  </marker>
+  <style>
+    .title {font-family:Arial,Helvetica,sans-serif;font-size:42px;font-weight:700;fill:#202830}
+    .subtitle {font-family:Arial,Helvetica,sans-serif;font-size:22px;fill:#56636e}
+    .actor {font-family:Arial,Helvetica,sans-serif;font-size:25px;font-weight:700;fill:#27333c}
+    .actorSub {font-family:Arial,Helvetica,sans-serif;font-size:18px;fill:#596772}
+    .section {font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;fill:#1f4fa3}
+    .section2 {font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;fill:#13754d}
+    .msg {font-family:Arial,Helvetica,sans-serif;font-size:18px;fill:#3f4c56}
+    .small {font-family:Arial,Helvetica,sans-serif;font-size:17px;fill:#56636e}
+    .note {font-family:Arial,Helvetica,sans-serif;font-size:16px;fill:#596772}
+    .conv {font-family:Arial,Helvetica,sans-serif;font-size:17px;fill:#596772}
+    .line {stroke:#61707c;stroke-width:2;fill:none}
+    .dash {stroke:#a8b3bb;stroke-width:2;stroke-dasharray:8 8;fill:none}
+    .noteBox {fill:#fff;stroke:#8998a3;stroke-width:2;stroke-dasharray:6 5}
+  </style>
+</defs>
+<rect width="2900" height="1960" fill="#fff"/>
+
+<text x="1450" y="68" text-anchor="middle" class="title">Diagrama de secuencia — Chatbot WhatsApp y Bitácora en tiempo real</text>
+<text x="1450" y="108" text-anchor="middle" class="subtitle">backend/app/services/conversation_service.py (ConversationStep) · message_service.py · socket_manager.py · frontend/src/hooks/useTaskSocket.ts</text>
+<rect x="0" y="160" width="440" height="104" rx="18" fill="#f2f4f5" stroke="#8e9aa3" stroke-width="3"/>
+<text x="220.0" y="203" text-anchor="middle" class="actor">Operario</text>
+<text x="220.0" y="233" text-anchor="middle" class="actorSub">(responsable · WhatsApp)</text>
+<rect x="480" y="160" width="440" height="104" rx="18" fill="#fff4ef" stroke="#ff7043" stroke-width="3"/>
+<text x="700.0" y="203" text-anchor="middle" class="actor">Twilio</text>
+<text x="700.0" y="233" text-anchor="middle" class="actorSub">(API de WhatsApp)</text>
+<rect x="960" y="160" width="440" height="104" rx="18" fill="#eef4ff" stroke="#2e64d6" stroke-width="3"/>
+<text x="1180.0" y="203" text-anchor="middle" class="actor">Backend</text>
+<text x="1180.0" y="233" text-anchor="middle" class="actorSub">(FastAPI · webhook + servicios)</text>
+<rect x="1440" y="160" width="440" height="104" rx="18" fill="#f7f8f9" stroke="#b8c0c7" stroke-width="3"/>
+<text x="1660.0" y="203" text-anchor="middle" class="actor">Base de datos</text>
+<text x="1660.0" y="233" text-anchor="middle" class="actorSub">(PostgreSQL)</text>
+<rect x="1920" y="160" width="440" height="104" rx="18" fill="#e9f7f0" stroke="#16885b" stroke-width="3"/>
+<text x="2140.0" y="203" text-anchor="middle" class="actor">Socket.IO</text>
+<text x="2140.0" y="233" text-anchor="middle" class="actorSub">(tiempo real)</text>
+<rect x="2400" y="160" width="440" height="104" rx="18" fill="#eef4ff" stroke="#2e64d6" stroke-width="3"/>
+<text x="2620.0" y="203" text-anchor="middle" class="actor">Frontend</text>
+<text x="2620.0" y="233" text-anchor="middle" class="actorSub">(panel del jefe de obra)</text>
+<line x1="220" y1="264" x2="220" y2="1815" class="dash"/>
+<line x1="700" y1="264" x2="700" y2="1815" class="dash"/>
+<line x1="1180" y1="264" x2="1180" y2="1815" class="dash"/>
+<line x1="1660" y1="264" x2="1660" y2="1815" class="dash"/>
+<line x1="2140" y1="264" x2="2140" y2="1815" class="dash"/>
+<line x1="2620" y1="264" x2="2620" y2="1815" class="dash"/>
+<text x="40" y="315" class="section">1 · CHATBOT DE TAREAS — responder al menú de WhatsApp</text>
+<line x1="220" y1="360" x2="700" y2="360" class="line" marker-end="url(#arrow)"/>
+<text x="470" y="346" text-anchor="middle" class="msg">"2" (marcar en curso)</text>
+<line x1="700" y1="410" x2="1180" y2="410" class="line" marker-end="url(#arrow)"/>
+<text x="940" y="397" text-anchor="middle" class="msg">POST /webhooks/twilio (firma HMAC)</text>
+<rect x="920" y="440" width="520" height="72" rx="12" class="noteBox"/>
+<text x="1180" y="468" text-anchor="middle" class="note">verifica firma Twilio + rate-limit</text>
+<text x="1180" y="492" text-anchor="middle" class="note">por número de WhatsApp</text>
+<text x="1660" y="542" text-anchor="middle" class="msg">ConversationSession.get_by_responsible()</text>
+<line x1="1660" y1="552" x2="1180" y2="552" class="dash" marker-end="url(#arrow)"/>
+<text x="1420" y="538" text-anchor="middle" class="msg">step actual: STATUS_MENU</text>
+<rect x="920" y="580" width="520" height="72" rx="12" class="noteBox"/>
+<text x="1180" y="608" text-anchor="middle" class="note">ConversationService.handle_inbound()</text>
+<text x="1180" y="632" text-anchor="middle" class="note">enruta según ConversationStep</text>
+<text x="1180" y="682" text-anchor="middle" class="msg">apply_status_update(EN_PROGRESO)</text>
+<line x1="1180" y1="710" x2="1660" y2="710" class="line" marker-end="url(#arrow)"/>
+<text x="1420" y="696" text-anchor="middle" class="msg">emit_task_updated(task)</text>
+<line x1="2140" y1="710" x2="2620" y2="710" class="line" marker-end="url(#arrow)"/>
+<text x="2380" y="696" text-anchor="middle" class="msg">"task_updated" → room obra_{id}</text>
+<rect x="2360" y="744" width="520" height="62" rx="12" class="noteBox"/>
+<text x="2620" y="780" text-anchor="middle" class="note">tablero se actualiza en vivo, sin recargar</text>
+<line x1="1180" y1="820" x2="700" y2="820" class="line" marker-end="url(#arrow)"/>
+<text x="940" y="806" text-anchor="middle" class="msg">send_whatsapp_message(reply)</text>
+<line x1="700" y1="865" x2="220" y2="865" class="line" marker-end="url(#arrow)"/>
+<text x="460" y="851" text-anchor="middle" class="msg">✅ Marqué la tarea en curso"</text>
+<line x1="0" y1="905" x2="2900" y2="905" class="dash"/>
+<text x="40" y="948" class="section2">2 · BITÁCORA DE OBRA — nota de voz procesada con IA</text>
+<line x1="220" y1="990" x2="700" y2="990" class="line" marker-end="url(#arrow)"/>
+<text x="460" y="976" text-anchor="middle" class="msg">audio (nota de voz)</text>
+<line x1="700" y1="1035" x2="1180" y2="1035" class="line" marker-end="url(#arrow)"/>
+<text x="940" y="1021" text-anchor="middle" class="msg">webhook con MediaUrl / MediaContentType</text>
+<rect x="920" y="1070" width="520" height="72" rx="12" class="noteBox"/>
+<text x="1180" y="1098" text-anchor="middle" class="note">MessageService detecta adjunto de</text>
+<text x="1180" y="1122" text-anchor="middle" class="note">audio → deriva a BitacoraService</text>
+<text x="1180" y="1168" text-anchor="middle" class="msg">crea BitacoraEntry(source="whatsapp")</text>
+<rect x="920" y="1200" width="520" height="72" rx="12" class="noteBox"/>
+<text x="1180" y="1228" text-anchor="middle" class="note">gpt-4o-mini-transcribe transcribe el audio +</text>
+<text x="1180" y="1252" text-anchor="middle" class="note">la IA genera sugerencias de tareas</text>
+<text x="1180" y="1300" text-anchor="middle" class="msg">guarda transcript + suggestions[]</text>
+<line x1="1180" y1="1330" x2="1660" y2="1330" class="line" marker-end="url(#arrow)"/>
+<text x="1420" y="1316" text-anchor="middle" class="msg">emit_bitacora_created(entry)</text>
+<line x1="2140" y1="1330" x2="2620" y2="1330" class="line" marker-end="url(#arrow)"/>
+<text x="2380" y="1316" text-anchor="middle" class="msg">"bitacora_created" → room obra_{id}</text>
+<rect x="2360" y="1360" width="520" height="76" rx="12" class="noteBox"/>
+<text x="2620" y="1390" text-anchor="middle" class="note">toast en vivo: nueva nota de voz</text>
+<text x="2620" y="1414" text-anchor="middle" class="note">para revisar, sin recargar la página</text>
+<line x1="2620" y1="1470" x2="1180" y2="1470" class="line" marker-end="url(#arrow)"/>
+<text x="1900" y="1456" text-anchor="middle" class="msg">jefe aplica sugerencia · POST /bitacora/{id}/suggestions/apply</text>
+<line x1="1180" y1="1515" x2="700" y2="1515" class="line" marker-end="url(#arrow)"/>
+<text x="940" y="1501" text-anchor="middle" class="msg">(opcional) ack por WhatsApp</text>
+<line x1="700" y1="1560" x2="220" y2="1560" class="line" marker-end="url(#arrow)"/>
+<text x="460" y="1546" text-anchor="middle" class="msg">"Recibimos tu nota 🎙"</text>
+<text x="40" y="1860" class="conv" font-weight="700">Convención</text>
+<text x="40" y="1892" class="conv">Línea sólida = llamada/mensaje · línea punteada = respuesta o confirmación asíncrona · recuadro punteado = procesamiento interno (sin mensaje entre actores).</text>
+</svg>
