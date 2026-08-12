@@ -4,7 +4,7 @@
 **Tipo de evaluación:** diagnóstico interno basado en documentos, código y validaciones locales.  
 **Importante:** los porcentajes de este informe son estimaciones operativas, no una calificación oficial de la cátedra.
 
-> **Actualización:** este diagnóstico preliminar fue reemplazado, para la presentación del **2026-08-15**, por [`alcance-defensa-2026-08-15.md`](alcance-defensa-2026-08-15.md), elaborado con el Gantt completo. La cifra global de 68% no debe utilizarse para evaluar ese corte parcial.
+> **Actualización:** este diagnóstico preliminar fue reemplazado, para la presentación obligatoria y calificada del **2026-08-13**, por [`alcance-defensa-2026-08-13.md`](alcance-defensa-2026-08-13.md), elaborado con el Gantt completo y la consigna oficial. La cifra global de 68% no debe utilizarse para evaluar ese corte parcial.
 
 ## 1. Resumen ejecutivo
 
@@ -13,7 +13,7 @@ CONSTRUCTA es un proyecto funcionalmente avanzado, pero su nivel de terminación
 | Dimensión | Estimación | Lectura |
 |---|---:|---|
 | Implementación de los 17 compromisos originales consolidados | **78%** | El camino feliz y la mayoría de los módulos existen. |
-| Evidencia objetiva y pruebas de esos compromisos | **35%** | Hay build y 16 tests, pero cubren principalmente aislamiento/archivos; faltan frontend, E2E y actas de ejecución manual. |
+| Evidencia objetiva y pruebas de esos compromisos | **35%** | Hay build y 24 tests de backend, pero cubren solo parte del sistema; faltan frontend, E2E y actas de ejecución manual. |
 | Estructura del IPI frente a la plantilla | **94%** | Están 15 de los 16 bloques esperados; falta el índice. |
 | Contenido del IPI como borrador | **~75%** | Tiene 8.279 palabras, arquitectura, módulos y anexos; quedan datos, evidencias y correcciones importantes. |
 | IPI listo para una entrega final | **55–60%** | Persisten marcadores, desalineación con el anteproyecto, citas incompletas, figuras faltantes y afirmaciones obsoletas. |
@@ -152,9 +152,9 @@ Ese flujo debe poder ejecutarse de principio a fin, con datos de demostración c
 ### Validaciones positivas
 
 - Backend y frontend locales respondieron HTTP `200`.
-- PostgreSQL y Alembic: `0041 (head)`.
+- Migraciones de código: `0001–0043`; la base local auditada permanece en `0041`.
 - Backend: 112 rutas totales, 107 bajo `/api/v1`.
-- `pytest`: **16/16 tests aprobados**; 9 advertencias no bloqueantes.
+- `pytest`: **24 tests aprobados**; 16 advertencias no bloqueantes.
 - Frontend: TypeScript y build de Vite aprobados; 2.630 módulos transformados.
 - Existe CI en `.github/workflows/ci.yml` para ejecutar `pytest` y el build en pushes a `main` y pull requests.
 
@@ -240,10 +240,10 @@ La plantilla plantea 16 bloques. El borrador contiene 15 y carece de **índice**
    El Anteproyecto excluía costos, presupuestos y finanzas; el IPI actual convierte materiales, cotizaciones y compras en un bloque central. Si la ampliación no fue aprobada, debe mostrarse como mejora adicional, no como objetivo original.
 
 5. **Datos obsoletos.**  
-   El informe menciona migraciones hasta `0038`; el estado real es `0041`.
+   El informe mencionaba migraciones hasta `0038`; el código actual llega a `0043` y la base local auditada permanece en `0041`.
 
 6. **Pruebas sobreafirmadas.**  
-   El texto dice que los módulos y flujos E2E fueron verificados, pero los casos manuales no registran resultados reales y los 16 tests automatizados cubren un subconjunto.
+   El texto dice que los módulos y flujos E2E fueron verificados, pero los casos manuales no registran resultados reales y los 24 tests automatizados cubren un subconjunto.
 
 7. **Seguridad sobreafirmada.**  
    No corresponde afirmar aislamiento estricto de tenants mientras existan las rutas señaladas en la sección anterior.
@@ -345,7 +345,7 @@ La guía espera referencias a pruebas funcionales, unitarias, de integración y 
 - Restaurar los 12 objetivos aprobados y su trazabilidad.
 - Agregar “Evolución del alcance”.
 - Decidir cómo presentar compras/costos.
-- Actualizar `0038 → 0041`, pruebas, seguridad y arquitectura.
+- Actualizar las referencias documentales hasta `0043`, distinguir el estado local `0041` y revisar pruebas, seguridad y arquitectura.
 - Completar análisis de campo, beneficios medibles e impacto económico.
 - Corregir citas APA, Resumen, portada, índice, figuras y anexos.
 

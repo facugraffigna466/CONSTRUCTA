@@ -29,9 +29,13 @@ GREY = RGBColor(0x5B, 0x67, 0x70)
 ORANGE = RGBColor(0xFF, 0x6B, 0x35)
 BODY_FONT = "Calibri"
 
-# Figura -> (archivo PNG, ancho en pulgadas). Las capturas (2-5) son marcadores.
+# Figura -> (archivo PNG, ancho en pulgadas).
 FIG_IMG = {
     1: ("casos-de-uso.png", 5.4),
+    2: ("captura-portafolio.png", 6.3),
+    3: ("captura-gantt.png", 6.3),
+    4: ("captura-planilla.png", 6.3),
+    5: ("captura-presupuestos.png", 6.3),
     6: ("arquitectura.png", 5.8),
     7: ("der.png", 6.0),
 }
@@ -93,7 +97,7 @@ def body_par(doc, text):
 
 
 def quote_par(doc, text):
-    completar = "[COMPLETAR]" in text
+    completar = "[COMPLETAR]" in text or "[PENDIENTE]" in text
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p.paragraph_format.left_indent = Inches(0.25)
@@ -217,12 +221,16 @@ def build_title_page(doc):
     center("Informe de Proyecto Integrador", 15, bold=True, color=INK, after=36)
 
     center("Alumnos", 11, bold=True, color=SLATE, after=2)
-    for _ in range(3):
-        center("«Apellido, Nombre»", 11, color=INK, after=2)
+    for student in ("Becerra, Martina", "Graffigna, Facundo", "Llancaman, Agustín"):
+        center(student, 11, color=INK, after=2)
     doc.add_paragraph().paragraph_format.space_after = Pt(14)
     center("Directores", 11, bold=True, color=SLATE, after=2)
-    for _ in range(2):
-        center("«Apellido, Nombre»", 11, color=INK, after=2)
+    for director in (
+        "Porrini, Federico Eduardo",
+        "Carreño, Ignacio Luciano",
+        "Juarez, Leandro",
+    ):
+        center(director, 11, color=INK, after=2)
     doc.add_paragraph().paragraph_format.space_after = Pt(40)
     center("«día» de «mes» de 2026", 11, color=GREY, after=2)
     center("Córdoba — Argentina", 11, color=GREY, after=2)
