@@ -1853,3 +1853,154 @@ Recalcular el estado de CONSTRUCTA usando el Gantt completo aportado por el equi
 - Ejecutar y registrar el flujo crítico completo de MVP, WhatsApp y bitácora.
 - Preparar y ensayar la presentación antes del 2026-08-15.
 - Actualizar el IPI con los objetivos aprobados, estado al corte y evidencia.
+
+---
+
+## 2026-07-24 — Alineación del IPI y corrección de la presentación del 13 de agosto
+
+### Objective
+Alinear el borrador del IPI con el Anteproyecto aprobado, la implementación y la evidencia realmente disponibles, y corregir la preparación del corte de agosto según la consigna oficial de presentación obligatoria y calificada del 2026-08-13.
+
+### Changes made
+- Se restituyeron en el IPI el objetivo global y los doce objetivos específicos aprobados, con una matriz de trazabilidad que distingue estado, evidencia y pendiente.
+- Se agregó una sección de evolución del alcance para separar las ampliaciones desarrolladas de los compromisos originales, en especial planificación avanzada, importaciones, presupuestos, compras y capacidades multiempresa.
+- Se incorporaron los integrantes y directores informados por el equipo, y se actualizaron arquitectura, módulos, migraciones, pruebas, beneficios, impactos y conclusión con afirmaciones ajustadas a la evidencia.
+- Se documentó el relevamiento exploratorio realizado en junio de 2026 con cuatro arquitectas docentes, el director de RODE y un jefe de obra de esa empresa, diferenciándolo de una validación formal con usuarios.
+- Se distinguió la calificación 10 obtenida ante los docentes de Administración de Proyectos de una prueba de aceptación con usuarios finales.
+- Se corrigió el informe de defensa desde el 2026-08-15 al 2026-08-13 y se incorporaron el checkpoint del 2026-08-06, el recuperatorio del 2026-08-20 y la distribución oficial de ocho minutos.
+- Se recalculó el corte del Gantt al día 129 y se ajustó el plan de preparación para mostrar la extracción de eventos y estados como actividad en curso.
+- Se actualizó el generador DOCX con los nombres de estudiantes y directores y con el reconocimiento visual de marcadores `[PENDIENTE]`.
+
+### Files modified
+- `docs/IPI-CONSTRUCTA.md` — objetivos aprobados, evolución del alcance, estado técnico, pruebas, relevamiento, impactos, conclusión y anexos.
+- `docs/build_ipi_docx.py` — integrantes, directores y tratamiento de marcadores pendientes.
+- `docs/alcance-defensa-2026-08-13.md` — informe renombrado y recalculado para la fecha oficial, con consigna y guion temporal.
+- `docs/estado-proyecto-agosto-2026.md` — referencia al informe vigente y actualización de datos técnicos.
+- `docs/documentacion.md` — registro de la alineación y de la corrección de fecha.
+
+### Problems found
+- El IPI reemplazaba los doce objetivos aprobados por nueve formulaciones diferentes y no explicaba qué funciones surgieron como ampliaciones posteriores.
+- Presupuestos, costos y finanzas figuraban como parte central pese a estar excluidos del alcance original del Anteproyecto.
+- Existían afirmaciones demasiado amplias sobre seguridad multiempresa, escalabilidad, inmutabilidad, beneficios y cierre de pruebas.
+- El código contiene migraciones hasta `0043`, pero la base local auditada permanece en `0041`.
+- Los veinte casos manuales solo contienen pasos y resultados esperados; no constituyen evidencia de ejecución.
+- La consolidación de auditoría ya no representa con precisión todos los pendientes: persisten controles multiempresa incompletos en rutas de usuarios, proveedores, compras, presupuestos, responsables, equipo, planos y presencia.
+- La presentación estaba documentada para el 2026-08-15, aunque la fecha oficial informada es el 2026-08-13.
+
+### Solutions applied
+- Se preservaron como núcleo de trazabilidad los doce objetivos aprobados y se etiquetaron las incorporaciones posteriores como evolución del alcance.
+- Se reformularon los resultados no medidos como hipótesis o beneficios esperados y se señalaron los métodos necesarios para validarlos.
+- Se presentó la verificación manual existente como exploratoria y se definió el formato de evidencia que deberán completar los recorridos críticos.
+- Se actualizaron las referencias a migraciones de código hasta `0043` y se explicitó la necesidad de llevar la base local desde `0041` antes de depender de las funciones nuevas.
+- Se moderaron las afirmaciones de seguridad, tiempo real, escalabilidad e historial para reflejar las limitaciones detectadas.
+- Se recalculó el avance funcional planificado al 2026-08-13 en 51,4 %, con 64 actividades finalizadas, dos en curso y 31 futuras.
+- Se reorganizó la preparación alrededor de la dinámica oficial de un minuto de introducción, cinco de demostración y dos de pendientes y organización.
+
+### Validation
+- `backend/.venv/bin/pytest -q` — 24 pruebas aprobadas y 16 advertencias no bloqueantes.
+- `npm run build` en `frontend/` — TypeScript y Vite completados; advertencia no bloqueante por paquete principal superior a 500 kB.
+- Revisión del Gantt — 2026-08-13 corresponde al día 129; documentación en 129/301 y extracción de eventos/estados en 3/6.
+- Conteo del corte — 64 actividades finalizadas según plan, dos en curso y 31 posteriores; avance funcional ponderado de 51,4 %.
+- Revisión de extensión — Resumen y Abstract permanecen por debajo del límite de 300 palabras.
+- `git diff --check` — sin errores de espacios ni formato de parche.
+
+### Pending / next steps
+- Realizar una copia de seguridad y actualizar de forma controlada la base local de `0041` a `0043`.
+- Corregir y probar los controles multiempresa todavía abiertos antes de presentar el producto como SaaS listo para producción.
+- Ejecutar sobre un único commit los recorridos críticos y registrar fecha, entorno, entrada, resultado real, evidencia e incidencia.
+- Preparar diapositivas, datos de demostración, contingencias y un guion ensayado de ocho minutos.
+- Actualizar el DER, `docs/database.md`, las figuras del IPI y sus referencias.
+- Completar la matriz retrospectiva del relevamiento, el estudio económico, la reflexión del equipo, el título definitivo y la fecha de portada.
+
+---
+
+## 2026-07-24 — Organización del equipo y base de costos del IPI
+
+### Objective
+Incorporar al IPI la modalidad real de trabajo del equipo, la variabilidad de su dedicación y los gastos informados durante el desarrollo, evitando inventar horas, atribuciones de entrevistas o costos operativos que todavía no cuentan con evidencia suficiente.
+
+### Changes made
+- Se documentó que Martina Becerra, Facundo Graffigna y Agustín Llancaman comparten tareas de código y documentación según necesidad y disponibilidad.
+- Se registraron la reunión semanal de seguimiento y el grupo de WhatsApp como mecanismos de coordinación sincrónica y asincrónica.
+- Se explicó que la dedicación varía por parciales, exámenes finales y otras obligaciones, y que no existe un registro contemporáneo de horas.
+- Se agregó una reflexión sobre las ventajas y limitaciones de la propiedad compartida y una mejora propuesta con responsable principal, revisor, fecha y criterio de aceptación por entregable.
+- Se separaron los gastos directos de desarrollo de los costos futuros de operación por empresa.
+- Se incorporaron las suscripciones de Claude y ChatGPT/OpenAI, el uso gratuito o de prueba de Twilio y el alojamiento local, señalando los datos que requieren comprobación.
+- Se explicitó que no se reconstruirán hallazgos individuales de las entrevistas cuando el equipo no conserva un recuerdo suficientemente detallado.
+- Se incorporó la modalidad organizativa al cierre recomendado de dos minutos de la presentación.
+
+### Files modified
+- `docs/IPI-CONSTRUCTA.md` — organización, dedicación, reflexión, límites del relevamiento y base del estudio económico.
+- `docs/alcance-defensa-2026-08-13.md` — explicación breve de la organización del equipo para el cierre de la presentación.
+- `docs/documentacion.md` — registro de las decisiones documentales y económicas.
+
+### Problems found
+- No se registraron horas de trabajo por integrante y la dedicación semanal fue deliberadamente variable.
+- Se informó un valor de USD 20 para Claude, pero debe confirmarse si la periodicidad indicada es semanal o mensual.
+- No se informó el importe exacto, el producto contratado ni la periodicidad de ChatGPT/OpenAI.
+- Las suscripciones personales de asistencia al desarrollo podrían confundirse con el consumo de API generado por la aplicación.
+- El uso de Twilio continúa en modalidad gratuita o de prueba y el sistema se aloja localmente, por lo que todavía no existen costos reales de producción.
+- No hay recuerdo suficiente para atribuir con rigor observaciones específicas a cada participante del relevamiento.
+
+### Solutions applied
+- Se descartó presentar una cifra única de horas-persona y se propuso una reconstrucción por rangos basada en Git, reuniones, mensajes y estimaciones individuales.
+- Los importes informados se registraron como datos pendientes de comprobante y no se utilizaron para calcular un total.
+- Se separaron suscripciones de desarrollo, consumo variable de servicios externos e infraestructura futura.
+- Se definieron unidades de medición para hosting, mensajería, IA y correo antes de proyectar escenarios de operación.
+- Se mantuvieron únicamente hallazgos generales del relevamiento, con límites explícitos y una propuesta de validación posterior.
+
+### Validation
+- Revisión manual de las nuevas secciones de organización, economía, conclusión y guion de presentación — estructura y tono consistentes con el resto del IPI.
+- Recuento del Resumen — 284 palabras, por debajo del máximo de 300.
+- Recuento del Abstract — 257 palabras, por debajo del máximo de 300.
+- `git diff --check` — sin errores de espacios ni formato de parche.
+- No se modificó código de producto; no correspondió repetir pruebas de backend o frontend para estos cambios documentales.
+
+### Pending / next steps
+- Confirmar con comprobantes si los USD 20 de Claude son semanales o mensuales y durante cuántos períodos los abonó cada integrante.
+- Confirmar el producto, importe, periodicidad y períodos abonados de ChatGPT/OpenAI.
+- Reconstruir rangos de horas por etapa e integrante para obtener escenarios mínimo, probable y máximo.
+- Registrar desde ahora responsable, revisor, fecha, evidencia y esfuerzo aproximado de cada entregable.
+- Seleccionar infraestructura de despliegue y estimar costos de Twilio, IA, correo y alojamiento bajo tres escenarios de uso.
+- Solicitar, si es posible, la validación de la síntesis general a los participantes del relevamiento.
+- Agregar las principales dificultades técnicas y aprendizajes cuando el equipo pueda reconstruirlos.
+
+---
+
+## 2026-07-24 — Cuantificación de suscripciones de IA del equipo
+
+### Objective
+Precisar el gasto mensual informado por el equipo para las suscripciones personales de Claude y ChatGPT utilizadas durante el desarrollo de CONSTRUCTA y eliminar la ambigüedad de periodicidad que impedía calcular una base económica.
+
+### Changes made
+- Se confirmó que cada uno de los tres integrantes abona una cuenta de Claude de USD 20 mensuales.
+- Se confirmó que cada uno de los tres integrantes abona una cuenta de ChatGPT de USD 20 mensuales.
+- Se calculó un gasto base de USD 60 mensuales por cada proveedor y USD 120 mensuales para el equipo.
+- Se agregó la fórmula para obtener el costo acumulado una vez conocida la cantidad de meses abonados.
+- Se mantuvo separada esta inversión de asistencia al desarrollo respecto del consumo de APIs generado por la aplicación.
+
+### Files modified
+- `docs/IPI-CONSTRUCTA.md` — periodicidad, costo por servicio, total mensual y fórmula de acumulación.
+- `docs/documentacion.md` — registro de la confirmación económica.
+
+### Problems found
+- Aún no se conoce desde qué mes se abona cada cuenta ni si las seis suscripciones estuvieron activas durante todos los meses del proyecto.
+- El valor informado no contempla impuestos, recargos ni diferencias de cambio.
+- Falta definir qué proporción de suscripciones de uso personal corresponde atribuir específicamente a CONSTRUCTA.
+
+### Solutions applied
+- Se utilizó únicamente el valor base confirmado: `3 × USD 20 + 3 × USD 20 = USD 120 por mes`.
+- El documento evita presentar un total histórico hasta contar con fechas y comprobantes.
+- Se distinguieron explícitamente las suscripciones personales de los costos futuros de API e infraestructura del producto.
+
+### Validation
+- Revisión aritmética — Claude: USD 60/mes; ChatGPT: USD 60/mes; total: USD 120/mes.
+- Revisión manual de la tabla y la fórmula de acumulación — consistentes con los datos informados.
+- `git diff --check` — sin errores de espacios ni formato de parche.
+- No se modificó código de producto; no correspondió ejecutar pruebas técnicas.
+
+### Pending / next steps
+- Confirmar el mes inicial y la continuidad de cada una de las seis suscripciones.
+- Incorporar comprobantes e impuestos si la cátedra solicita costo efectivamente pagado y no solo precio base.
+- Definir un criterio razonable para imputar al proyecto suscripciones que también tengan uso personal.
+- Reconstruir el esfuerzo por rangos y completar los escenarios de operación y retorno de inversión.

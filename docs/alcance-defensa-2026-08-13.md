@@ -1,30 +1,42 @@
-# Alcance y estado de la defensa del 15 de agosto de 2026
+# Alcance y estado de la presentación del 13 de agosto de 2026
 
-**Fecha de análisis:** 2026-07-23  
+**Fecha de análisis:** 2026-07-24  
 **Fuente de planificación:** `/Users/agustinllancaman/Downloads/Gantt_Proyecto.xlsx`  
-**Fecha de presentación informada por el equipo:** 2026-08-15
+**Fecha oficial de presentación:** 2026-08-13
 
 > Este informe reemplaza, para el corte académico de agosto, la estimación global preliminar de `docs/estado-proyecto-agosto-2026.md`. Esa evaluación mezclaba el corte parcial con requisitos de entrega final y producción.
 
+## Consigna oficial
+
+- **2026-08-06:** último checkpoint y consultas finales.
+- **2026-08-13:** presentación obligatoria y calificada del avance.
+- **2026-08-20:** recuperatorio únicamente con justificación.
+- **Duración máxima:** ocho minutos:
+  - un minuto para presentar el proyecto y el avance respecto del Gantt;
+  - cinco minutos de demostración funcional;
+  - dos minutos para pendientes, próximos pasos y organización del equipo.
+
+Se recomienda llevar la demostración desplegada y la presentación accesible desde cualquier equipo. Si se usa una notebook propia, debe prepararse también la conexión al proyector y una contingencia visual para los servicios externos.
+
 ## 1. Veredicto
 
-CONSTRUCTA está bien posicionado para la presentación del 15 de agosto:
+CONSTRUCTA está bien posicionado para la presentación del 13 de agosto:
 
 | Indicador | Resultado |
 |---|---:|
 | Alcance técnico/funcional del corte ya implementado | **89,6%** |
-| Actividades completas o parciales del corte | **86,4%** |
+| Cierre ponderado de actividades del corte | **87,1%** |
 | Actividades totalmente cerradas | **50/66 = 75,8%** |
 | Paquete completo listo para defender hoy | **73–76%** |
-| Avance funcional que el Gantt espera para el proyecto global al 15/08 | **51,9%** |
+| Avance funcional que el Gantt espera para el proyecto global al 13/08 | **51,4%** |
 
 La diferencia entre “90% técnico” y “75% defendible” se explica por:
 
 - ausencia de una presentación y un guion ensayado;
 - pruebas funcionales/E2E con poca evidencia reproducible;
-- entrevistas con expertos sin actas ni resultados;
+- relevamiento con expertos reconstruido sin actas contemporáneas ni validación posterior;
 - análisis de mensajes reales sustentado por pocos casos;
-- IPI desalineado respecto de los objetivos aprobados.
+- IPI alineado en estructura y objetivos, pero todavía sin resultados de pruebas, figuras, estudio económico y reflexión final.
 
 No conviene agregar funcionalidades nuevas antes de la presentación. El esfuerzo debe pasar a evidencia, relato y ensayo.
 
@@ -32,11 +44,11 @@ No conviene agregar funcionalidades nuevas antes de la presentación. El esfuerz
 
 - Inicio: **2026-04-07**, día 1.
 - Fin: **2027-02-01**, día 301.
-- Presentación: **2026-08-15**, día 131.
+- Presentación: **2026-08-13**, día 129.
 - El corte cae en la semana S19, que abarca del 11 al 17 de agosto.
 - Las duraciones son días calendario.
 
-Según el plan, al finalizar el 15 de agosto debería haber:
+Según el plan, al finalizar el 13 de agosto debería haber:
 
 - **64 actividades finalizadas**;
 - **2 actividades en curso**;
@@ -44,19 +56,16 @@ Según el plan, al finalizar el 15 de agosto debería haber:
 
 Las dos actividades en curso son:
 
-| Actividad | Plan | Avance temporal al 15/08 |
+| Actividad | Plan | Avance temporal al 13/08 |
 |---|---|---:|
-| Documentación del proyecto | 07/04/2026–01/02/2027 | 131/301 = **43,5%** |
-| Extracción de eventos y estados | 11/08/2026–16/08/2026 | 5/6 = **83,3%** |
+| Documentación del proyecto | 07/04/2026–01/02/2027 | 129/301 = **42,9%** |
+| Extracción de eventos y estados | 11/08/2026–16/08/2026 | 3/6 = **50,0%** |
 
 El último entregable que debe estar completamente cerrado antes de la presentación es:
 
 > **Implementación del parser de mensajes — fin planificado: 2026-08-10.**
 
-La extracción de eventos y estados termina el 16 de agosto. Para evitar una defensa ambigua conviene:
-
-- adelantar su cierre técnico al 14 de agosto; o
-- mostrarla como trabajo en curso, tal como indica el Gantt.
+La extracción de eventos y estados termina el 16 de agosto. En la presentación debe mostrarse como trabajo en curso, tal como indica el Gantt, diferenciando lo ya demostrable de lo que queda por cerrar.
 
 ## 3. Qué corresponde defender
 
@@ -136,7 +145,7 @@ Escala:
 
 | Fase | Estado | Brecha principal |
 |---|---|---|
-| Planificación | Mayormente completa | Las entrevistas con expertos están pendientes de documentar. |
+| Planificación | Mayormente completa | El relevamiento está reconstruido en el IPI; falta la matriz detallada y su validación posterior con los participantes. |
 | Investigación chatbot | Parcial | Faltan comparación formal de alternativas y registro del análisis. |
 | Diseño del sistema | Completa | Preparar diagramas legibles para la exposición. |
 | Base de datos | Mayormente completa | Carga inicial e integridad tienen evidencia automatizada limitada. |
@@ -145,23 +154,21 @@ Escala:
 | Chatbot MVP | Completa funcionalmente | Preparar contingencia si falla WhatsApp/Twilio. |
 | Integración | Completa funcionalmente | Falta acta reproducible del flujo E2E. |
 | Testing y validación | Parcial | Los 20 casos manuales no registran resultados reales. |
-| Cierre inicial | Parcial | El informe es borrador y la presentación está pendiente. |
-| Documentación continua | Parcial y adelantada | El contenido existe, pero necesita alineación con el Anteproyecto. |
+| Cierre inicial | Parcial | El IPI es un borrador avanzado y la presentación está pendiente. |
+| Documentación continua | Parcial y adelantada | El contenido ya está alineado con el Anteproyecto; faltan evidencia, figuras y datos del equipo. |
 | Consolidación del MVP | Mayormente completa | Estabilización y robustez operativa siguen parciales. |
 | Bitácora | Completa funcionalmente | Faltan pruebas automatizadas del pipeline. |
-| Interpretación al 15/08 | Mayormente completa técnicamente | Falta un corpus de mensajes y resultados reproducibles. |
+| Interpretación al 13/08 | Mayormente completa técnicamente | Falta un corpus de mensajes y resultados reproducibles. |
 
 ### Conteo del corte
 
 - 50 actividades completas.
-- 14 actividades parciales.
-- 2 actividades pendientes:
-  - entrevistas con expertos;
-  - preparación de la presentación.
+- 15 actividades parciales, incluido el relevamiento retrospectivo con expertos.
+- 1 actividad pendiente: preparación de la presentación.
 
 ## 6. Evidencia técnica disponible
 
-- Arquitectura y modelo: `docs/diagramas/`, `docs/database.md`, modelos SQLAlchemy y migraciones `0001–0041`.
+- Arquitectura y modelo: `docs/diagramas/`, `docs/database.md`, modelos SQLAlchemy y migraciones de código `0001–0043`. La base local auditada estaba en `0041` y debe actualizarse antes de depender de las funciones de `0042` y `0043`.
 - Backend MVP: routers y servicios de usuarios, obras, responsables, tareas y alertas.
 - Frontend MVP: login, portfolio, obra, tareas, Gantt, resumen y alertas.
 - Chatbot: `message_service.py`, `conversation_service.py`, parser de Twilio y webhook.
@@ -179,8 +186,7 @@ Escala:
   - aplicación de acciones e historial.
 - Validación técnica general:
   - backend operativo;
-  - migraciones en `0041`;
-  - 16 tests aprobados;
+  - 24 tests de backend aprobados;
   - build del frontend aprobado.
 
 La evidencia automatizada no prueba actualmente el flujo completo de WhatsApp, bitácora e interpretación.
@@ -198,17 +204,16 @@ El Anteproyecto excluía la interpretación avanzada de respuestas libres. Por l
 
 ## 8. Faltantes que sí bloquean una buena defensa
 
-### 1. Entrevistas/análisis de dominio
+### 1. Evidencia del relevamiento de dominio
 
-Preparar:
+El IPI ya identifica perfiles, fecha, modalidad, límites y hallazgos reconstruidos. Falta completar:
 
-- entrevistados o perfiles;
-- fecha y modalidad;
-- preguntas;
-- hallazgos;
-- decisiones de producto derivadas.
+- una matriz que separe cada encuentro o grupo de participantes;
+- los hallazgos que el equipo recuerda con suficiente certeza;
+- las decisiones de producto derivadas;
+- una validación posterior de esa síntesis por parte de los participantes, si resulta posible.
 
-Si no hubo entrevistas formales, no afirmar que se completaron: presentar observaciones del dominio y planificar el relevamiento.
+No deben presentarse citas textuales ni conclusiones atribuidas con precisión que la evidencia disponible no permita sostener.
 
 ### 2. Corpus de mensajes
 
@@ -244,7 +249,7 @@ Como mínimo:
 
 ### 4. Presentación y demo
 
-No existe en el Gantt un hito específico para el 15 de agosto. Debe agregarse operativamente:
+No existe en el Gantt un hito específico para el 13 de agosto. Debe agregarse operativamente:
 
 - preparación de diapositivas;
 - preparación de datos;
@@ -252,17 +257,14 @@ No existe en el Gantt un hito específico para el 15 de agosto. Debe agregarse o
 - video/capturas de contingencia;
 - congelamiento de versión.
 
-### 5. Alineación del IPI
+### 5. Cierre documental del IPI
 
-Antes de mostrar el documento:
+La alineación principal ya fue aplicada: se restituyeron los doce objetivos, se agregó la matriz de estado, se separó la evolución del alcance y se actualizaron migraciones, pruebas y límites. Antes de mostrar el documento falta:
 
-- restaurar los 12 objetivos aprobados;
-- agregar `objetivo → estado al 15/08 → evidencia → pendiente`;
-- separar alcance aprobado de ampliaciones;
-- cambiar el tono de “informe final” por estado de avance;
-- actualizar `0038 → 0041`;
-- eliminar afirmaciones de pruebas o seguridad sin evidencia;
-- documentar las entrevistas y mensajes reales.
+- incorporar resultados reales y capturas de los recorridos críticos;
+- completar la matriz retrospectiva del relevamiento;
+- actualizar el DER y las figuras necesarias;
+- mantener visibles los pendientes económicos y de aceptación que corresponden a etapas posteriores.
 
 ## 9. Qué puede esperar hasta después de agosto
 
@@ -283,7 +285,7 @@ Los riesgos de seguridad encontrados en módulos extra deben corregirse antes de
 ## 10. Guion recomendado para la demostración
 
 1. Problema y objetivo.
-2. Corte del Gantt al 15 de agosto.
+2. Corte del Gantt al 13 de agosto.
 3. Crear o abrir una obra preparada.
 4. Mostrar tareas, responsables y dependencias.
 5. Mostrar Gantt, dashboard y alertas.
@@ -302,14 +304,16 @@ Preparar:
 - video del flujo WhatsApp/IA;
 - versión etiquetada del código.
 
+Para el cierre de dos minutos puede explicarse que el equipo trabaja con propiedad compartida de código y documentación, realiza una reunión semanal y comunica avances de forma asincrónica por WhatsApp. La dedicación varía por las obligaciones académicas. Como mejora inmediata para llegar a la presentación, cada pendiente deberá tener un responsable principal, fecha y evidencia de cierre, aunque el resto del equipo continúe colaborando.
+
 ## 11. Plan hasta la presentación
 
 ### 2026-07-24 a 2026-07-28
 
 - Formalizar el análisis de mensajes reales.
-- Documentar entrevistas o corregir su estado.
+- Completar la matriz retrospectiva del relevamiento a partir de la base ya redactada.
 - Crear el corpus de mensajes.
-- Restaurar objetivos y tabla de avance en el IPI.
+- Incorporar al IPI el vínculo hacia la evidencia que se genere.
 
 ### 2026-07-29 a 2026-08-03
 
@@ -323,17 +327,17 @@ Preparar:
 - Preparar diapositivas, datos y guion.
 - Congelar el alcance de la demo.
 
-### 2026-08-11 a 2026-08-14
+### 2026-08-11 a 2026-08-12
 
-- Cerrar o delimitar la extracción de eventos/estados.
+- Delimitar qué parte de la extracción de eventos/estados ya es demostrable.
 - Ensayar la exposición.
 - Corregir fallos de demostración.
 - Etiquetar la versión.
 - Preparar contingencias.
 
-### 2026-08-15
+### 2026-08-13
 
-- Defender el alcance comprometido.
+- Presentar el alcance comprometido en un máximo de ocho minutos.
 - Mostrar los extras únicamente al final y como adelantos.
 
 ## 12. Corrección respecto del diagnóstico preliminar
@@ -345,8 +349,8 @@ La estimación global anterior de 68% no debe usarse para esta presentación por
 - asumía erróneamente que la planificación terminaba en junio;
 - exigía cierres que el plan ubica entre agosto de 2026 y febrero de 2027.
 
-Para el 15 de agosto, las cifras relevantes son:
+Para el 13 de agosto, las cifras relevantes son:
 
 - **89,6% técnico del alcance del corte**;
 - **73–76% del paquete defendible actual**;
-- **51,9% del proyecto funcional global planificado para esa fecha**.
+- **51,4% del proyecto funcional global planificado para esa fecha**.
