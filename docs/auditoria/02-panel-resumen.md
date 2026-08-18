@@ -1,10 +1,5 @@
 # Auditoría 02 — Panel de Resumen (Dashboard principal)
 
-> **Fecha:** 2026-08-18
-> **Auditor:** Claude Sonnet 4.6 (con supervisión de Facundo)
-> **Alcance:** el panel que ve el usuario al loguearse (Portfolio de obras): KPI cards, tabs de filtro por estado, buscador, cards de obra, badge de alertas, presencia online. **No incluye** el "Dashboard Avanzado" futuro (indicadores nuevos, panel de decisiones) ni el detalle de obra (esa es otra auditoría).
-> **Metodología:** lectura de código + ejecución local (backend `:8000`, frontend `:5173`) + pruebas con Playwright + curl al API + queries directas a Postgres para contrastar los números que muestra el panel con la realidad.
-
 ---
 
 ## 1. Resumen ejecutivo
