@@ -1,10 +1,4 @@
 # Auditoría 03 — Módulo de Tareas + Bot WhatsApp
-
-> **Fecha:** 2026-08-18
-> **Auditor:** Claude Sonnet 4.6 (con supervisión de Facundo)
-> **Alcance:** creación de tareas (formulario web, planilla, importación Excel/CSV/MS Project XML, bulk), máquina de estados (`VALID_TRANSITIONS`), dependencias FS/SS/FF/SF + WBS + cascade + CPM, efectos secundarios (Socket.IO, alertas automáticas, historial, `recompute_obra_status`), y el bot de WhatsApp que reporta/cambia estado desde el campo. Cierra la serie del módulo más grande hasta ahora.
-> **Metodología:** lectura de código + ejecución local (backend `:8000`, frontend `:5173`) + suite `pytest` (21/21 verdes) + `curl` para reproducir validaciones y transiciones + simulación de webhook `POST /webhooks/twilio` para el bot (el signature check se skippea con `APP_DEBUG=true`, así que no hace falta Twilio real).
-
 ---
 
 ## 1. Resumen ejecutivo
