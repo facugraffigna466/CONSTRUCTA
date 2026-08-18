@@ -1,10 +1,4 @@
 # Auditoría 01 — Login, Usuarios y Planes de Suscripción
-
-> **Fecha:** 2026-08-18
-> **Auditor:** Claude Sonnet 4.6 (con supervisión de Facundo)
-> **Alcance:** autenticación, gestión de usuarios, roles, multi-tenant, planes de suscripción y límites, **y sistema de emails (Brevo) que soporta todo el módulo** (invitaciones, reset, verificación, aviso de plan).
-> **Metodología:** lectura de código + ejecución local (backend en `:8000`, frontend en `:5173`) + pruebas manuales por browser (Playwright) y por API (`curl`) + corrida de la suite `pytest` existente (`31/31 passed`) + inspección de `.env`, `.env.example` y config Brevo.
-
 ---
 
 ## 1. Resumen ejecutivo
