@@ -477,14 +477,64 @@ class MessageService:
             return ("Recibí tu nota de voz, pero no tengo obras asociadas a tu número todavía. "
                     "Avisale al jefe de obra para que te vincule.")
 
-        # 3a. Una sola obra → procesar directo
+        # 3a. Una sola obra → guardar y procesar IA en background para no exceder
+        #     el timeout de 15 s del webhook de Twilio (Whisper + Claude ~ 30-40 s).
         if len(obra_ids) == 1:
             entry = await service.create_entry(
                 obra_id=obra_ids[0], source="whatsapp", audio_path=f"/uploads/{filename}",
                 responsible_id=responsible_id, created_by=created_by,
             )
-            entry = await service.process_entry(entry, audio_bytes=audio_bytes, filename=f"audio.{ext}")
-            return self._bitacora_reply(entry)
+            await self.db.flush()  # persistir antes de lanzar el task
+
+            entry_id = entry.id
+            sender_phone = payload.from_number
+            audio_snapshot = audio_bytes
+            audio_fname = f"audio.{ext}"
+
+            async def _bg_process_entry():
+                import asyncio
+                import logging
+                from app.core.database import AsyncSessionLocal
+                from app.models.bitacora import BitacoraEntry as _BE
+                from app.services.bitacora_service import BitacoraService as _BS
+                from sqlalchemy import select
+
+                _log = logging.getLogger(__name__)
+                await asyncio.sleep(2)  # esperar commit de la tx padre
+                try:
+                    async with AsyncSessionLocal() as bg_session:
+                        bg_entry = (await bg_session.execute(
+                            select(_BE).where(_BE.id == entry_id)
+                        )).scalar_one_or_none()
+                        if not bg_entry:
+                            _log.error("BitacoraEntry %s no encontrada en bg task", entry_id)
+                            return
+                        await _BS(bg_session).process_entry(
+                            bg_entry, audio_bytes=audio_snapshot, filename=audio_fname
+                        )
+                        await bg_session.commit()
+                        # Notificar al usuario por WhatsApp con el resultado
+                        from app.integrations.twilio.client import send_whatsapp_message
+                        if bg_entry.status == "procesado":
+                            n = len([s for s in (bg_entry.suggestions or []) if s.get("type") != "note"])
+                            msg = f"📋 Nota procesada. Resumen: {bg_entry.summary}"
+                            if n:
+                                msg += (
+                                    f"\n\nDetecté {n} "
+                                    f"{'acciones sugeridas' if n != 1 else 'acción sugerida'}. "
+                                    "Revisalas en la app."
+                                )
+                        else:
+                            msg = (
+                                "🎙️ Tu nota quedó guardada en la bitácora. "
+                                "Hubo un problema al analizarla con IA; podés reintentarlo desde la app."
+                            )
+                        await send_whatsapp_message(sender_phone, msg[:1500])
+                except Exception:
+                    _log.exception("Error en bg processing de BitacoraEntry %s", entry_id)
+
+            _asyncio.create_task(_bg_process_entry())
+            return "🎙️ Nota de voz recibida. La estoy procesando con IA — te aviso enseguida."
 
         # 3b. Varias obras → transcribir, dejar pendiente y preguntar
         transcript = await service.transcribe_audio(audio_bytes, f"audio.{ext}")
@@ -612,7 +662,45 @@ class MessageService:
         entry.status = "pendiente_analisis" if entry.transcript else "pendiente_transcripcion"
         from app.services.bitacora_service import BitacoraService
         if entry.transcript:
-            entry = await BitacoraService(self.db).process_entry(entry)
+            await self.db.flush()
+            entry_id = entry.id
+            sender_phone = sender.whatsapp_number if hasattr(sender, "whatsapp_number") else None
+
+            async def _bg_analyze():
+                import asyncio
+                import logging
+                from app.core.database import AsyncSessionLocal
+                from app.models.bitacora import BitacoraEntry as _BE
+                from app.services.bitacora_service import BitacoraService as _BS
+                from sqlalchemy import select
+
+                _log = logging.getLogger(__name__)
+                await asyncio.sleep(2)
+                try:
+                    async with AsyncSessionLocal() as bg_session:
+                        bg_entry = (await bg_session.execute(
+                            select(_BE).where(_BE.id == entry_id)
+                        )).scalar_one_or_none()
+                        if not bg_entry:
+                            return
+                        await _BS(bg_session).process_entry(bg_entry)
+                        await bg_session.commit()
+                        if sender_phone:
+                            from app.integrations.twilio.client import send_whatsapp_message
+                            if bg_entry.status == "procesado":
+                                n = len([s for s in (bg_entry.suggestions or []) if s.get("type") != "note"])
+                                msg = f"📋 Nota procesada. Resumen: {bg_entry.summary}"
+                                if n:
+                                    msg += f"\n\n{n} {'acciones sugeridas' if n != 1 else 'acción sugerida'} en la app."
+                            else:
+                                msg = "🎙️ Nota guardada. Hubo un error al analizar con IA; reintentalo desde la app."
+                            await send_whatsapp_message(sender_phone, msg[:1500])
+                except Exception:
+                    _log.exception("Error en bg análisis de BitacoraEntry %s", entry_id)
+
+            import asyncio as _aio
+            _aio.create_task(_bg_analyze())
+            return "Procesando la nota con IA — te aviso en un momento."
         else:
             await self.db.flush()
         return self._bitacora_reply(entry)
