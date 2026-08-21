@@ -103,4 +103,17 @@ class ObraService:
 
     async def delete(self, obra_id: int, manager_id: int) -> None:
         await self.get_for_manager(obra_id, manager_id)
+        await self._cleanup_plano_files(obra_id)
         await self.repo.delete(obra_id)
+
+    async def _cleanup_plano_files(self, obra_id: int) -> None:
+        """El FK de Plano.obra_id es ON DELETE CASCADE — borra las filas solo, así
+        que hay que borrar los archivos físicos ANTES o quedan huérfanos en uploads/."""
+        from sqlalchemy import select
+        from app.models.plano import Plano
+        from app.services.plano_service import UPLOADS_DIR
+        paths = (await self.repo.session.execute(
+            select(Plano.file_path).where(Plano.obra_id == obra_id)
+        )).scalars().all()
+        for path in paths:
+            (UPLOADS_DIR / path).unlink(missing_ok=True)
