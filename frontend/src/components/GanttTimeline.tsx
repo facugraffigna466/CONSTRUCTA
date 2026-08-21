@@ -1512,7 +1512,7 @@ export function GanttTimeline({
                     id: string; pathD: string; arrowPoints: string;
                     color: string; violated: boolean;
                     labelX: number; labelY: number; depType: string; lagDays: number;
-                    x_A: number; y_A: number; x_B: number; y_B: number; ax: number;
+                    x_A: number; y_A: number; x_B: number; y_B: number;
                   }[] = [];
 
                   filteredVisible.forEach((taskB) => {
@@ -1566,7 +1566,6 @@ export function GanttTimeline({
                       const r = 6;
                       const dy = y_B > y_A ? r : y_B < y_A ? -r : 0;
                       let pathD: string;
-                      let ax = x_B;  // x donde termina la flecha (ahí van la punta y el punto)
                       if (Math.abs(y_A - y_B) < 2) {
                         // Misma fila — línea recta
                         pathD = `M ${x_A} ${y_A} H ${x_B}`;
@@ -1574,20 +1573,21 @@ export function GanttTimeline({
                         // Hay lugar horizontal — escalón redondeado en el punto medio
                         const midX = (x_A + x_B) / 2;
                         pathD = `M ${x_A} ${y_A} H ${midX - r} q ${r} 0 ${r} ${dy} V ${y_B - dy} q 0 ${dy} ${r} ${dy} H ${x_B}`;
+                      } else if (x_B - x_A >= r) {
+                        // Poco espacio: codo redondeado que baja al borde de la sucesora.
+                        pathD = `M ${x_A} ${y_A} H ${x_B - r} q ${r} 0 ${r} ${dy} V ${y_B}`;
                       } else {
-                        // Poco/ningún espacio (la sucesora arranca pegada): la flecha baja
-                        // hasta el borde de la sucesora y ENTRA con un codo redondeado
-                        // (se apoya ~r px dentro, como la propia punta), en vez de rodear
-                        // por la derecha y montarse sobre su barra.
-                        pathD = `M ${x_A} ${y_A} H ${x_B} V ${y_B - dy} q 0 ${dy} ${r} ${dy}`;
-                        ax = x_B + r;
+                        // Pegada: baja recto hasta el borde de la sucesora. La flecha
+                        // termina en el borde (la punta se apoya ahí) y NO se mete en la
+                        // barra, para que el borde de la barra no la tape.
+                        pathD = `M ${x_A} ${y_A} H ${x_B} V ${y_B}`;
                       }
 
-                      const arrowPoints = `${ax + 7},${y_B} ${ax - 1},${y_B - 5} ${ax - 1},${y_B + 5}`;
+                      const arrowPoints = `${x_B + 7},${y_B} ${x_B - 1},${y_B - 5} ${x_B - 1},${y_B + 5}`;
                       const labelX = x_A + (x_B - x_A) / 2;
                       const labelY = (y_A + y_B) / 2;
 
-                      paths.push({ id: `${link.depends_on_id}->${taskB.id}`, pathD, arrowPoints, color, violated, labelX, labelY, depType: dtype, lagDays, x_A, y_A, x_B, y_B, ax });
+                      paths.push({ id: `${link.depends_on_id}->${taskB.id}`, pathD, arrowPoints, color, violated, labelX, labelY, depType: dtype, lagDays, x_A, y_A, x_B, y_B });
                     });
                   });
 
@@ -1602,7 +1602,7 @@ export function GanttTimeline({
                       pointerEvents: "none",
                       zIndex: 3, overflow: "visible",
                     }}>
-                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A, y_B, ax }) => (
+                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A }) => (
                         <g key={id}>
                           {/* Halo blanco: separa la línea de la grilla y las barras para que resalte */}
                           <path
@@ -1619,10 +1619,8 @@ export function GanttTimeline({
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Arrowhead at successor */}
+                          {/* Arrowhead at successor (sin punto: la punta sola marca la conexión) */}
                           <polygon points={arrowPoints} fill={color} style={{ pointerEvents: "none" }} />
-                          {/* Connection dot at successor */}
-                          <circle cx={ax} cy={y_B} r={3.5} fill="#fff" stroke={color} strokeWidth={1.8} style={{ pointerEvents: "none" }} />
                           {/* Dep type label (non-FS) */}
                           {depType !== "FS" && (
                             <>
