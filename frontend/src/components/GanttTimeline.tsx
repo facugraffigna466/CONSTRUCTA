@@ -1566,16 +1566,22 @@ export function GanttTimeline({
                       const r = 6;
                       const dy = y_B > y_A ? r : y_B < y_A ? -r : 0;
                       let pathD: string;
-                      let midX: number;
                       if (Math.abs(y_A - y_B) < 2) {
-                        // Same row — straight line
+                        // Misma fila — línea recta
                         pathD = `M ${x_A} ${y_A} H ${x_B}`;
-                      } else if (x_A + 16 < x_B) {
-                        midX = (x_A + x_B) / 2;
+                      } else if (x_B - x_A > 16) {
+                        // Hay lugar horizontal — escalón redondeado en el punto medio
+                        const midX = (x_A + x_B) / 2;
                         pathD = `M ${x_A} ${y_A} H ${midX - r} q ${r} 0 ${r} ${dy} V ${y_B - dy} q 0 ${dy} ${r} ${dy} H ${x_B}`;
+                      } else if (x_B - x_A >= r) {
+                        // Poco espacio (la sucesora arranca casi pegada): bajar por el
+                        // borde izquierdo de la sucesora (x_B) y entrar desde arriba, en
+                        // vez de rodear por la derecha y montarse sobre su barra.
+                        pathD = `M ${x_A} ${y_A} H ${x_B - r} q ${r} 0 ${r} ${dy} V ${y_B}`;
                       } else {
-                        midX = Math.max(x_A, x_B) + 24;
-                        pathD = `M ${x_A} ${y_A} H ${midX - r} q ${r} 0 ${r} ${dy} V ${y_B - dy} q 0 ${dy} ${-r} ${dy} H ${x_B}`;
+                        // Pegadas o solapadas: bajada vertical justo en el borde de la
+                        // sucesora, sin tramo horizontal que pise su barra.
+                        pathD = `M ${x_A} ${y_A} H ${x_B} V ${y_B}`;
                       }
 
                       const arrowPoints = `${x_B + 7},${y_B} ${x_B - 1},${y_B - 5} ${x_B - 1},${y_B + 5}`;
