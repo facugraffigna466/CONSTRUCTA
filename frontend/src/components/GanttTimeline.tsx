@@ -1602,7 +1602,7 @@ export function GanttTimeline({
                       pointerEvents: "none",
                       zIndex: 3, overflow: "visible",
                     }}>
-                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays }) => (
+                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A, x_B, y_B }) => (
                         <g key={id}>
                           {/* Halo blanco: separa la línea de la grilla y las barras para que resalte */}
                           <path
@@ -1610,9 +1610,8 @@ export function GanttTimeline({
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Estilo minimal: sin puntos de conexión (la línea sale del borde de
-                              la predecesora y la punta marca la sucesora). Evita que el punto se
-                              monte sobre la punta cuando una tarea es predecesora y sucesora. */}
+                          {/* Connection dot at predecessor (chico) */}
+                          <circle cx={x_A} cy={y_A} r={2.6} fill={color} stroke="#fff" strokeWidth={1.2} style={{ pointerEvents: "none" }} />
                           {/* Path */}
                           <path
                             d={pathD} stroke={color} strokeWidth={2.4} fill="none"
@@ -1620,8 +1619,10 @@ export function GanttTimeline({
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Arrowhead at successor (sin punto: la punta sola marca la conexión) */}
+                          {/* Arrowhead at successor */}
                           <polygon points={arrowPoints} fill={color} style={{ pointerEvents: "none" }} />
+                          {/* Connection dot at successor (chico) */}
+                          <circle cx={x_B} cy={y_B} r={2.6} fill="#fff" stroke={color} strokeWidth={1.4} style={{ pointerEvents: "none" }} />
                           {/* Dep type label (non-FS) */}
                           {depType !== "FS" && (
                             <>
