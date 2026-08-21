@@ -9,9 +9,11 @@ from app.core.database import Base
 class Plano(Base):
     """Plano de obra (documento técnico) con versionado.
 
-    Se agrupan por (obra_id, discipline, name): cada carga nueva de ese grupo
-    incrementa la versión y marca la anterior como no-vigente. El chatbot de
-    WhatsApp responde con la última versión vigente de la disciplina pedida
+    Se agrupan por (obra_id, discipline, name). Cada carga nueva del grupo
+    incrementa `version` y pasa a ser la vigente; `is_latest` marca cuál manda hoy
+    y se puede corregir a mano si se cargó una revisión vieja por error.
+
+    El chatbot de WhatsApp responde con la vigente de la disciplina pedida
     (ej: "mandame el plano de electricidad").
     """
 

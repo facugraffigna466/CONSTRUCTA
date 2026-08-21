@@ -1,20 +1,29 @@
 from __future__ import annotations
 
+import re
 import uuid
 import unicodedata
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ConflictError, NotFoundError, UnprocessableError
 from app.models.plano import Plano
 from app.models.task import Task
+from app.repositories.historial import HistorialRepository
 
 UPLOADS_DIR = Path(__file__).parent.parent.parent / "uploads"
 UPLOADS_DIR.mkdir(exist_ok=True)
 
 MAX_BYTES = 25 * 1024 * 1024  # 25 MB — los planos pueden pesar
+
+# Extensiones permitidas al subir un plano. Se valida contra esto — nunca contra el
+# content_type que manda el cliente (falsificable) — y determina tanto el nombre en
+# disco como el Content-Type real que se sirve después (ver app/main.py). Cerrar esta
+# whitelist es lo que evita que un .html/.svg disfrazado se sirva y ejecute como tal.
+ALLOWED_EXTS = {"pdf", "png", "jpg", "jpeg", "webp", "gif", "dwg", "dxf"}
 
 # Disciplinas canónicas y los sinónimos que el chatbot reconoce en el texto.
 DISCIPLINE_SYNONYMS: dict[str, list[str]] = {
@@ -29,6 +38,10 @@ DISCIPLINE_SYNONYMS: dict[str, list[str]] = {
     "instalaciones": ["instalacion", "instalaciones"],
     "replanteo": ["replanteo", "topografia", "relevamiento"],
 }
+
+# Disciplinas aceptadas al SUBIR un plano (a diferencia del matcheo del bot, acá no
+# hay fallback silencioso: lo que no es una de estas — o "general" — se rechaza).
+CANONICAL_DISCIPLINES = frozenset(DISCIPLINE_SYNONYMS.keys())
 
 
 def _norm(text: str) -> str:
@@ -46,17 +59,24 @@ def canonical_discipline(value: str) -> str:
 
 
 def match_discipline_in_text(text: str) -> str | None:
-    """Detecta la disciplina pedida dentro de un mensaje libre del chatbot."""
+    """Detecta la disciplina pedida dentro de un mensaje libre del chatbot.
+
+    Matchea por palabra completa (\\b): "gasto" o "Gaspar" ya no disparan "gas".
+    Sigue habiendo ambigüedad inherente al lenguaje natural en sinónimos genéricos
+    de una sola palabra ("agua", "luz", "aire") — eso no lo resuelve un regex.
+    """
     n = _norm(text)
     for canon, syns in DISCIPLINE_SYNONYMS.items():
-        if any(s in n for s in syns) or canon in n:
-            return canon
+        for s in (*syns, canon):
+            if re.search(rf"\b{re.escape(s)}\b", n):
+                return canon
     return None
 
 
 class PlanoService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self.historial = HistorialRepository(session)
 
     # ── Carga con versionado ─────────────────────────────────────────────────
 
@@ -72,27 +92,72 @@ class PlanoService:
         original_filename: str | None,
         content_type: str | None,
         notes: str | None = None,
+        replaces_plano_id: int | None = None,
+        actor_name: str | None = None,
     ) -> Plano:
-        disc = canonical_discipline(discipline)
-        clean_name = (name or "").strip() or None
+        # ── Actualización de un plano existente ──────────────────────────────
+        # El usuario eligió "esto reemplaza a aquel plano", así que la disciplina y
+        # el sector se HEREDAN en vez de pedirlos de nuevo: no hay que reescribir el
+        # nombre exacto ni arriesgarse a que un typo abra un grupo paralelo.
+        replaces: Plano | None = None
+        if replaces_plano_id is not None:
+            replaces = await self.get_or_raise(replaces_plano_id, tenant_id)
+            if replaces.obra_id != obra_id:
+                raise NotFoundError("Plano", replaces_plano_id)
+            discipline, name = replaces.discipline, replaces.name
 
-        # versión: agrupar por (obra, disciplina, nombre); la anterior deja de ser vigente
+        disc = canonical_discipline(discipline)
+        if disc not in CANONICAL_DISCIPLINES and disc != "general":
+            raise UnprocessableError(
+                f"Disciplina no reconocida: «{discipline}». Elegí una de las disponibles."
+            )
+        clean_name = (name or "").strip() or None
+        # Un plano nuevo necesita nombre: es lo que le da identidad propia. Sin él,
+        # dos planos distintos de la misma disciplina caían en el mismo grupo
+        # (name = NULL) y se versionaban entre sí sin que nadie lo pidiera.
+        # Al versionar no se pide: se hereda del plano que se está actualizando.
+        if replaces is None and clean_name is None:
+            raise UnprocessableError("Poné un nombre para identificar el plano.")
+
+        # Extensión validada contra whitelist — nunca se usa el content_type que manda
+        # el cliente (falsificable) para decidir qué se guarda ni qué se sirve después.
+        ext = ""
+        if original_filename and "." in original_filename:
+            ext = original_filename.rsplit(".", 1)[-1].lower()[:8]
+        ext = "".join(ch for ch in ext if ch.isalnum())
+        if ext not in ALLOWED_EXTS:
+            raise UnprocessableError(
+                "Tipo de archivo no permitido. Subí un PDF, una imagen (jpg/png/webp/gif) "
+                "o un CAD (dwg/dxf)."
+            )
+
+        # Todo lo anterior se valida ANTES de tocar el disco: si algo de esto falla,
+        # no queda ningún archivo huérfano en uploads/.
+
+        # versión: agrupar por (obra, disciplina, nombre); la anterior deja de ser vigente.
+        # FOR UPDATE serializa uploads concurrentes del mismo grupo (reduce la ventana
+        # de la carrera); el índice único parcial en la migración es el backstop real
+        # para cuando el grupo arranca vacío (ahí no hay fila que lockear).
         group = (await self.session.execute(
             select(Plano).where(
                 Plano.obra_id == obra_id,
                 Plano.discipline == disc,
                 Plano.name.is_(clean_name) if clean_name is None else Plano.name == clean_name,
-            )
+            ).with_for_update()
         )).scalars().all()
         next_version = (max((p.version for p in group), default=0)) + 1
+
+        # La versión que se sube es la vigente. Una sola regla, sin inferencias:
+        # si quedó mal (se cargó una revisión vieja), se corrige con set_latest().
         for prev in group:
             prev.is_latest = False
+        # Bajar los anteriores ANTES de insertar el nuevo: el índice único parcial
+        # (migración 0045) no tolera dos vigentes del mismo grupo ni un instante.
+        await self.session.flush()
 
-        ext = ""
-        if original_filename and "." in original_filename:
-            ext = "." + original_filename.rsplit(".", 1)[-1].lower()[:8]
-        stored = f"{uuid.uuid4().hex}{ext}"
-        (UPLOADS_DIR / stored).write_bytes(file_bytes)
+        stored = f"{uuid.uuid4().hex}.{ext}"
+        dest = UPLOADS_DIR / stored
+        dest.write_bytes(file_bytes)
 
         plano = Plano(
             obra_id=obra_id, tenant_id=tenant_id, uploaded_by=uploaded_by,
@@ -101,8 +166,70 @@ class PlanoService:
             content_type=content_type, file_size=len(file_bytes), notes=notes,
         )
         self.session.add(plano)
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except IntegrityError:
+            dest.unlink(missing_ok=True)
+            raise ConflictError(
+                "Justo se subió otra versión de este plano al mismo tiempo. Volvé a intentar."
+            )
+        except Exception:
+            dest.unlink(missing_ok=True)
+            raise
         await self.session.refresh(plano)
+
+        verbo = "actualizó" if replaces is not None else "subió"
+        await self.historial.log(
+            event_type="plano_uploaded",
+            description=(
+                f"{actor_name or 'Alguien'} {verbo} el plano de {disc}"
+                f"{f' — {clean_name}' if clean_name else ''} (v{next_version})."
+            ),
+            obra_id=obra_id,
+            payload={
+                "discipline": disc, "name": clean_name, "version": next_version,
+                "file_size": len(file_bytes),
+            },
+            triggered_by="user",
+        )
+        return plano
+
+    async def set_latest(self, plano_id: int, tenant_id: int | None, actor_name: str | None = None) -> Plano:
+        """Marca manualmente una versión como la vigente de su plano. Es la
+        escapatoria a la regla "manda la última que subís": si se cargó una revisión
+        vieja por error, se corrige acá en vez de borrar y volver a subir."""
+        plano = await self.get_or_raise(plano_id, tenant_id)
+        if plano.is_latest:
+            return plano
+
+        siblings = (await self.session.execute(
+            select(Plano).where(
+                Plano.obra_id == plano.obra_id,
+                Plano.discipline == plano.discipline,
+                Plano.name.is_(None) if plano.name is None else Plano.name == plano.name,
+                Plano.id != plano.id,
+            ).with_for_update()
+        )).scalars().all()
+        for s in siblings:
+            s.is_latest = False
+        # Igual que en create(): bajar los otros y persistirlo antes de subir este,
+        # o el índice único parcial ve dos vigentes a la vez y aborta.
+        await self.session.flush()
+
+        plano.is_latest = True
+        await self.session.flush()
+
+        await self.historial.log(
+            event_type="plano_set_latest",
+            description=(
+                f"{actor_name or 'Alguien'} marcó como vigente el plano de {plano.discipline}"
+                f"{f' — {plano.name}' if plano.name else ''} v{plano.version}."
+            ),
+            obra_id=plano.obra_id,
+            payload={"discipline": plano.discipline, "name": plano.name,
+                     "version": plano.version},
+            triggered_by="user",
+        )
         return plano
 
     # ── Consultas ────────────────────────────────────────────────────────────
@@ -118,10 +245,13 @@ class PlanoService:
             raise NotFoundError("Plano", plano_id)
         return plano
 
-    async def delete(self, plano_id: int, tenant_id: int | None) -> None:
+    async def delete(self, plano_id: int, tenant_id: int | None, actor_name: str | None = None) -> None:
         plano = await self.get_or_raise(plano_id, tenant_id)
-        # si era la vigente, promover la versión anterior del grupo
+        # Capturar todo lo que hace falta ANTES de borrar — después el objeto queda expirado.
         was_latest = plano.is_latest
+        discipline, name, obra_id, version, file_path = (
+            plano.discipline, plano.name, plano.obra_id, plano.version, plano.file_path,
+        )
         group_filter = [
             Plano.obra_id == plano.obra_id,
             Plano.discipline == plano.discipline,
@@ -131,10 +261,27 @@ class PlanoService:
         await self.session.delete(plano)
         if was_latest:
             siblings = (await self.session.execute(
-                select(Plano).where(*group_filter).order_by(Plano.version.desc())
+                select(Plano).where(*group_filter)
             )).scalars().all()
             if siblings:
-                siblings[0].is_latest = True
+                # Al borrar la vigente, hereda la última que se había cargado antes
+                # — mismo criterio que create(): manda el orden de carga.
+                siblings.sort(key=lambda p: p.version)
+                siblings[-1].is_latest = True
+
+        # Borrar el archivo físico — antes quedaba huérfano en uploads/.
+        (UPLOADS_DIR / file_path).unlink(missing_ok=True)
+
+        await self.historial.log(
+            event_type="plano_deleted",
+            description=(
+                f"{actor_name or 'Alguien'} borró el plano de {discipline}"
+                f"{f' — {name}' if name else ''} (v{version})."
+            ),
+            obra_id=obra_id,
+            payload={"discipline": discipline, "name": name, "version": version},
+            triggered_by="user",
+        )
 
     # ── Soporte para el chatbot ──────────────────────────────────────────────
 

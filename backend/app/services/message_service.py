@@ -14,6 +14,16 @@ from app.services.conversation_service import ConversationService
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_for_caption(text: str, max_len: int = 120) -> str:
+    """Limpia un string generado por el usuario (ej. el `name` de un plano) antes de
+    interpolarlo en un mensaje que el bot manda como si fuera propio. Sin esto, un
+    `name` con `\\n` podía inyectar líneas extra al caption — vector de phishing vía
+    el canal de confianza del bot."""
+    cleaned = "".join(ch for ch in text if ch.isprintable() and ch not in "\r\n")
+    cleaned = " ".join(cleaned.split())
+    return cleaned[:max_len].strip()
+
 # Argentina standard time (UTC-3). The send-hour window configured by the
 # user is interpreted in this offset so that "08:00–20:00" means local time.
 _AR_OFFSET = timedelta(hours=-3)
@@ -227,6 +237,7 @@ class MessageService:
                 from_number=payload.to_number,
                 to_number=payload.from_number,
                 body=reply,
+                media_url=media_url,
                 responsible_id=responsible.id if responsible else None,
                 task_id=task_id,
                 external_message_id=outbound_sid,
@@ -360,6 +371,14 @@ class MessageService:
                 msg += f"\nPlanos disponibles: {', '.join(disponibles)}."
             return (msg, None)
 
+        # Re-chequeo final por disciplina del plano YA resuelto — cubre el pedido
+        # ambiguo ("mandame el plano", sin decir cuál) que antes se saltaba el filtro
+        # de arriba porque ese solo corría cuando `disc` venía explícito.
+        if not is_staff:
+            allowed = await svc.allowed_disciplines_for_responsible(sender.id, obra_ids[0])
+            if allowed is not None and plano.discipline not in allowed:
+                return ("No tenés acceso a ese plano en esta obra. Consultale al jefe de obra.", None)
+
         return self._format_plano_reply(plano, settings)
 
     async def _pending_plano_obra(self, sender, is_staff: bool) -> bool:
@@ -418,13 +437,25 @@ class MessageService:
             tipo = f"de {disc} " if disc else ""
             return (f"No hay planos {tipo}cargados en {elegida['name']}.", None)
 
+        # Mismo re-chequeo que en _handle_plano_request: cubre el pedido ambiguo.
+        if not is_staff:
+            allowed = await svc.allowed_disciplines_for_responsible(sender.id, elegida["obra_id"])
+            if allowed is not None and plano.discipline not in allowed:
+                return (f"No tenés acceso a ese plano en {elegida['name']}.", None)
+
         return self._format_plano_reply(plano, settings)
 
     def _format_plano_reply(self, plano, settings) -> tuple[str, str | None]:
+        from app.core.signing import BOT_TTL, signed_upload_url
+
         base_url = (settings.PUBLIC_BASE_URL or "").rstrip("/")
-        url = f"{base_url}/uploads/{plano.file_path}" if base_url else None
+        # Firmada (antes: URL cruda sin exp/sig → /uploads la rechazaba con 403 y
+        # Twilio nunca podía bajar el archivo). TTL largo porque Twilio archiva el
+        # media unos días y puede reintentar la descarga más tarde.
+        url = signed_upload_url(plano.file_path, plano.tenant_id, ttl=BOT_TTL) if base_url else None
         fecha = plano.created_at.strftime("%d/%m/%Y")
-        detalle = f" — {plano.name}" if plano.name else ""
+        nombre = _sanitize_for_caption(plano.name) if plano.name else ""
+        detalle = f" — {nombre}" if nombre else ""
         caption = f"📐 Plano de {plano.discipline}{detalle} (v{plano.version}, {fecha})."
         if not url:
             caption += "\nNo puedo adjuntar el archivo todavía (falta configurar la URL pública)."
