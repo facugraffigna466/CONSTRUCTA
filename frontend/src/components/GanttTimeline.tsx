@@ -1583,7 +1583,7 @@ export function GanttTimeline({
                         pathD = `M ${x_A} ${y_A} H ${x_B} V ${y_B}`;
                       }
 
-                      const arrowPoints = `${x_B + 7},${y_B} ${x_B - 1},${y_B - 5} ${x_B - 1},${y_B + 5}`;
+                      const arrowPoints = `${x_B + 6},${y_B} ${x_B - 1},${y_B - 4} ${x_B - 1},${y_B + 4}`;
                       const labelX = x_A + (x_B - x_A) / 2;
                       const labelY = (y_A + y_B) / 2;
 
@@ -1602,11 +1602,11 @@ export function GanttTimeline({
                       pointerEvents: "none",
                       zIndex: 3, overflow: "visible",
                     }}>
-                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A, x_B, y_B }) => (
+                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A }) => (
                         <g key={id}>
                           {/* Halo blanco: separa la línea de la grilla y las barras para que resalte */}
                           <path
-                            d={pathD} stroke="#fff" strokeWidth={5} fill="none" strokeOpacity={0.9}
+                            d={pathD} stroke="#fff" strokeWidth={4} fill="none" strokeOpacity={0.9}
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
@@ -1614,15 +1614,13 @@ export function GanttTimeline({
                           <circle cx={x_A} cy={y_A} r={2.6} fill={color} stroke="#fff" strokeWidth={1.2} style={{ pointerEvents: "none" }} />
                           {/* Path */}
                           <path
-                            d={pathD} stroke={color} strokeWidth={2.4} fill="none"
+                            d={pathD} stroke={color} strokeWidth={1.8} fill="none"
                             strokeDasharray={violated ? "5 3" : undefined}
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Arrowhead at successor */}
+                          {/* Arrowhead at successor (solo la punta, sin punto) */}
                           <polygon points={arrowPoints} fill={color} style={{ pointerEvents: "none" }} />
-                          {/* Connection dot at successor (chico) */}
-                          <circle cx={x_B} cy={y_B} r={2.6} fill="#fff" stroke={color} strokeWidth={1.4} style={{ pointerEvents: "none" }} />
                           {/* Dep type label (non-FS) */}
                           {depType !== "FS" && (
                             <>
