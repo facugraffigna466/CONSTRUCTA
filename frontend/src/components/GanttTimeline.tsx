@@ -1574,17 +1574,16 @@ export function GanttTimeline({
                         const midX = (x_A + x_B) / 2;
                         pathD = `M ${x_A} ${y_A} H ${midX - r} q ${r} 0 ${r} ${dy} V ${y_B - dy} q 0 ${dy} ${r} ${dy} H ${x_B}`;
                       } else if (x_B - x_A >= r) {
-                        // Poco espacio (la sucesora arranca casi pegada): bajar por el
-                        // borde izquierdo de la sucesora (x_B) y entrar desde arriba, en
-                        // vez de rodear por la derecha y montarse sobre su barra.
+                        // Poco espacio: codo redondeado que baja al borde de la sucesora.
                         pathD = `M ${x_A} ${y_A} H ${x_B - r} q ${r} 0 ${r} ${dy} V ${y_B}`;
                       } else {
-                        // Pegadas o solapadas: bajada vertical justo en el borde de la
-                        // sucesora, sin tramo horizontal que pise su barra.
+                        // Pegada: baja recto hasta el borde de la sucesora. La flecha
+                        // termina en el borde (la punta se apoya ahí) y NO se mete en la
+                        // barra, para que el borde de la barra no la tape.
                         pathD = `M ${x_A} ${y_A} H ${x_B} V ${y_B}`;
                       }
 
-                      const arrowPoints = `${x_B + 7},${y_B} ${x_B - 1},${y_B - 5} ${x_B - 1},${y_B + 5}`;
+                      const arrowPoints = `${x_B + 6},${y_B} ${x_B - 1},${y_B - 4} ${x_B - 1},${y_B + 4}`;
                       const labelX = x_A + (x_B - x_A) / 2;
                       const labelY = (y_A + y_B) / 2;
 
@@ -1603,27 +1602,25 @@ export function GanttTimeline({
                       pointerEvents: "none",
                       zIndex: 3, overflow: "visible",
                     }}>
-                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A, x_B, y_B }) => (
+                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A }) => (
                         <g key={id}>
                           {/* Halo blanco: separa la línea de la grilla y las barras para que resalte */}
                           <path
-                            d={pathD} stroke="#fff" strokeWidth={5} fill="none" strokeOpacity={0.9}
+                            d={pathD} stroke="#fff" strokeWidth={4} fill="none" strokeOpacity={0.9}
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Connection dot at predecessor */}
-                          <circle cx={x_A} cy={y_A} r={4} fill={color} stroke="#fff" strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+                          {/* Connection dot at predecessor (chico) */}
+                          <circle cx={x_A} cy={y_A} r={2.6} fill={color} stroke="#fff" strokeWidth={1.2} style={{ pointerEvents: "none" }} />
                           {/* Path */}
                           <path
-                            d={pathD} stroke={color} strokeWidth={2.4} fill="none"
+                            d={pathD} stroke={color} strokeWidth={1.8} fill="none"
                             strokeDasharray={violated ? "5 3" : undefined}
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Arrowhead at successor */}
+                          {/* Arrowhead at successor (solo la punta, sin punto) */}
                           <polygon points={arrowPoints} fill={color} style={{ pointerEvents: "none" }} />
-                          {/* Connection dot at successor */}
-                          <circle cx={x_B} cy={y_B} r={3.5} fill="#fff" stroke={color} strokeWidth={1.8} style={{ pointerEvents: "none" }} />
                           {/* Dep type label (non-FS) */}
                           {depType !== "FS" && (
                             <>
