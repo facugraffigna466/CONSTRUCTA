@@ -1602,7 +1602,7 @@ export function GanttTimeline({
                       pointerEvents: "none",
                       zIndex: 3, overflow: "visible",
                     }}>
-                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays, x_A, y_A }) => (
+                      {paths.map(({ id, pathD, arrowPoints, color, violated, labelX, labelY, depType, lagDays }) => (
                         <g key={id}>
                           {/* Halo blanco: separa la línea de la grilla y las barras para que resalte */}
                           <path
@@ -1610,8 +1610,9 @@ export function GanttTimeline({
                             strokeLinecap="round" strokeLinejoin="round"
                             style={{ pointerEvents: "none" }}
                           />
-                          {/* Connection dot at predecessor */}
-                          <circle cx={x_A} cy={y_A} r={4} fill={color} stroke="#fff" strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+                          {/* Estilo minimal: sin puntos de conexión (la línea sale del borde de
+                              la predecesora y la punta marca la sucesora). Evita que el punto se
+                              monte sobre la punta cuando una tarea es predecesora y sucesora. */}
                           {/* Path */}
                           <path
                             d={pathD} stroke={color} strokeWidth={2.4} fill="none"
