@@ -41,16 +41,16 @@ AUDIO_EXTS = {"ogg", "oga", "mp3", "mpeg", "m4a", "mp4", "wav", "webm", "aac"}
 MAX_AUDIO_BYTES = 25 * 1024 * 1024  # 25 MB (límite de Whisper)
 
 
-def _audio_url(entry: BitacoraEntry) -> str | None:
-    """Ruta relativa FIRMADA para el audio (el front le antepone su base de API)."""
+def _audio_url(entry: BitacoraEntry, tenant_id: int | None) -> str | None:
+    """Ruta relativa FIRMADA (con scope de tenant) para el audio."""
     if not entry.audio_path:
         return None
-    return signed_upload_path(Path(entry.audio_path).name)
+    return signed_upload_path(Path(entry.audio_path).name, tenant_id)
 
 
-async def _to_read(entry: BitacoraEntry, db: DbSession) -> BitacoraEntryRead:
+async def _to_read(entry: BitacoraEntry, db: DbSession, tenant_id: int | None) -> BitacoraEntryRead:
     data = BitacoraEntryRead.model_validate(entry)
-    data.audio_url = _audio_url(entry)
+    data.audio_url = _audio_url(entry, tenant_id)
     if entry.obra_id:
         data.obra_name = (await db.execute(
             select(Obra.name).where(Obra.id == entry.obra_id)
@@ -62,7 +62,9 @@ async def _to_read(entry: BitacoraEntry, db: DbSession) -> BitacoraEntryRead:
     return data
 
 
-async def _to_read_bulk(entries: list[BitacoraEntry], db: DbSession) -> list[BitacoraEntryRead]:
+async def _to_read_bulk(
+    entries: list[BitacoraEntry], db: DbSession, tenant_id: int | None
+) -> list[BitacoraEntryRead]:
     """Resuelve nombres de obra y responsable en 2 queries para toda la lista (evita N+1)."""
     obra_ids = {e.obra_id for e in entries if e.obra_id}
     resp_ids = {e.responsible_id for e in entries if e.responsible_id}
@@ -79,7 +81,7 @@ async def _to_read_bulk(entries: list[BitacoraEntry], db: DbSession) -> list[Bit
     result: list[BitacoraEntryRead] = []
     for e in entries:
         data = BitacoraEntryRead.model_validate(e)
-        data.audio_url = _audio_url(e)
+        data.audio_url = _audio_url(e, tenant_id)
         data.obra_name = obra_names.get(e.obra_id) if e.obra_id else None
         data.responsible_name = resp_names.get(e.responsible_id) if e.responsible_id else None
         result.append(data)
@@ -127,7 +129,7 @@ async def create_audio_entry(
         created_by=current_user.id,
     )
     entry = await service.process_entry(entry, audio_bytes=content, filename=f"audio.{ext}")
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.post("/obras/{obra_id}/bitacora/texto", response_model=BitacoraEntryRead, status_code=status.HTTP_201_CREATED)
@@ -148,7 +150,7 @@ async def create_text_entry(
         created_by=current_user.id,
     )
     entry = await service.process_entry(entry)
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.get("/bitacora", response_model=list[BitacoraEntryRead])
@@ -167,7 +169,7 @@ async def list_entries(
         limit=limit,
         offset=offset,
     )
-    return await _to_read_bulk(entries, db)
+    return await _to_read_bulk(entries, db, current_user.tenant_id)
 
 
 @router.get("/bitacora/pending-count")
@@ -187,7 +189,7 @@ async def list_unassigned(db: DbSession, current_user: CurrentUser):
     entries = await BitacoraService(db).list_unassigned(
         tenant_id=current_user.tenant_id, user_id=current_user.id
     )
-    return await _to_read_bulk(entries, db)
+    return await _to_read_bulk(entries, db, current_user.tenant_id)
 
 
 @router.get("/tasks/{task_id}/bitacora", response_model=list[BitacoraEntryRead])
@@ -196,7 +198,7 @@ async def list_for_task(task_id: int, db: DbSession, current_user: CurrentUser):
     entries = await BitacoraService(db).list_for_task(
         task_id=task_id, tenant_id=current_user.tenant_id, user_id=current_user.id
     )
-    return await _to_read_bulk(entries, db)
+    return await _to_read_bulk(entries, db, current_user.tenant_id)
 
 
 @router.post("/bitacora/{entry_id}/transcript", response_model=BitacoraEntryRead)
@@ -209,7 +211,7 @@ async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession,
     entry.status = "pendiente_analisis"
     entry.error = None
     entry = await service.process_entry(entry)
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.post("/bitacora/{entry_id}/reprocess", response_model=BitacoraEntryRead)
@@ -224,7 +226,7 @@ async def reprocess(entry_id: int, db: DbSession, current_user: CurrentUser):
             audio_bytes = path.read_bytes()
             filename = path.name
     entry = await service.process_entry(entry, audio_bytes=audio_bytes, filename=filename)
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.post("/bitacora/{entry_id}/obra", response_model=BitacoraEntryRead)
@@ -239,7 +241,7 @@ async def assign_obra(entry_id: int, data: BitacoraAssignObra, db: DbSession, cu
         entry.status = "pendiente_analisis"
         entry = await service.process_entry(entry)
     await db.flush()
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.post("/bitacora/{entry_id}/suggestions/{index}/apply", response_model=BitacoraEntryRead)
@@ -260,7 +262,7 @@ async def apply_suggestion(
         entry_id, index, current_user.id, actor=actor,
         edits=edits.model_dump(exclude_unset=True) if edits else None,
     )
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.post("/bitacora/{entry_id}/suggestions/{index}/dismiss", response_model=BitacoraEntryRead)
@@ -268,7 +270,7 @@ async def dismiss_suggestion(entry_id: int, index: int, db: DbSession, current_u
     service = BitacoraService(db)
     await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     entry = await service.dismiss_suggestion(entry_id, index)
-    return await _to_read(entry, db)
+    return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.delete("/bitacora/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

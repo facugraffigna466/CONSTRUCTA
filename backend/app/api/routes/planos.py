@@ -1,10 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from sqlalchemy import select
 
-from app.core.deps import CurrentUser, DbSession
-from app.core.signing import signed_upload_url
+from app.core.deps import AdminUser, CurrentUser, DbSession
+from app.core.signing import WEB_TTL, signed_upload_url
 from app.models.plano import Plano
+from app.models.user import User
 from app.schemas.plano import PlanoRead
 from app.services.plano_service import MAX_BYTES, PlanoService
 from app.services.obra_service import ObraService
@@ -12,10 +14,24 @@ from app.services.obra_service import ObraService
 router = APIRouter(tags=["planos"])
 
 
-def _to_read(plano: Plano) -> PlanoRead:
+def _to_read(plano: Plano, author: str | None = None) -> PlanoRead:
     out = PlanoRead.model_validate(plano)
-    # URL firmada (HMAC + expiración): los planos no se sirven públicamente.
-    return out.model_copy(update={"file_url": signed_upload_url(plano.file_path)})
+    # URL firmada (HMAC + expiración + scope de tenant): los planos no se sirven públicamente.
+    return out.model_copy(update={
+        "file_url": signed_upload_url(plano.file_path, plano.tenant_id, ttl=WEB_TTL),
+        "uploaded_by_name": author,
+    })
+
+
+async def _authors(db, planos: list[Plano]) -> dict[int, str]:
+    """Nombre de quien subió cada versión, en una sola query (evita N+1)."""
+    ids = {p.uploaded_by for p in planos if p.uploaded_by}
+    if not ids:
+        return {}
+    rows = (await db.execute(
+        select(User.id, User.full_name, User.email).where(User.id.in_(ids))
+    )).all()
+    return {r.id: (r.full_name or r.email) for r in rows}
 
 
 @router.post("/obras/{obra_id}/planos", response_model=PlanoRead, status_code=status.HTTP_201_CREATED)
@@ -25,9 +41,16 @@ async def upload_plano(
     current_user: CurrentUser,
     file: UploadFile = File(...),
     discipline: Annotated[str, Form()] = "general",
-    name: Annotated[str | None, Form()] = None,
-    notes: Annotated[str | None, Form()] = None,
+    name: Annotated[str | None, Form(max_length=255)] = None,
+    notes: Annotated[str | None, Form(max_length=500)] = None,
+    replaces_plano_id: Annotated[int | None, Form()] = None,
 ):
+    """Sube un plano. Con `replaces_plano_id` se carga como nueva versión de un
+    plano existente: hereda su disciplina y nombre, y queda vigente — sin depender
+    de que el nombre que se mande coincida."""
+    # 404 si la obra no existe o pertenece a otro tenant (antes tocaba disco/DB sin validar).
+    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
+
     content = await file.read()
     if len(content) > MAX_BYTES:
         raise HTTPException(400, "El plano no puede superar 25 MB.")
@@ -43,6 +66,8 @@ async def upload_plano(
         original_filename=file.filename,
         content_type=file.content_type,
         notes=notes,
+        replaces_plano_id=replaces_plano_id,
+        actor_name=current_user.full_name or current_user.email,
     )
     return _to_read(plano)
 
@@ -51,9 +76,22 @@ async def upload_plano(
 async def list_planos(obra_id: int, db: DbSession, current_user: CurrentUser):
     await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     planos = await PlanoService(db).list_by_obra(obra_id)
-    return [_to_read(p) for p in planos]
+    authors = await _authors(db, planos)
+    return [_to_read(p, authors.get(p.uploaded_by)) for p in planos]
+
+
+@router.patch("/planos/{plano_id}/vigente", response_model=PlanoRead)
+async def set_plano_vigente(plano_id: int, db: DbSession, current_user: AdminUser):
+    """Marca esta versión como la vigente de su plano (la que responde el bot y la que
+    se muestra primero). Para corregir cuando se cargó una versión vieja por error."""
+    plano = await PlanoService(db).set_latest(
+        plano_id, current_user.tenant_id, actor_name=current_user.full_name or current_user.email
+    )
+    return _to_read(plano)
 
 
 @router.delete("/planos/{plano_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_plano(plano_id: int, db: DbSession, current_user: CurrentUser):
-    await PlanoService(db).delete(plano_id, current_user.tenant_id)
+async def delete_plano(plano_id: int, db: DbSession, current_user: AdminUser):
+    await PlanoService(db).delete(
+        plano_id, current_user.tenant_id, actor_name=current_user.full_name or current_user.email
+    )

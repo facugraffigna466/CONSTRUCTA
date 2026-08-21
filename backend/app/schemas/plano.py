@@ -16,6 +16,7 @@ class PlanoRead(BaseModel):
     file_size: int | None = None
     notes: str | None = None
     uploaded_by: int | None = None
+    uploaded_by_name: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

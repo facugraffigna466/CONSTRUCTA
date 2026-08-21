@@ -89,30 +89,82 @@ fastapi_app.include_router(solicitudes_router.router, prefix=API_PREFIX)
 # Serve uploaded images — must be a proper route (not StaticFiles) to work
 # correctly when wrapped by the Socket.IO ASGI app.
 from pathlib import Path as _Path
-from fastapi import HTTPException as _HTTPException
+from fastapi import HTTPException as _HTTPException, Request as _Request
 from fastapi.responses import FileResponse as _FileResponse
 
 _UPLOADS_DIR = _Path(__file__).parent.parent / "uploads"
 
+# Content-Type explícito por extensión — nunca inferido de un nombre de archivo
+# atacante-controlado (Starlette adivina por extensión y eso es lo que permitía que
+# un .html/.svg subido como "plano" se sirviera y ejecutara como tal). Lo que no está
+# en esta tabla (no debería poder llegar, dado el whitelist de planos/bitácora) se
+# sirve como octet-stream, que fuerza descarga en vez de ejecutar/renderizar.
+_MEDIA_TYPES = {
+    "pdf": "application/pdf",
+    "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+    "webp": "image/webp", "gif": "image/gif",
+    "dwg": "application/acad", "dxf": "application/dxf",
+    "ogg": "audio/ogg", "oga": "audio/ogg", "mp3": "audio/mpeg", "mpeg": "audio/mpeg",
+    "m4a": "audio/mp4", "mp4": "audio/mp4", "wav": "audio/wav", "webm": "audio/webm", "aac": "audio/aac",
+}
+# Sin uso de previsualización inline (CAD binario) → forzar descarga.
+_FORCE_ATTACHMENT_EXTS = {"dwg", "dxf"}
+
+
+async def _requester_tenant_id(request: "_Request") -> int | None:
+    """Best-effort: si viene un Bearer JWT válido, devuelve su tenant_id. Si no hay
+    header, o es inválido/expirado, devuelve None sin fallar — la ruta sigue siendo
+    accesible por link directo (así es como <a href> y Twilio la consumen, no pueden
+    mandar headers custom). Cuando SÍ hay un token, exigimos que su tenant coincida
+    con el firmado en la URL — cierra el caso de una sesión válida de OTRO tenant
+    reusando un link ajeno."""
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    from app.core.database import AsyncSessionLocal
+    from app.core.security import decode_access_token
+    try:
+        payload = decode_access_token(auth.split(" ", 1)[1])
+        user_id = int(payload["sub"])
+    except Exception:
+        return None
+    try:
+        async with AsyncSessionLocal() as session:
+            from app.repositories.user import UserRepository
+            user = await UserRepository(session).get(user_id)
+            return user.tenant_id if user else None
+    except Exception:
+        return None
+
 
 @fastapi_app.get("/uploads/{filename}", tags=["upload"])
-async def serve_uploaded_file(filename: str, exp: str | None = None, sig: str | None = None):
+async def serve_uploaded_file(
+    request: _Request, filename: str,
+    exp: str | None = None, sig: str | None = None, tid: str | None = None,
+):
     from app.core.signing import requires_signature, verify_download
 
     safe = _Path(filename).name
-    # Archivos sensibles (planos, audios): requieren firma válida (HMAC + expiración).
-    # Se valida ANTES de tocar el disco para no revelar existencia sin autorización.
-    # Las imágenes (portadas/avatares) siguen siendo públicas.
-    if requires_signature(safe) and not verify_download(safe, exp, sig):
-        raise _HTTPException(403, "Enlace inválido o expirado.")
+    # Archivos sensibles (planos, audios): requieren firma válida (HMAC + expiración +
+    # scope de tenant). Se valida ANTES de tocar el disco para no revelar existencia
+    # sin autorización. Las imágenes (portadas/avatares) siguen siendo públicas.
+    if requires_signature(safe):
+        requester_tid = await _requester_tenant_id(request)
+        if not verify_download(safe, tid, exp, sig, requester_tenant_id=requester_tid):
+            raise _HTTPException(403, "Enlace inválido o expirado.")
     fp = _UPLOADS_DIR / safe
     if not fp.is_file():
         raise _HTTPException(404, "Archivo no encontrado.")
-    return _FileResponse(str(fp))
+
+    ext = safe.rsplit(".", 1)[-1].lower() if "." in safe else ""
+    media_type = _MEDIA_TYPES.get(ext, "application/octet-stream")
+    headers = {}
+    if ext in _FORCE_ATTACHMENT_EXTS or ext not in _MEDIA_TYPES:
+        headers["Content-Disposition"] = f'attachment; filename="{safe}"'
+    return _FileResponse(str(fp), media_type=media_type, headers=headers)
 
 
 import logging as _logging
-from fastapi import Request as _Request
 from fastapi.responses import JSONResponse as _JSONResponse
 from sqlalchemy import text as _sql_text
 from app.core.deps import DbSession as _DbSession
