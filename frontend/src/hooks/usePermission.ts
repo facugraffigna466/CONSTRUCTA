@@ -12,7 +12,8 @@ export type Permission =
   | "miembro.invite"
   | "miembro.remove"
   | "configuracion.edit"
-  | "documentos.upload";
+  | "documentos.upload"
+  | "documentos.delete";
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   admin: [
@@ -20,7 +21,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "tarea.create", "tarea.edit", "tarea.delete", "tarea.move",
     "miembro.invite", "miembro.remove",
     "configuracion.edit",
-    "documentos.upload",
+    "documentos.upload", "documentos.delete",
   ],
   collaborator: [
     "obra.edit",

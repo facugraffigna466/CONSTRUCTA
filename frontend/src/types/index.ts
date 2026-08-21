@@ -246,6 +246,8 @@ export interface Plano {
   file_size: number | null;
   notes: string | null;
   uploaded_by: number | null;
+  /** Nombre de quien subió esta versión, para el historial. */
+  uploaded_by_name: string | null;
   created_at: string;
 }
 
