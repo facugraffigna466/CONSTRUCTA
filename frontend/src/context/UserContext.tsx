@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { fetchMe } from "../api/users";
+import type { ApiUser } from "../api/users";
 import { getToken } from "../lib/tokenStorage";
 import type { CurrentUser } from "../types";
 
@@ -22,15 +23,27 @@ export function userAvatarColor(userId: number): string {
   return AVATAR_COLORS[userId % AVATAR_COLORS.length];
 }
 
-function buildUser(api: { id: number; full_name: string; email: string; role: UserRole; avatar_url?: string | null; whatsapp_number?: string | null; tenant_name?: string | null }): CurrentUser {
+function buildUser(api: ApiUser): CurrentUser {
   const initials = api.full_name
     .split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("");
   const color = userAvatarColor(api.id);
-  return { id: api.id, name: api.full_name, email: api.email, initials, color, role: api.role, avatar_url: api.avatar_url, whatsapp_number: api.whatsapp_number ?? null, tenant_name: api.tenant_name ?? null };
+  return {
+    id: api.id,
+    name: api.full_name,
+    email: api.email,
+    initials,
+    color,
+    role: api.role,
+    avatar_url: api.avatar_url,
+    whatsapp_number: api.whatsapp_number ?? null,
+    tenant_name: api.tenant_name ?? null,
+    obra_roles: api.obra_roles ?? [],
+  };
 }
 
 const PLACEHOLDER: CurrentUser = {
-  id: 0, name: "", email: "", initials: "?", color: "#6B7580", role: "collaborator", avatar_url: null,
+  id: 0, name: "", email: "", initials: "?", color: "#6B7580", role: "collaborator",
+  avatar_url: null, obra_roles: [],
 };
 
 interface UserContextValue {

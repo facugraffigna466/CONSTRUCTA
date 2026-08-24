@@ -277,7 +277,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             onViewTareas={() => onTabChange("tareas")}
             onViewHistorial={() => onTabChange("historial")}
             onEditTask={(t: Task) => setTaskToEdit(t)}
-            onDeleteTask={can("tarea.delete") ? (t: Task) => setTaskToDelete(t) : undefined}
+            onDeleteTask={can("tarea.delete", obra.id) ? (t: Task) => setTaskToDelete(t) : undefined}
             onTaskRescheduled={() => loadData(true)}
             onStatusChange={handleStatusChange}
           />
@@ -361,7 +361,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                               Sin resp.
                             </span>
                           )}
-                          {can("tarea.edit") && (
+                          {can("tarea.edit", obra.id) && (
                             <button
                               onClick={() => setTaskToEdit(t)}
                               style={{
@@ -457,7 +457,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                       Tabla
                     </button>
                   </div>
-                  {can("tarea.create") && (
+                  {can("tarea.create", obra.id) && (
                     <button
                       onClick={() => setShowImport(true)}
                       title="Importar desde MS Project o Excel"
@@ -509,7 +509,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                     )}
                     {exportLoading ? "Exportando..." : "Exportar"}
                   </button>
-                  {can("tarea.create") && (
+                  {can("tarea.create", obra.id) && (
                     <button
                       onClick={() => {
                         if (taskView === "tabla") {
@@ -538,7 +538,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
               </div>
               {/* Table / Sheet */}
               {taskView === "tabla" ? (
-                <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create") ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create") ? () => setShowImport(true) : undefined} />
+                <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create", obra.id) ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create", obra.id) ? () => setShowImport(true) : undefined} />
               ) : (
                 <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} onTaskSaved={handleTaskSaved} onTaskDeleted={(id: number) => setTasks(prev => prev.filter(t => t.id !== id))} onBulkImported={() => loadData(true)} onOpenTask={(t: Task) => setTaskToEdit(t)} />
               )}
@@ -796,7 +796,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             )}
 
             {/* Nueva tarea — solo en resumen */}
-            {activeTab === "resumen" && can("tarea.create") && (
+            {activeTab === "resumen" && can("tarea.create", obra.id) && (
               <button
                 onClick={() => setShowCreateTask(true)}
                 style={{

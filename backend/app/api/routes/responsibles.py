@@ -19,7 +19,13 @@ router = APIRouter(prefix="/responsibles", tags=["responsibles"])
 async def create_responsible(
     data: ResponsibleCreate, db: DbSession, current_user: AdminUser
 ):
-    return await ResponsibleService(db).create(data, tenant_id=current_user.tenant_id)
+    resp = await ResponsibleService(db).create(data, tenant_id=current_user.tenant_id)
+    # Rediseño identidad WhatsApp — parte C: al crear un responsable nuevo
+    # se dispara el WhatsApp de bienvenida. No lo hacemos dentro del service
+    # para que los tests que crean responsables directo no toquen Twilio.
+    from app.services.responsible_confirmation import send_welcome_confirmation
+    await send_welcome_confirmation(resp)
+    return resp
 
 
 @router.get("", response_model=list[ResponsibleRead])

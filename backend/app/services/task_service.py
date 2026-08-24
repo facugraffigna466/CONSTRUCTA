@@ -146,8 +146,23 @@ class TaskService:
             )
 
     async def _ensure_team_member(self, obra_id: int, responsible_id: int | None) -> None:
-        """Si se asigna un responsable a una tarea, queda en el equipo de la obra.
-        Evita que el tab Responsables diga 'sin equipo' cuando hay gente asignada."""
+        """Valida que el responsable ya pertenezca al equipo de la obra
+        (`ObraTeamMember`) antes de asignarle una tarea.
+
+        **Cambio de comportamiento (rediseño identidad WhatsApp — parte A.4).**
+        Antes este método CREABA silenciosamente la fila si no existía, con
+        `member_type='equipo'` y `plan_disciplines=NULL` (acceso total a
+        planos por default). Eso permitía que asignar una tarea a alguien
+        desde el TaskFormModal le diera acceso irrestricto a los planos de
+        la obra sin ninguna decisión explícita del admin, y además saltaba
+        el flujo de confirmación por WhatsApp que ahora es obligatorio.
+
+        Ahora falla con un error 422 claro: el flujo correcto es
+        (1) agregar al responsable al equipo desde el tab Responsables de
+        la obra (con su member_type + plan_disciplines explícitos), y
+        recién (2) asignarle la tarea. El frontend puede recuperar el 422
+        y mostrarle al usuario el paso que falta.
+        """
         if responsible_id is None:
             return
         from sqlalchemy import select
@@ -158,12 +173,11 @@ class TaskService:
                 ObraTeamMember.responsible_id == responsible_id,
             )
         )).scalar_one_or_none()
-        if not exists:
-            self.repo.session.add(ObraTeamMember(
-                obra_id=obra_id,
-                tenant_id=await tenant_for_obra(self.repo.session, obra_id),
-                responsible_id=responsible_id,
-            ))
+        if exists is None:
+            raise UnprocessableError(
+                "El responsable no está en el equipo de esta obra — "
+                "agregalo desde el tab Responsables antes de asignarle tareas."
+            )
 
     async def _assert_depends_on_valid(
         self, depends_on_id: int, obra_id: int, current_task_id: int | None = None

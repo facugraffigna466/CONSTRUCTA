@@ -25,6 +25,11 @@ python-socketio[asyncio_client]
 # ── Observabilidad ─────────────────────────────────────────────
 sentry-sdk[fastapi]>=2.0.0
 
+# ── Emails (transaccionales via Brevo) ─────────────────────────
+# tenacity: retry con backoff exponencial ante 429/503/timeouts de Brevo.
+# httpx ya está listado como dependencia general (línea 35).
+tenacity>=9.0
+
 # ── Phase 3 (uncomment when implementing) ──────────────────────
 # anthropic==0.40.0
 # openai-whisper==20231117

@@ -9,7 +9,35 @@ class ResponsibleRepository(BaseRepository[Responsible]):
         super().__init__(Responsible, session)
 
     async def get_by_whatsapp(self, number: str) -> Responsible | None:
-        """Primary lookup for the chatbot pipeline (Phase 2)."""
+        """Lookup principal del pipeline del chatbot.
+
+        Solo devuelve responsables ACTIVOS. Un responsable con `is_active=False`
+        (desactivado por su admin) no debe seguir siendo reconocido — antes
+        este método lo devolvía igual, permitiéndole seguir usando el bot
+        indefinidamente.
+
+        Los callers que necesiten distinguir "desactivado" de "nunca existió"
+        (para dar un mensaje diferenciado) deben usar `get_by_whatsapp_any`."""
+        if not number:
+            return None
+        result = await self.session.execute(
+            select(Responsible).where(
+                Responsible.whatsapp_number == number,
+                Responsible.is_active.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_whatsapp_any(self, number: str) -> Responsible | None:
+        """Idem al anterior pero SIN filtrar por `is_active`. Uso: el webhook
+        de mensajes lo llama para poder distinguir tres casos y dar mensajes
+        diferentes:
+          - número no registrado → "este número no está registrado…"
+          - registrado pero desactivado → "ya no tenés acceso al sistema…"
+          - registrado y activo → flujo normal
+        """
+        if not number:
+            return None
         result = await self.session.execute(
             select(Responsible).where(Responsible.whatsapp_number == number)
         )

@@ -8,11 +8,19 @@ POST   /solicitudes-cotizacion/{id}/confirmar           → confirmar proveedor 
 POST   /solicitudes-cotizacion/{id}/confirmar-contratista → confirmar contratista
 DELETE /solicitudes-cotizacion/{id}                     → eliminar solicitud
 """
-from fastapi import APIRouter, HTTPException, Response, status
+from typing import Annotated
 
-from app.core.deps import CurrentUser, DbSession
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+
+from app.core.deps import DbSession
+from app.core.obra_permissions import (
+    require_obra_role,
+    require_solicitud_obra_role,
+)
 from app.models.obra import Obra
+from app.models.obra_user_role import ObraUserRoleType
 from app.models.solicitud_cotizacion import SolicitudCotizacion
+from app.models.user import User
 from app.schemas.purchase_order import PurchaseOrderRead
 from app.schemas.solicitud_cotizacion import (
     AnalisisHistoricoComprasRead,
@@ -65,8 +73,11 @@ def _order_read(order) -> PurchaseOrderRead:
     "/obras/{obra_id}/solicitudes-cotizacion",
     response_model=list[SolicitudCotizacionRead],
 )
-async def list_solicitudes(obra_id: int, db: DbSession, current_user: CurrentUser):
-    await _get_obra_or_404(obra_id, db, current_user.tenant_id)
+async def list_solicitudes(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     return await SolicitudService(db).list_for_obra(obra_id)
 
 
@@ -81,9 +92,8 @@ async def create_solicitud(
     obra_id: int,
     data: SolicitudCotizacionCreate,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.JEFE_OBRA))],
 ):
-    await _get_obra_or_404(obra_id, db, current_user.tenant_id)
     try:
         svc = SolicitudService(db)
         sol = await svc.create(
@@ -105,8 +115,11 @@ async def create_solicitud(
     "/obras/{obra_id}/analisis-compras",
     response_model=AnalisisHistoricoComprasRead,
 )
-async def analisis_compras(obra_id: int, db: DbSession, current_user: CurrentUser):
-    await _get_obra_or_404(obra_id, db, current_user.tenant_id)
+async def analisis_compras(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     try:
         return await SolicitudService(db).analizar_historico(obra_id)
     except ValueError as exc:
@@ -124,9 +137,8 @@ async def confirmar_proveedor(
     solicitud_id: int,
     data: ConfirmarProveedorRequest,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_solicitud_obra_role(ObraUserRoleType.JEFE_OBRA))],
 ):
-    await _assert_solicitud_tenant(solicitud_id, db, current_user.tenant_id)
     try:
         order = await SolicitudService(db).confirmar(
             solicitud_id=solicitud_id,
@@ -149,9 +161,8 @@ async def confirmar_contratista(
     solicitud_id: int,
     data: ConfirmarContratistaRequest,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_solicitud_obra_role(ObraUserRoleType.JEFE_OBRA))],
 ):
-    await _assert_solicitud_tenant(solicitud_id, db, current_user.tenant_id)
     try:
         order = await SolicitudService(db).confirmar_contratista(
             solicitud_id=solicitud_id,
@@ -173,9 +184,8 @@ async def confirmar_contratista(
 async def delete_solicitud(
     solicitud_id: int,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_solicitud_obra_role(ObraUserRoleType.JEFE_OBRA))],
 ):
-    await _assert_solicitud_tenant(solicitud_id, db, current_user.tenant_id)
     try:
         await SolicitudService(db).delete_solicitud(solicitud_id)
     except ValueError as exc:

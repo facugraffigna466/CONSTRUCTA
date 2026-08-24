@@ -1,15 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
 import type { UserRole } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
 import { useDialog } from "../hooks/useDialog";
 import { fetchMembers, inviteMember, removeMember } from "../api/users";
-import type { ApiUser } from "../api/users";
+import type { ApiUser, ObraAssignmentInvite, ObraUserRoleType } from "../api/users";
+import type { Obra } from "../types";
 import { useConfirm } from "./ConfirmProvider";
 
 interface Props {
   onClose: () => void;
+  /** Obras del tenant para el selector de asignaciones (Fase 4). Si viene
+   *  vacía o ausente, el selector no se muestra — solo se invita con rol
+   *  de empresa (comportamiento previo a Fase 4). */
+  obras?: Obra[];
 }
+
+const OBRA_ROLE_LABELS: Record<ObraUserRoleType, string> = {
+  jefe_obra: "Jefe de obra",
+  colaborador: "Colaborador",
+  solo_lectura: "Solo lectura",
+};
+const OBRA_ROLE_COLORS: Record<ObraUserRoleType, { bg: string; color: string; border: string }> = {
+  jefe_obra:    { bg: "#FFF1E9", color: "#C45215", border: "#F7C9A3" },
+  colaborador:  { bg: "#E4F3EC", color: "#1F8A5B", border: "#BFE3CE" },
+  solo_lectura: { bg: "#EEF2F6", color: "#5B6770", border: "#D8DDE3" },
+};
 
 const ROLE_OPTIONS: { value: UserRole; label: string }[] = [
   { value: "admin",        label: "Administrador" },
@@ -30,7 +46,7 @@ function getInitials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
 }
 
-export function InviteModal({ onClose }: Props) {
+export function InviteModal({ onClose, obras = [] }: Props) {
   const { user } = useUser();
   const canInvite = usePermission("miembro.invite");
   const canRemove = usePermission("miembro.remove");
@@ -47,6 +63,15 @@ export function InviteModal({ onClose }: Props) {
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  // Fase 4: rol por obra (opcional). Vacío = no asigna a esa obra.
+  const [obraRoles, setObraRoles] = useState<Record<number, ObraUserRoleType | "">>({});
+  const [obrasExpanded, setObrasExpanded] = useState(false);
+
+  const pickedAssignments = useMemo<ObraAssignmentInvite[]>(() => {
+    return Object.entries(obraRoles)
+      .filter(([, r]) => r !== "")
+      .map(([id, r]) => ({ obra_id: Number(id), role: r as ObraUserRoleType }));
+  }, [obraRoles]);
 
   async function loadMembers() {
     try {
@@ -71,11 +96,16 @@ export function InviteModal({ onClose }: Props) {
     setSending(true);
     setError(null);
     try {
-      const res = await inviteMember(email.trim(), role);
+      // Si es admin de empresa, el rol de empresa ya le da acceso a todo —
+      // ignoramos las asignaciones por-obra (el backend también). Para
+      // collaborator, mandamos las asignaciones seleccionadas.
+      const assignments = role === "admin" ? null : pickedAssignments;
+      const res = await inviteMember(email.trim(), role, assignments);
       setInviteUrl(res.invite_url);
       setSentEmail(email.trim());
       setSent(true);
       setEmail("");
+      setObraRoles({});
       loadMembers();
       setTimeout(() => setSent(false), 6000);
     } catch (e: unknown) {
@@ -135,7 +165,7 @@ export function InviteModal({ onClose }: Props) {
               Equipo
             </h2>
             <p style={{ margin: "2px 0 0", fontSize: 12.5, color: C.text3 }}>
-              Los miembros acceden a todas las obras de la organización.
+              El acceso a cada obra se configura al invitar (o después, desde la lista de equipo).
             </p>
           </div>
           <button
@@ -228,6 +258,94 @@ export function InviteModal({ onClose }: Props) {
                   </div>
                   {error && (
                     <p style={{ margin: "6px 0 0", fontSize: 12, color: C.danger }}>{error}</p>
+                  )}
+
+                  {/* Selector de obras (Fase 4). Solo se muestra si el rol de
+                      empresa es collaborator (admin ya ve todo) y hay obras
+                      cargadas en el prop. Colapsable para no saturar el
+                      modal. */}
+                  {role === "collaborator" && obras.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        onClick={() => setObrasExpanded((v) => !v)}
+                        style={{
+                          background: "none", border: "none", cursor: "pointer",
+                          padding: 0, color: C.text2, fontSize: 12.5, fontWeight: 600,
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        }}
+                      >
+                        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" style={{
+                          transform: obrasExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                          transition: ".12s",
+                        }}>
+                          <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Asignar a obras
+                        {pickedAssignments.length > 0 && (
+                          <span style={{
+                            fontSize: 10.5, fontWeight: 700, padding: "1px 7px",
+                            borderRadius: 99, background: C.secondary50, color: C.secondary,
+                            border: `1px solid ${C.secondary}22`,
+                          }}>
+                            {pickedAssignments.length}
+                          </span>
+                        )}
+                        <span style={{ fontWeight: 500, color: C.text3 }}>
+                          (opcional — también se puede asignar después)
+                        </span>
+                      </button>
+
+                      {obrasExpanded && (
+                        <div style={{
+                          marginTop: 10, border: `1px solid ${C.line}`, borderRadius: 10,
+                          maxHeight: 220, overflowY: "auto", background: C.surface,
+                        }}>
+                          {obras.map((o, idx) => {
+                            const cur = obraRoles[o.id] ?? "";
+                            return (
+                              <div key={o.id} style={{
+                                display: "flex", alignItems: "center", gap: 10,
+                                padding: "8px 12px",
+                                borderTop: idx > 0 ? `1px solid ${C.line}` : "none",
+                              }}>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {o.name}
+                                  </div>
+                                  {o.location && (
+                                    <div style={{ fontSize: 11, color: C.text3 }}>{o.location}</div>
+                                  )}
+                                </div>
+                                <select
+                                  value={cur}
+                                  onChange={(e) => setObraRoles((prev) => ({
+                                    ...prev, [o.id]: e.target.value as ObraUserRoleType | "",
+                                  }))}
+                                  style={{
+                                    fontSize: 11, fontWeight: 700, padding: "4px 22px 4px 8px",
+                                    borderRadius: 99, cursor: "pointer",
+                                    background: cur === "" ? "#F4F5F4" : OBRA_ROLE_COLORS[cur].bg,
+                                    color: cur === "" ? "#8E97A0" : OBRA_ROLE_COLORS[cur].color,
+                                    border: `1px solid ${cur === "" ? "#E6E7E5" : OBRA_ROLE_COLORS[cur].border}`,
+                                    appearance: "none",
+                                    backgroundImage: `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 16 16'><path d='M4 6l4 4 4-4' fill='none' stroke='%23${cur === "" ? "8E97A0" : OBRA_ROLE_COLORS[cur].color.slice(1)}' stroke-width='1.6'/></svg>")`,
+                                    backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
+                                    fontFamily: "'Plus Jakarta Sans', sans-serif",
+                                  }}
+                                >
+                                  <option value="">Sin acceso</option>
+                                  <option value="solo_lectura">{OBRA_ROLE_LABELS.solo_lectura}</option>
+                                  <option value="colaborador">{OBRA_ROLE_LABELS.colaborador}</option>
+                                  <option value="jefe_obra">{OBRA_ROLE_LABELS.jefe_obra}</option>
+                                </select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </>
               )}

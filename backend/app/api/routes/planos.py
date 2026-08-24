@@ -1,10 +1,12 @@
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.core.deps import AdminUser, CurrentUser, DbSession
+from app.core.deps import DbSession
+from app.core.obra_permissions import require_obra_role, require_plano_obra_role
 from app.core.signing import WEB_TTL, signed_upload_url
+from app.models.obra_user_role import ObraUserRoleType
 from app.models.plano import Plano
 from app.models.user import User
 from app.schemas.plano import PlanoRead
@@ -38,7 +40,7 @@ async def _authors(db, planos: list[Plano]) -> dict[int, str]:
 async def upload_plano(
     obra_id: int,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.COLABORADOR))],
     file: UploadFile = File(...),
     discipline: Annotated[str, Form()] = "general",
     name: Annotated[str | None, Form(max_length=255)] = None,
@@ -48,8 +50,6 @@ async def upload_plano(
     """Sube un plano. Con `replaces_plano_id` se carga como nueva versión de un
     plano existente: hereda su disciplina y nombre, y queda vigente — sin depender
     de que el nombre que se mande coincida."""
-    # 404 si la obra no existe o pertenece a otro tenant (antes tocaba disco/DB sin validar).
-    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
 
     content = await file.read()
     if len(content) > MAX_BYTES:
@@ -73,15 +73,22 @@ async def upload_plano(
 
 
 @router.get("/obras/{obra_id}/planos", response_model=list[PlanoRead])
-async def list_planos(obra_id: int, db: DbSession, current_user: CurrentUser):
-    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
+async def list_planos(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     planos = await PlanoService(db).list_by_obra(obra_id)
     authors = await _authors(db, planos)
     return [_to_read(p, authors.get(p.uploaded_by)) for p in planos]
 
 
 @router.patch("/planos/{plano_id}/vigente", response_model=PlanoRead)
-async def set_plano_vigente(plano_id: int, db: DbSession, current_user: AdminUser):
+async def set_plano_vigente(
+    plano_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_plano_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
     """Marca esta versión como la vigente de su plano (la que responde el bot y la que
     se muestra primero). Para corregir cuando se cargó una versión vieja por error."""
     plano = await PlanoService(db).set_latest(
@@ -91,7 +98,11 @@ async def set_plano_vigente(plano_id: int, db: DbSession, current_user: AdminUse
 
 
 @router.delete("/planos/{plano_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_plano(plano_id: int, db: DbSession, current_user: AdminUser):
+async def delete_plano(
+    plano_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_plano_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
     await PlanoService(db).delete(
         plano_id, current_user.tenant_id, actor_name=current_user.full_name or current_user.email
     )

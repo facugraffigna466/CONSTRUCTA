@@ -8,12 +8,18 @@ POST /purchase-orders/{order_id}/send        → enviar al proveedor (WhatsApp/e
 POST /purchase-orders/{order_id}/receive     → confirmar recepción
 """
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession
+from app.core.obra_permissions import (
+    require_obra_role,
+    require_purchase_order_obra_role,
+)
 from app.models.alert import AlertType
+from app.models.obra_user_role import ObraUserRoleType
 from app.models.obra import Obra
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
 from app.models.responsible import Responsible
@@ -68,8 +74,11 @@ async def _order_to_read(order: PurchaseOrder, db: DbSession) -> PurchaseOrderRe
 # ─── Presupuesto ──────────────────────────────────────────────────────────────
 
 @router.get("/obras/{obra_id}/presupuesto", response_model=PresupuestoResponse)
-async def get_presupuesto(obra_id: int, db: DbSession, current_user: CurrentUser):
-    await _get_obra_scoped(obra_id, db, current_user)
+async def get_presupuesto(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
 
     ResponsibleAlias = Responsible
     UserAlias = User
@@ -122,8 +131,11 @@ async def get_presupuesto(obra_id: int, db: DbSession, current_user: CurrentUser
 # ─── Pedidos ──────────────────────────────────────────────────────────────────
 
 @router.get("/obras/{obra_id}/purchase-orders", response_model=list[PurchaseOrderRead])
-async def list_orders(obra_id: int, db: DbSession, current_user: CurrentUser):
-    await _get_obra_scoped(obra_id, db, current_user)
+async def list_orders(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     result = await db.execute(
         select(PurchaseOrder)
         .where(PurchaseOrder.obra_id == obra_id)
@@ -134,8 +146,12 @@ async def list_orders(obra_id: int, db: DbSession, current_user: CurrentUser):
 
 
 @router.post("/obras/{obra_id}/purchase-orders", response_model=PurchaseOrderRead, status_code=status.HTTP_201_CREATED)
-async def create_order(obra_id: int, data: PurchaseOrderCreate, db: DbSession, current_user: CurrentUser):
-    await _get_obra_scoped(obra_id, db, current_user)
+async def create_order(
+    obra_id: int,
+    data: PurchaseOrderCreate,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
 
     materials = (await db.execute(
         select(TaskMaterial)
@@ -195,14 +211,19 @@ def _build_order_message(order: PurchaseOrder, obra_name: str, supplier_name: st
 
 
 @router.post("/purchase-orders/{order_id}/send", response_model=PurchaseOrderRead)
-async def send_order(order_id: int, data: PurchaseOrderSendRequest, db: DbSession, current_user: CurrentUser):
+async def send_order(
+    order_id: int,
+    data: PurchaseOrderSendRequest,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_purchase_order_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
     order = (await db.execute(
         select(PurchaseOrder).where(PurchaseOrder.id == order_id)
     )).scalar_one_or_none()
+    # La dependency ya validó existencia + tenant + rol; el reload acá es defensivo.
     if not order:
         raise HTTPException(404, "Pedido no encontrado")
 
-    # Aislamiento por tenant: verificar ANTES de tocar el pedido (404 si es de otra empresa).
     obra = await _get_obra_scoped(order.obra_id, db, current_user)
 
     # Idempotencia: solo un pedido en 'borrador' se envía. Un segundo click / reintento
@@ -250,15 +271,16 @@ async def send_order(order_id: int, data: PurchaseOrderSendRequest, db: DbSessio
 
 
 @router.post("/purchase-orders/{order_id}/receive", response_model=PurchaseOrderRead)
-async def receive_order(order_id: int, db: DbSession, current_user: CurrentUser):
+async def receive_order(
+    order_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_purchase_order_obra_role(ObraUserRoleType.COLABORADOR))],
+):
     order = (await db.execute(
         select(PurchaseOrder).where(PurchaseOrder.id == order_id)
     )).scalar_one_or_none()
     if not order:
         raise HTTPException(404, "Pedido no encontrado")
-
-    # Aislamiento por tenant: 404 si el pedido es de una obra de otra empresa.
-    await _get_obra_scoped(order.obra_id, db, current_user)
 
     if order.status == "recibido":
         return await _order_to_read(order, db)

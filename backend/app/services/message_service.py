@@ -73,8 +73,19 @@ class MessageService:
 
         # ── 2. Identificar al emisor: responsable (asignado a tareas) o staff
         #       (usuario arquitecto/jefe/admin con su número de WhatsApp cargado) ──
+        # `get_by_whatsapp` ahora filtra por is_active (rediseño identidad
+        # WhatsApp — parte A.1). Si no encuentra activo, hacemos un lookup
+        # extra sin filtrar para distinguir "desactivado" (mensaje específico)
+        # de "no registrado" (mensaje genérico). Solo pagamos la query extra
+        # en el path menos común.
         responsible = await self.resp_repo.get_by_whatsapp(payload.from_number)
-        staff = None if responsible else await self.user_repo.get_by_whatsapp(payload.from_number)
+        deactivated_responsible = None
+        if responsible is None:
+            any_resp = await self.resp_repo.get_by_whatsapp_any(payload.from_number)
+            if any_resp is not None and not any_resp.is_active:
+                deactivated_responsible = any_resp
+        staff = None if (responsible or deactivated_responsible) else \
+            await self.user_repo.get_by_whatsapp(payload.from_number)
         sender = responsible or staff
         is_staff = responsible is None and staff is not None
 
@@ -167,12 +178,25 @@ class MessageService:
                     return inbound
 
         # ── 4. Ruteo ───────────────────────────────────────────────────────────
-        if sender is None:
+        if deactivated_responsible is not None:
+            # Rediseño identidad WhatsApp — parte A.1: un responsable dado de
+            # baja no debe seguir siendo tratado normalmente. Mensaje distinto
+            # al de "no registrado" para no confundir al usuario.
+            reply = (
+                "Ya no tenés acceso al sistema CONSTRUCTA. "
+                "Consultá con tu jefe de obra."
+            )
+        elif sender is None:
             reply = (
                 "Este número no está registrado en el sistema CONSTRUCTA. "
                 "Comunicáte con el encargado de tu obra."
             )
-
+        elif responsible is not None and responsible.confirmed_at is None:
+            # Rediseño identidad WhatsApp — parte C: hasta que el responsable
+            # no confirme (respondiendo "SI" al mensaje de bienvenida), el bot
+            # solo maneja el propio flujo de confirmación. Cualquier otro
+            # comando queda bloqueado con el mismo pedido.
+            reply = await self._handle_pending_confirmation(responsible, payload.Body or "")
         else:
             # La ventana horaria / chatbot_enabled aplican a los recordatorios a
             # responsables (evitar spam). El staff inicia la conversación, no se
@@ -464,7 +488,17 @@ class MessageService:
     async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, sender, is_staff: bool) -> str:
         """Nota de voz de WhatsApp → entrada de bitácora con IA. Sirve para
         responsables y para staff (arquitecto/jefe). Si el emisor tiene varias
-        obras, la nota queda pendiente y el bot pregunta a cuál va."""
+        obras, la nota queda pendiente y el bot pregunta a cuál va.
+
+        **Gate por member_type (rediseño identidad WhatsApp — parte B).** La
+        bitácora puede contener información sensible de toda la obra (no solo
+        de la tarea asignada). Un contratista externo/puntual no debería tener
+        acceso libre a eso. Regla: si el responsable es 'contratista' en
+        TODAS las obras donde participa (o no es 'equipo' en NINGUNA), se
+        rechaza el audio con un mensaje explicativo.
+
+        Staff (User con whatsapp_number) siempre puede — está bajo el rol de
+        empresa admin/collaborator, ya autenticado y con acceso pleno."""
         import asyncio as _asyncio
         import uuid as _uuid
         from pathlib import Path as _Path
@@ -472,7 +506,20 @@ class MessageService:
         import requests as _requests
 
         from app.core.config import settings as _settings
+        from app.repositories.obra_team_member import ObraTeamMemberRepository
         from app.services.bitacora_service import BitacoraService
+
+        if not is_staff:
+            member_types = await ObraTeamMemberRepository(self.db).list_member_types_for_responsible(
+                sender.id
+            )
+            # Regla: se necesita al menos una obra donde sea 'equipo'. Sin
+            # ninguna 'equipo' (todo 'contratista' o lista vacía) → bloquear.
+            if not any(mt == "equipo" for mt in member_types):
+                return (
+                    "La bitácora por audio no está disponible para tu tipo de acceso. "
+                    "Consultá con tu jefe de obra si necesitás registrar novedades."
+                )
 
         # 1. Descargar el audio de Twilio (basic auth SID:token).
         #    En un thread para no bloquear el event loop con I/O síncrono.
@@ -811,6 +858,35 @@ class MessageService:
                 f"{solicitud.ref_code}, pero hubo un problema al procesarlo. "
                 "El equipo lo revisará manualmente."
             )
+
+    async def _handle_pending_confirmation(self, responsible, body: str) -> str:
+        """Flujo de confirmación (rediseño identidad WhatsApp — parte C).
+
+        Mientras `responsible.confirmed_at` sea NULL, este handler intercepta
+        TODOS los mensajes entrantes. Solo hay dos salidas:
+          - El body es una afirmación reconocida ("SI", "SÍ", "OK",
+            "CONFIRMAR", "CONFIRMO", "S") → seteamos confirmed_at y damos
+            la bienvenida.
+          - Cualquier otro → repetimos el pedido de confirmación.
+
+        La decisión de aceptar variantes ampliadas ("OK", "S") es una concesión
+        de UX — un obrero con teclado touch puede tipear cualquiera de esas y
+        entender que aceptó. Si en el futuro se quiere ser más estricto (solo
+        "SI"), acotar el set.
+        """
+        norm = (body or "").strip().upper().rstrip(".!?¡¿").replace("Í", "I")
+        if norm in {"SI", "OK", "CONFIRMAR", "CONFIRMO", "S", "SIP", "DALE"}:
+            responsible.confirmed_at = datetime.now(timezone.utc)
+            await self.resp_repo.session.flush()
+            nombre = (responsible.full_name or "").split(" ")[0] or "👷"
+            return (
+                f"¡Listo {nombre}! Tu acceso a CONSTRUCTA está confirmado. "
+                "Ya podés reportar avances, pedir planos y mandarme notas de voz."
+            )
+        return (
+            "Todavía no confirmaste tu acceso al sistema CONSTRUCTA. "
+            "Respondé *SI* para activar tu cuenta."
+        )
 
     async def _save_message(self, data: MessageCreateInternal) -> Message:
         msg = Message(**data.model_dump())
