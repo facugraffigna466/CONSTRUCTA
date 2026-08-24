@@ -28,6 +28,15 @@ class Responsible(Base):
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    # NULL = todavía no confirmó su acceso vía WhatsApp (respondiendo "SI" al
+    # mensaje de bienvenida). Mientras esté en NULL, el bot solo le responde
+    # con el pedido de confirmación — ninguna otra funcionalidad se procesa.
+    # La confirmación es POR PERSONA (una vez), no por obra — sumar al equipo
+    # de otra obra no requiere volver a confirmar.
+    # Ver docs/roles-redesign/whatsapp-identidad-permisos.md §"Alcance de la confirmación".
+    confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
 
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="responsible")
     messages: Mapped[list["Message"]] = relationship("Message", back_populates="responsible")

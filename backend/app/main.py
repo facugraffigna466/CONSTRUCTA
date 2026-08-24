@@ -13,6 +13,7 @@ from app.api.routes import exports as exports_router
 from app.api.routes import critical_path as critical_path_router
 from app.api.routes import baseline as baseline_router
 from app.api.routes import obra_team as obra_team_router
+from app.api.routes import obra_user_roles as obra_user_roles_router
 from app.api.routes import suppliers as suppliers_router
 from app.api.routes import task_materials as task_materials_router
 from app.api.routes import purchase_orders as purchase_orders_router
@@ -76,6 +77,7 @@ fastapi_app.include_router(exports_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(critical_path_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(baseline_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(obra_team_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(obra_user_roles_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(admin_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(suppliers_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(task_materials_router.router, prefix=API_PREFIX)

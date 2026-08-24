@@ -16,11 +16,19 @@ class ResponsibleService:
         self.historial = HistorialRepository(session)
 
     async def create(self, data: ResponsibleCreate, tenant_id: int | None = None) -> Responsible:
-        existing = await self.repo.get_by_whatsapp(data.whatsapp_number)
+        # Chequeo de conflicto SIN filtrar por is_active — dos responsables
+        # activos o uno desactivado y otro nuevo con el mismo whatsapp son
+        # igualmente inválidos (el número es unique global).
+        existing = await self.repo.get_by_whatsapp_any(data.whatsapp_number)
         if existing:
             raise ConflictError(
                 f"A responsible with number {data.whatsapp_number} already exists"
             )
+        # Nuevo responsable → confirmed_at queda NULL (default). El bot lo
+        # trata como "pendiente confirmación" hasta que responda SI.
+        # El WhatsApp de bienvenida lo dispara el caller (route de team o de
+        # responsibles) — la creación acá es en la misma transacción y no
+        # queremos side-effects HTTP en el service para tests que mockean.
         responsible = Responsible(**data.model_dump(), tenant_id=tenant_id)
         return await self.repo.create(responsible)
 
@@ -53,7 +61,9 @@ class ResponsibleService:
         if not changes:
             return await self.get_or_raise(responsible_id, tenant_id)
         if "whatsapp_number" in changes:
-            existing = await self.repo.get_by_whatsapp(changes["whatsapp_number"])
+            # Chequeo de conflicto contra cualquier responsable (activo o
+            # desactivado): el número es unique global.
+            existing = await self.repo.get_by_whatsapp_any(changes["whatsapp_number"])
             if existing and existing.id != responsible_id:
                 raise ConflictError(f"A responsible with number {changes['whatsapp_number']} already exists")
         updated = await self.repo.update_fields(responsible_id, **changes)

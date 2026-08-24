@@ -438,8 +438,11 @@ function DocumentoRow({
 // ── Componente principal ──────────────────────────────────────────────────────
 export function PlanosTab({ obraId }: { obraId: number }) {
   const { confirm } = useConfirm();
+  // Fase 4: permisos ahora se resuelven por-obra. Un colaborador global puede
+  // NO tener rol en esta obra puntual (404 del backend) o puede tener SL/COL/JO.
   const can = useCan();
-  const canDelete = can("documentos.delete");
+  const canUpload = can("documentos.upload", obraId);
+  const canDelete = can("documentos.delete", obraId);
 
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [loading, setLoading] = useState(true);
@@ -555,17 +558,19 @@ export function PlanosTab({ obraId }: { obraId: number }) {
             {total === 0 ? "Todavía no hay planos cargados" : "Cada plano guarda su historial de revisiones"}
           </p>
         </div>
-        <button
-          onClick={() => { setError(null); nuevoRef.current?.click(); }}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0,
-            background: C.primary, color: "#fff", border: "none", borderRadius: 10,
-            padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
-            fontFamily: "'Plus Jakarta Sans', sans-serif",
-          }}
-        >
-          <Plus size={15} /> Plano nuevo
-        </button>
+        {canUpload && (
+          <button
+            onClick={() => { setError(null); nuevoRef.current?.click(); }}
+            style={{
+              display: "inline-flex", alignItems: "center", gap: 6, flexShrink: 0,
+              background: C.primary, color: "#fff", border: "none", borderRadius: 10,
+              padding: "9px 14px", fontSize: 13, fontWeight: 700, cursor: "pointer",
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}
+          >
+            <Plus size={15} /> Plano nuevo
+          </button>
+        )}
       </div>
 
       {error && (

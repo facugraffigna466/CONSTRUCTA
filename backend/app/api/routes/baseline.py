@@ -1,10 +1,16 @@
 from datetime import date, datetime
-from fastapi import APIRouter, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 from sqlalchemy import delete, select
-from app.core.deps import CurrentUserId, DbSession
+
+from app.core.deps import DbSession
+from app.core.obra_permissions import require_obra_role
 from app.core.tenant_denorm import tenant_for_obra
 from app.models.baseline import TaskBaseline
+from app.models.obra_user_role import ObraUserRoleType
+from app.models.user import User
 from app.services.task_service import TaskService
 
 router = APIRouter(prefix="/obras", tags=["baseline"])
@@ -23,9 +29,13 @@ class BaselineResponse(BaseModel):
 
 
 @router.post("/{obra_id}/baseline", response_model=BaselineResponse, status_code=status.HTTP_201_CREATED)
-async def save_baseline(obra_id: int, db: DbSession, user_id: CurrentUserId):
+async def save_baseline(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
     """Snapshot current task dates as the baseline for this obra. Replaces any existing baseline."""
-    tasks = await TaskService(db).list_by_obra(obra_id, user_id)
+    tasks = await TaskService(db).list_by_obra(obra_id, current_user.id)
 
     await db.execute(delete(TaskBaseline).where(TaskBaseline.obra_id == obra_id))
 
@@ -56,10 +66,12 @@ async def save_baseline(obra_id: int, db: DbSession, user_id: CurrentUserId):
 
 
 @router.get("/{obra_id}/baseline", response_model=BaselineResponse)
-async def get_baseline(obra_id: int, db: DbSession, user_id: CurrentUserId):
+async def get_baseline(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     """Return the latest saved baseline for this obra."""
-    await TaskService(db).list_by_obra(obra_id, user_id)  # access check
-
     result = await db.execute(
         select(TaskBaseline).where(TaskBaseline.obra_id == obra_id).order_by(TaskBaseline.saved_at.desc())
     )

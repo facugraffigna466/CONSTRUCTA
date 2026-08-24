@@ -13,15 +13,25 @@ DELETE /bitacora/{id}
 """
 import uuid
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession
+from app.core.obra_permissions import (
+    assert_obra_access,
+    require_bitacora_obra_role,
+    require_obra_role,
+    require_task_obra_role,
+    visible_obra_ids,
+)
 from app.core.signing import signed_upload_path
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
+from app.models.obra_user_role import ObraUserRoleType
 from app.models.responsible import Responsible
+from app.models.user import User
 from app.schemas.bitacora import (
     BitacoraAssignObra,
     BitacoraEntryRead,
@@ -29,7 +39,6 @@ from app.schemas.bitacora import (
     BitacoraTextCreate,
 )
 from app.services.bitacora_service import BitacoraService
-from app.services.obra_service import ObraService
 
 router = APIRouter(tags=["bitacora"])
 
@@ -92,11 +101,9 @@ async def _to_read_bulk(
 async def create_audio_entry(
     obra_id: int,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.COLABORADOR))],
     file: UploadFile = File(...),
 ):
-    # 404 si la obra no existe o pertenece a otro tenant
-    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     # Control de costo de IA: cota mensual por tenant (falla rápido, antes de leer el audio)
     await BitacoraService(db).assert_within_ai_quota(current_user.tenant_id)
 
@@ -134,10 +141,11 @@ async def create_audio_entry(
 
 @router.post("/obras/{obra_id}/bitacora/texto", response_model=BitacoraEntryRead, status_code=status.HTTP_201_CREATED)
 async def create_text_entry(
-    obra_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser
+    obra_id: int,
+    data: BitacoraTextCreate,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.COLABORADOR))],
 ):
-    # 404 si la obra no existe o pertenece a otro tenant
-    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     if not data.text.strip():
         raise HTTPException(400, "El texto está vacío.")
     service = BitacoraService(db)
@@ -161,6 +169,8 @@ async def list_entries(
     limit: int = 100,
     offset: int = 0,
 ):
+    if obra_id is not None:
+        await assert_obra_access(db, current_user, obra_id, ObraUserRoleType.SOLO_LECTURA)
     service = BitacoraService(db)
     entries = await service.list_entries(
         tenant_id=current_user.tenant_id,
@@ -169,6 +179,11 @@ async def list_entries(
         limit=limit,
         offset=offset,
     )
+    if obra_id is None:
+        # Filtro por obras visibles para non-admin.
+        visible = await visible_obra_ids(db, current_user)
+        if visible is not None:
+            entries = [e for e in entries if (e.obra_id in visible) or e.obra_id is None]
     return await _to_read_bulk(entries, db, current_user.tenant_id)
 
 
@@ -177,6 +192,8 @@ async def pending_count(
     db: DbSession, current_user: CurrentUser, obra_id: int | None = None
 ) -> dict[str, int]:
     """Sugerencias sin revisar (Sí/No pendiente) de una obra — para el badge del menú."""
+    if obra_id is not None:
+        await assert_obra_access(db, current_user, obra_id, ObraUserRoleType.SOLO_LECTURA)
     count = await BitacoraService(db).pending_suggestions_count(
         tenant_id=current_user.tenant_id, user_id=current_user.id, obra_id=obra_id
     )
@@ -185,7 +202,11 @@ async def pending_count(
 
 @router.get("/bitacora/unassigned", response_model=list[BitacoraEntryRead])
 async def list_unassigned(db: DbSession, current_user: CurrentUser):
-    """Notas de voz sin obra asignada del tenant — para asignación manual del jefe."""
+    """Notas de voz sin obra asignada del tenant — para asignación manual del jefe.
+    Como estas entradas no están asignadas a ninguna obra, solo tiene sentido
+    para admin de empresa (nadie más puede resolverlas)."""
+    if current_user.role != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo admin de empresa puede ver bitácoras sin asignar")
     entries = await BitacoraService(db).list_unassigned(
         tenant_id=current_user.tenant_id, user_id=current_user.id
     )
@@ -193,7 +214,11 @@ async def list_unassigned(db: DbSession, current_user: CurrentUser):
 
 
 @router.get("/tasks/{task_id}/bitacora", response_model=list[BitacoraEntryRead])
-async def list_for_task(task_id: int, db: DbSession, current_user: CurrentUser):
+async def list_for_task(
+    task_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_task_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     """Notas de voz que originaron o modificaron esta tarea (trazabilidad tarea → audio)."""
     entries = await BitacoraService(db).list_for_task(
         task_id=task_id, tenant_id=current_user.tenant_id, user_id=current_user.id
@@ -202,7 +227,12 @@ async def list_for_task(task_id: int, db: DbSession, current_user: CurrentUser):
 
 
 @router.post("/bitacora/{entry_id}/transcript", response_model=BitacoraEntryRead)
-async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession, current_user: CurrentUser):
+async def set_transcript(
+    entry_id: int,
+    data: BitacoraTextCreate,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.COLABORADOR))],
+):
     if not data.text.strip():
         raise HTTPException(400, "El texto está vacío.")
     service = BitacoraService(db)
@@ -215,7 +245,11 @@ async def set_transcript(entry_id: int, data: BitacoraTextCreate, db: DbSession,
 
 
 @router.post("/bitacora/{entry_id}/reprocess", response_model=BitacoraEntryRead)
-async def reprocess(entry_id: int, db: DbSession, current_user: CurrentUser):
+async def reprocess(
+    entry_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.COLABORADOR))],
+):
     service = BitacoraService(db)
     entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     audio_bytes = None
@@ -230,11 +264,18 @@ async def reprocess(entry_id: int, db: DbSession, current_user: CurrentUser):
 
 
 @router.post("/bitacora/{entry_id}/obra", response_model=BitacoraEntryRead)
-async def assign_obra(entry_id: int, data: BitacoraAssignObra, db: DbSession, current_user: CurrentUser):
+async def assign_obra(
+    entry_id: int,
+    data: BitacoraAssignObra,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
+    """Asigna la nota a una obra. Requiere jefe_obra sobre la obra ACTUAL de la
+    nota (o admin) — la validación de la obra DESTINO se hace acá con rol JO."""
     service = BitacoraService(db)
     entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
-    # 404 si la obra no existe o pertenece a otro tenant
-    await ObraService(db).get_or_raise(data.obra_id, tenant_id=current_user.tenant_id)
+    # La obra destino requiere jefe_obra también (asignar = decisión de gestión).
+    await assert_obra_access(db, current_user, data.obra_id, ObraUserRoleType.JEFE_OBRA)
     entry.obra_id = data.obra_id
     # Re-analizar con el contexto de la obra correcta
     if entry.transcript:
@@ -246,7 +287,10 @@ async def assign_obra(entry_id: int, data: BitacoraAssignObra, db: DbSession, cu
 
 @router.post("/bitacora/{entry_id}/suggestions/{index}/apply", response_model=BitacoraEntryRead)
 async def apply_suggestion(
-    entry_id: int, index: int, db: DbSession, current_user: CurrentUser,
+    entry_id: int,
+    index: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.COLABORADOR))],
     edits: BitacoraSuggestionEdit | None = None,
 ):
     actor = {
@@ -256,8 +300,6 @@ async def apply_suggestion(
         "channel": "bitacora",
     }
     service = BitacoraService(db)
-    # 404 si la entrada es de otro tenant
-    await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     entry = await service.apply_suggestion(
         entry_id, index, current_user.id, actor=actor,
         edits=edits.model_dump(exclude_unset=True) if edits else None,
@@ -266,15 +308,23 @@ async def apply_suggestion(
 
 
 @router.post("/bitacora/{entry_id}/suggestions/{index}/dismiss", response_model=BitacoraEntryRead)
-async def dismiss_suggestion(entry_id: int, index: int, db: DbSession, current_user: CurrentUser):
+async def dismiss_suggestion(
+    entry_id: int,
+    index: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.COLABORADOR))],
+):
     service = BitacoraService(db)
-    await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     entry = await service.dismiss_suggestion(entry_id, index)
     return await _to_read(entry, db, current_user.tenant_id)
 
 
 @router.delete("/bitacora/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_entry(entry_id: int, db: DbSession, current_user: CurrentUser):
+async def delete_entry(
+    entry_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.JEFE_OBRA))],
+):
     service = BitacoraService(db)
     entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
     # Borrar el audio del disco para no dejar archivos huérfanos

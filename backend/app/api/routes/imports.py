@@ -8,7 +8,9 @@ import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.core.deps import CurrentUserId, DbSession
+from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.obra_permissions import assert_obra_access
+from app.models.obra_user_role import ObraUserRoleType
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.imports import ImportConfirmPayload, ImportPreview
@@ -73,17 +75,19 @@ async def preview_import(
 async def confirm_import(
     payload: ImportConfirmPayload,
     db: DbSession,
-    manager_id: CurrentUserId,
+    current_user: CurrentUser,
 ) -> dict:
     if len(payload.rows) > MAX_IMPORT_ROWS:
         raise HTTPException(
             413, f"Demasiadas filas ({len(payload.rows)}); el máximo por importación es {MAX_IMPORT_ROWS}."
         )
 
+    # obra_id viene del body → validamos con el helper (rol JEFE_OBRA porque
+    # es equivalente a un bulk_create masivo).
+    await assert_obra_access(db, current_user, payload.obra_id, ObraUserRoleType.JEFE_OBRA)
+
     service = TaskService(db)
-    # Fail-fast: la obra debe existir y pertenecer al tenant del usuario (404 si no).
-    # Evita N intentos de creación fallidos contra una obra ajena/inexistente.
-    await service._get_obra_and_assert_access(payload.obra_id, manager_id)
+    manager_id = current_user.id
 
     resp_repo = ResponsibleRepository(db)
     task_repo = TaskRepository(db)

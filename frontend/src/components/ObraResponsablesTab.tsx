@@ -477,8 +477,11 @@ function Column({ type, list, total, search, onSearch, isAdmin, isAddingHere, on
 interface Props { obraId: number; onTeamChanged?: () => void; }
 
 export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
+  // Fase 4: gestionar equipo de responsables de la obra es acción de
+  // jefe_obra+ (matriz fase-1 §2.1). `tarea.delete` con obraId responde true
+  // solo para JO en esta obra o admin de empresa — mismo criterio.
   const can = useCan();
-  const isAdmin = can("configuracion.edit");
+  const isAdmin = can("tarea.delete", obraId);
 
   const [team, setTeam] = useState<ObraTeamMember[]>([]);
   const [allResponsibles, setAllResponsibles] = useState<Responsible[]>([]);

@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from typing import Any
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -15,6 +16,13 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     invitation_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     invitation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Asignaciones de ObraUserRole que quien invita eligió para el nuevo user,
+    # pendientes de materializarse hasta que se acepte la invitación. Lista de
+    # dicts [{"obra_id": int, "role": "jefe_obra"|"colaborador"|"solo_lectura"}].
+    # NULL después del accept (ya se materializaron) o si no hubo asignaciones.
+    pending_obra_assignments: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
+    )
     reset_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     reset_token_expires: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

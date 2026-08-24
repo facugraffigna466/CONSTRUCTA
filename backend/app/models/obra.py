@@ -68,3 +68,6 @@ class Obra(Base):
     team_members: Mapped[list["ObraTeamMember"]] = relationship(
         "ObraTeamMember", back_populates="obra", cascade="all, delete-orphan"
     )
+    user_roles: Mapped[list["ObraUserRole"]] = relationship(
+        "ObraUserRole", back_populates="obra", cascade="all, delete-orphan"
+    )

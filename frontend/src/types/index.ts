@@ -135,6 +135,16 @@ export interface WorkspaceMember {
   joined_at: string;
 }
 
+// Rol del usuario en una obra puntual (Fase 1+ del rediseño de roles).
+// Backend enum: obra_user_role_type. jefe_obra > colaborador > solo_lectura.
+export type ObraUserRoleType = "jefe_obra" | "colaborador" | "solo_lectura";
+
+export interface ObraRoleForUser {
+  obra_id: number;
+  obra_name: string;
+  role: ObraUserRoleType;
+}
+
 export interface CurrentUser {
   id: number;
   name: string;
@@ -145,6 +155,10 @@ export interface CurrentUser {
   avatar_url?: string | null;
   whatsapp_number?: string | null;
   tenant_name?: string | null;
+  // Obras a las que el usuario está asignado, con su rol en cada una. Se
+  // pobla desde /users/me. Vacío = admin de empresa (superset absoluto) o
+  // colaborador sin asignaciones. La UI resuelve la diferencia con `role`.
+  obra_roles: ObraRoleForUser[];
 }
 
 export interface Supplier {

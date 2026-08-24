@@ -8,6 +8,7 @@ import pytest_asyncio
 
 from app.core.security import create_access_token
 from app.models.obra import Obra
+from app.models.obra_user_role import ObraUserRole, ObraUserRoleType
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.services.plano_service import UPLOADS_DIR
@@ -43,6 +44,15 @@ async def ctx(db):
     obra_b = Obra(name="Obra B", manager_id=admin_b.id, tenant_id=t2.id)
     db.add(obra_b)
     await db.flush()
+
+    # Fase 2: para que los tests que ejercitan "colab puede subir plano" sigan
+    # pasando, asignamos al colab rol COLABORADOR en la obra. Los tests que
+    # verifican "colab NO puede borrar/marcar vigente" siguen dando 403 porque
+    # esas acciones requieren JEFE_OBRA (que colab no tiene).
+    db.add(ObraUserRole(
+        obra_id=obra.id, user_id=collab.id, tenant_id=t.id,
+        role=ObraUserRoleType.COLABORADOR,
+    ))
     await db.commit()
 
     return {

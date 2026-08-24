@@ -1,8 +1,12 @@
-from fastapi import APIRouter, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.core.deps import CurrentUser, DbSession
+from app.core.deps import DbSession
+from app.core.obra_permissions import require_task_obra_role
+from app.models.obra_user_role import ObraUserRoleType
 from app.models.user import User
 from app.models.responsible import Responsible
 from app.models.supplier import Supplier
@@ -46,8 +50,11 @@ async def _enrich(material: TaskMaterial, db: DbSession) -> TaskMaterialRead:
 
 
 @router.get("", response_model=list[TaskMaterialRead])
-async def list_materials(task_id: int, db: DbSession, current_user: CurrentUser):
-    await _get_task_or_404(task_id, db, current_user.tenant_id)
+async def list_materials(
+    task_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_task_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     result = await db.execute(
         select(TaskMaterial)
         .where(TaskMaterial.task_id == task_id)
@@ -59,9 +66,11 @@ async def list_materials(task_id: int, db: DbSession, current_user: CurrentUser)
 
 @router.post("", response_model=TaskMaterialRead, status_code=status.HTTP_201_CREATED)
 async def create_material(
-    task_id: int, data: TaskMaterialCreate, db: DbSession, current_user: CurrentUser
+    task_id: int,
+    data: TaskMaterialCreate,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_task_obra_role(ObraUserRoleType.COLABORADOR))],
 ):
-    await _get_task_or_404(task_id, db, current_user.tenant_id)
     material = TaskMaterial(
         task_id=task_id,
         tenant_id=current_user.tenant_id,
@@ -82,9 +91,12 @@ async def create_material(
 
 @router.patch("/{material_id}", response_model=TaskMaterialRead)
 async def update_material(
-    task_id: int, material_id: int, data: TaskMaterialUpdate, db: DbSession, current_user: CurrentUser
+    task_id: int,
+    material_id: int,
+    data: TaskMaterialUpdate,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_task_obra_role(ObraUserRoleType.COLABORADOR))],
 ):
-    await _get_task_or_404(task_id, db, current_user.tenant_id)
     result = await db.execute(
         select(TaskMaterial).where(
             TaskMaterial.id == material_id, TaskMaterial.task_id == task_id
@@ -104,9 +116,11 @@ async def update_material(
 
 @router.delete("/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_material(
-    task_id: int, material_id: int, db: DbSession, current_user: CurrentUser
+    task_id: int,
+    material_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_task_obra_role(ObraUserRoleType.JEFE_OBRA))],
 ):
-    await _get_task_or_404(task_id, db, current_user.tenant_id)
     result = await db.execute(
         select(TaskMaterial).where(
             TaskMaterial.id == material_id, TaskMaterial.task_id == task_id

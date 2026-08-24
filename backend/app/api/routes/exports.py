@@ -12,7 +12,14 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from typing import Annotated
+
+from fastapi import Depends
+
 from app.core.deps import CurrentUser, CurrentUserId, DbSession
+from app.core.obra_permissions import require_obra_role
+from app.models.obra_user_role import ObraUserRoleType
+from app.models.user import User
 from app.services.obra_service import ObraService
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
@@ -69,9 +76,8 @@ def _duration(start: date | None, due: date | None) -> int | str:
 async def export_tasks_excel(
     obra_id: int,
     db: DbSession,
-    current_user: CurrentUser,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
 ):
-    await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     tasks = await TaskRepository(db).list_by_obra(obra_id)
     if not tasks:
         raise HTTPException(404, "No hay tareas para exportar.")
@@ -217,7 +223,11 @@ async def download_template_excel(_: CurrentUserId):
 # ─── Presupuesto por obra ─────────────────────────────────────────────────────
 
 @router.get("/obras/{obra_id}/presupuesto-excel")
-async def export_presupuesto_excel(obra_id: int, db: DbSession, _: CurrentUserId):
+async def export_presupuesto_excel(
+    obra_id: int,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_obra_role(ObraUserRoleType.SOLO_LECTURA))],
+):
     """Excel del presupuesto: materiales por tarea con subtotales y totales."""
     from sqlalchemy import select
     from app.models.obra import Obra

@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
 import { InviteModal } from "../components/InviteModal";
+import { MemberObraRolesModal } from "../components/MemberObraRolesModal";
 import { fetchMembers, removeMember, updateMemberRole } from "../api/users";
-import type { ApiUser } from "../api/users";
+import type { ApiUser, ObraUserRoleType } from "../api/users";
+import { fetchObras } from "../api/obras";
+import type { Obra } from "../types";
 
 const C = {
   good: "#1F8A5B",
@@ -15,6 +18,18 @@ const C = {
 
 const AVATAR_COLORS = ["#FF6B35", "#2A6FDB", "#1F8A5B", "#9A4DC9", "#C97D0E", "#D03A3A", "#2C6571"];
 
+const OBRA_ROLE_LABELS: Record<ObraUserRoleType, string> = {
+  jefe_obra: "Jefe",
+  colaborador: "Colab.",
+  solo_lectura: "Lectura",
+};
+
+const OBRA_ROLE_COLORS: Record<ObraUserRoleType, { bg: string; color: string; border: string }> = {
+  jefe_obra:    { bg: "#FFF1E9", color: "#C45215", border: "#F7C9A3" },
+  colaborador:  { bg: "#E4F3EC", color: "#1F8A5B", border: "#BFE3CE" },
+  solo_lectura: { bg: "#EEF2F6", color: "#5B6770", border: "#D8DDE3" },
+};
+
 function getInitials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join("") || "?";
 }
@@ -25,28 +40,38 @@ export function EquipoPage() {
   const canRemove = usePermission("miembro.remove");
   const [showInvite, setShowInvite] = useState(false);
   const [members, setMembers]       = useState<ApiUser[]>([]);
+  const [obras, setObras]           = useState<Obra[]>([]);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
+  const [editingRolesFor, setEditingRolesFor] = useState<ApiUser | null>(null);
 
   function apiError(e: unknown, fallback: string): string {
     const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
     return typeof detail === "string" ? detail : fallback;
   }
 
-  useEffect(() => {
+  async function reload() {
     setLoading(true);
-    fetchMembers()
-      .then(setMembers)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [showInvite]);
+    try {
+      const [m, o] = await Promise.all([fetchMembers(), fetchObras()]);
+      setMembers(m); setObras(o);
+    } catch {
+      // silencioso: se muestra el estado vacío
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { reload(); }, [showInvite]);
 
   const active = members.filter(m => m.is_active).length;
 
   return (
     <>
-      {/* Page header */}
+      {/* Page header — el copy viejo ("todos acceden a todas las obras") era
+          mentira post Fase 2/3: ahora cada miembro tiene asignaciones por-obra
+          explícitas, salvo el admin de empresa que sigue siendo superset. */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, marginBottom: 28 }}>
         <div>
           <h1 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 28, fontWeight: 700, color: C.text, margin: 0, letterSpacing: "-0.025em" }}>
@@ -54,7 +79,7 @@ export function EquipoPage() {
           </h1>
           <p style={{ margin: "4px 0 0", fontSize: 13.5, color: C.text2 }}>
             <b style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, color: C.text }}>{active}</b>
-            {" "}miembro{active !== 1 ? "s" : ""} activo{active !== 1 ? "s" : ""} · todos acceden a todas las obras de la organización
+            {" "}miembro{active !== 1 ? "s" : ""} activo{active !== 1 ? "s" : ""} · el acceso a cada obra se configura por miembro
           </p>
         </div>
         {canInvite && (
@@ -138,6 +163,7 @@ export function EquipoPage() {
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: C.text3 }}>{m.email}</div>
+                  <ObraRolesLine member={m} onEdit={canRemove ? () => setEditingRolesFor(m) : undefined} />
                 </div>
 
                 {canRemove && !isMe ? (
@@ -216,7 +242,78 @@ export function EquipoPage() {
         )}
       </div>
 
-      {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
+      {showInvite && (
+        <InviteModal
+          obras={obras}
+          onClose={() => setShowInvite(false)}
+        />
+      )}
+      {editingRolesFor && (
+        <MemberObraRolesModal
+          member={editingRolesFor}
+          obras={obras}
+          onClose={() => setEditingRolesFor(null)}
+          onSaved={() => reload()}
+        />
+      )}
     </>
+  );
+}
+
+// ── Sub-componente: chips de obras asignadas + botón lápiz ───────────────────
+function ObraRolesLine({ member, onEdit }: { member: ApiUser; onEdit?: () => void }) {
+  const isAdmin = member.role === "admin";
+  const roles = member.obra_roles;
+  const wrap = useMemo(() => roles.slice(0, 4), [roles]);
+  const overflow = roles.length - wrap.length;
+
+  return (
+    <div style={{
+      marginTop: 6, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6,
+    }}>
+      {isAdmin ? (
+        <span style={{ fontSize: 11.5, color: C.text3, fontStyle: "italic" }}>
+          Acceso total a todas las obras
+        </span>
+      ) : roles.length === 0 ? (
+        <span style={{ fontSize: 11.5, color: C.text3 }}>
+          Sin obras asignadas
+        </span>
+      ) : (
+        <>
+          {wrap.map((r) => {
+            const c = OBRA_ROLE_COLORS[r.role];
+            return (
+              <span key={r.obra_id} style={{
+                fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 99,
+                background: c.bg, color: c.color, border: `1px solid ${c.border}`,
+                maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+              title={`${r.obra_name} · ${OBRA_ROLE_LABELS[r.role]}`}
+              >
+                {r.obra_name} · {OBRA_ROLE_LABELS[r.role]}
+              </span>
+            );
+          })}
+          {overflow > 0 && (
+            <span style={{ fontSize: 10.5, fontWeight: 600, padding: "2px 8px", borderRadius: 99, background: C.bg, color: C.text3, border: `1px solid ${C.line}` }}>
+              +{overflow} más
+            </span>
+          )}
+        </>
+      )}
+      {onEdit && !isAdmin && (
+        <button
+          onClick={onEdit}
+          title="Editar asignaciones de obra"
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: C.secondary, fontSize: 11.5, fontWeight: 600, padding: "0 4px",
+          }}
+        >
+          {roles.length === 0 ? "Asignar…" : "Editar"}
+        </button>
+      )}
+    </div>
   );
 }

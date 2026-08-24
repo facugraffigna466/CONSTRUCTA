@@ -1,5 +1,18 @@
 import { apiClient } from "./client";
 
+export type ObraUserRoleType = "jefe_obra" | "colaborador" | "solo_lectura";
+
+export interface ObraRoleForUser {
+  obra_id: number;
+  obra_name: string;
+  role: ObraUserRoleType;
+}
+
+export interface ObraAssignmentInvite {
+  obra_id: number;
+  role: ObraUserRoleType;
+}
+
 export interface ApiUser {
   id: number;
   email: string;
@@ -10,6 +23,10 @@ export interface ApiUser {
   whatsapp_number?: string | null;
   tenant_name?: string | null; // solo poblado en /users/me
   created_at: string;
+  // Asignaciones por-obra del usuario (Fase 3/4). Vacío = no está asignado a
+  // ninguna obra (los admin de empresa siempre vienen con [] y se resuelven
+  // como superset en el hook).
+  obra_roles: ObraRoleForUser[];
 }
 
 export async function fetchMe(): Promise<ApiUser> {
@@ -22,8 +39,22 @@ export async function fetchMembers(): Promise<ApiUser[]> {
   return data;
 }
 
-export async function inviteMember(email: string, role: "admin" | "collaborator"): Promise<{ invite_token: string; invite_url: string }> {
-  const { data } = await apiClient.post("/users/invite", { email, role });
+export interface InviteResponse {
+  invite_token: string;
+  invite_url: string;
+  obra_assignments: ObraAssignmentInvite[];
+}
+
+export async function inviteMember(
+  email: string,
+  role: "admin" | "collaborator",
+  obraAssignments?: ObraAssignmentInvite[] | null,
+): Promise<InviteResponse> {
+  const payload: Record<string, unknown> = { email, role };
+  if (obraAssignments && obraAssignments.length > 0) {
+    payload.obra_assignments = obraAssignments;
+  }
+  const { data } = await apiClient.post<InviteResponse>("/users/invite", payload);
   return data;
 }
 
@@ -31,6 +62,10 @@ export interface InviteContext {
   email: string;
   role: string;
   company_name: string | null;
+  // Obras a las que el invitado se va a asignar al aceptar. Se hidrata con el
+  // nombre de la obra para que la pantalla de accept pueda mostrar "vas a
+  // entrar a X obras" antes de tipear la clave.
+  obra_assignments: ObraRoleForUser[];
 }
 
 export async function fetchInviteContext(token: string): Promise<InviteContext> {
