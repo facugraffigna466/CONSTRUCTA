@@ -7,6 +7,13 @@
       "runtimeArgs": ["vite", "--port", "5174"],
       "cwd": "frontend",
       "port": 5174
+    },
+    {
+      "name": "backend",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": ["app.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"],
+      "cwd": "backend",
+      "port": 8000
     }
   ]
 }

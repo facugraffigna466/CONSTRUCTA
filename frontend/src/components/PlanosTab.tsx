@@ -324,9 +324,10 @@ function NuevoPlanoModal({
 
 // ── Fila de un plano, con su vigente y su historial ──────────────────────────
 function DocumentoRow({
-  doc, canDelete, onNuevaVersion, onDelete, onMarkVigente,
+  doc, canUpload, canDelete, onNuevaVersion, onDelete, onMarkVigente,
 }: {
   doc: Documento;
+  canUpload: boolean;
   canDelete: boolean;
   onNuevaVersion: (doc: Documento) => void;
   onDelete: (p: Plano) => void;
@@ -362,9 +363,11 @@ function DocumentoRow({
             <Download size={14} />
           </a>
         )}
-        <button onClick={() => onNuevaVersion(doc)} style={textBtn}>
-          <Plus size={13} /> Nueva versión
-        </button>
+        {canUpload && (
+          <button onClick={() => onNuevaVersion(doc)} style={textBtn}>
+            <Plus size={13} /> Nueva versión
+          </button>
+        )}
         {canDelete && (
           <button onClick={() => onDelete(v)} title="Eliminar" style={{ ...iconBtn, color: C.text3 }}>
             <Trash2 size={14} />
@@ -638,7 +641,7 @@ export function PlanosTab({ obraId }: { obraId: number }) {
                 </div>
                 {docs.map(doc => (
                   <DocumentoRow
-                    key={doc.key} doc={doc} canDelete={canDelete}
+                    key={doc.key} doc={doc} canUpload={canUpload} canDelete={canDelete}
                     onNuevaVersion={pedirVersion}
                     onDelete={remove}
                     onMarkVigente={markVigente}
