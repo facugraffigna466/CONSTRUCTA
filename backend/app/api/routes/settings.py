@@ -18,7 +18,7 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 
 @router.get("", response_model=SettingsRead)
 async def get_settings(db: DbSession, current_user: AdminUser) -> SettingsRead:
-    obj = await SettingsRepository(db).get_or_create(current_user.id)
+    obj = await SettingsRepository(db).get_or_create(current_user.tenant_id)
     return SettingsRead.model_validate(obj)
 
 
@@ -27,7 +27,7 @@ async def patch_settings(
     data: SettingsPatch, db: DbSession, current_user: AdminUser
 ) -> SettingsRead:
     updates = data.model_dump(exclude_none=True)
-    obj = await SettingsRepository(db).update(current_user.id, updates)
+    obj = await SettingsRepository(db).update(current_user.tenant_id, updates)
     return SettingsRead.model_validate(obj)
 
 
@@ -65,6 +65,11 @@ async def test_whatsapp(body: TestWhatsAppRequest, _: AdminUser) -> dict:
 
 
 @router.post("/simulate-overdue")
-async def simulate_overdue(db: DbSession, _: AdminUser) -> dict:
-    count = await NotificationService(db).mark_overdue_tasks()
+async def simulate_overdue(db: DbSession, current_user: AdminUser) -> dict:
+    # Scopeado al tenant del admin que dispara la simulación — sin esto,
+    # "Simular vencidos" en Configuración marcaba como vencidas las tareas de
+    # TODAS las empresas del sistema (docs/auditoria/11-panel-configuracion.md,
+    # hallazgo 3). El cron real (scheduler.py) sigue llamando sin tenant_id
+    # a propósito: ese sí debe procesar todo el sistema en cada corrida.
+    count = await NotificationService(db).mark_overdue_tasks(tenant_id=current_user.tenant_id)
     return {"alerts_created": count}

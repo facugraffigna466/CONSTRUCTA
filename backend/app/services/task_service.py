@@ -13,6 +13,7 @@ from app.repositories.calendar import CalendarRepository
 from app.repositories.historial import HistorialRepository
 from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
+from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
 from app.repositories.user import UserRepository
 from app.schemas.task import DependencyLinkInput, TaskCreate, TaskDueSoonRead, TaskStatusUpdate, TaskUpdate
@@ -82,6 +83,7 @@ class TaskService:
         self.historial = HistorialRepository(session)
         self.alert_repo = AlertRepository(session)
         self.calendar_repo = CalendarRepository(session)
+        self.settings_repo = SettingsRepository(session)
 
     # ── guards ────────────────────────────────────────────────────────────────
 
@@ -903,7 +905,11 @@ class TaskService:
                 already_blocked = await self.alert_repo.exists_unread_for_task(
                     task_id, AlertType.TASK_BLOCKED, blocked_msg
                 )
-                if not already_blocked:
+                # notify_task_blocked era decorativo — se guardaba pero ningún
+                # servicio lo leía (docs/auditoria/11-panel-configuracion.md,
+                # hallazgo 2).
+                cfg = await self.settings_repo.get_for_obra(task.obra_id)
+                if not already_blocked and cfg.notify_task_blocked:
                     await self.alert_repo.create_alert(
                         alert_type=AlertType.TASK_BLOCKED,
                         message=blocked_msg,

@@ -6,7 +6,7 @@ Endpoints (called by n8n on schedule):
   mark_overdue_tasks()   – TASK_OVERDUE alerts for tasks past due_date
   mark_no_response()     – NO_RESPONSE alerts for unanswered reminders
 
-All operations respect the per-manager SystemSettings configured in the UI.
+All operations respect the per-tenant SystemSettings configured in the UI.
 """
 import logging
 from datetime import date, datetime, timedelta, timezone
@@ -54,7 +54,7 @@ class NotificationService:
 
         Uses a ±30-minute window around (now + hours_ahead) so the scheduler can
         run hourly and each task is hit exactly once per reminder window.
-        Skips tasks whose manager has disabled auto_reminders or the specific
+        Skips tasks whose tenant has disabled auto_reminders or the specific
         reminder flag for this hour window (reminder_1day=24h, reminder_3days=72h).
         """
         now = datetime.now(timezone.utc)
@@ -129,20 +129,24 @@ class NotificationService:
 
         return count
 
-    async def mark_overdue_tasks(self) -> int:
+    async def mark_overdue_tasks(self, tenant_id: int | None = None) -> int:
         """Create TASK_OVERDUE alerts for tasks past their due_date.
 
-        Skips tasks whose manager has disabled the alert_overdue setting.
+        Skips tasks whose tenant has disabled alert_overdue o notify_task_overdue.
+        `tenant_id=None` (uso normal del scheduler) procesa TODO el sistema, una
+        corrida por cron para todas las empresas; pasar un tenant_id puntual es
+        para el endpoint de testing (/settings/simulate-overdue), que no debe
+        tocar otras empresas.
         """
         today = date.today()
-        tasks = await self.task_repo.list_overdue(today)
+        tasks = await self.task_repo.list_overdue(today, tenant_id=tenant_id)
         count = 0
         for task in tasks:
             cfg = await self.settings_repo.get_for_obra(task.obra_id)
 
-            if not cfg.alert_overdue:
+            if not cfg.alert_overdue or not cfg.notify_task_overdue:
                 logger.debug(
-                    "alert_overdue disabled for obra %d — skipping task %d",
+                    "alert_overdue/notify_task_overdue disabled for obra %d — skipping task %d",
                     task.obra_id, task.id,
                 )
                 continue
@@ -216,7 +220,7 @@ class NotificationService:
             resp_name = responsible.full_name if responsible else f"Responsable #{outbound.responsible_id}"
 
             # ── Create NO_RESPONSE alert ───────────────────────────────────────
-            if cfg.alert_no_response:
+            if cfg.alert_no_response and cfg.notify_no_response:
                 msg = f"Sin respuesta de {resp_name} para la tarea '{task.title}'."
                 if not await self.alert_repo.exists_for_task(task.id, AlertType.NO_RESPONSE, msg):
                     await self.alert_repo.create_alert(

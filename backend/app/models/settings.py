@@ -7,12 +7,19 @@ from app.core.database import Base
 
 
 class SystemSettings(Base):
+    """Configuración del chatbot/alertas — una por EMPRESA, no por usuario (ver
+    docs/auditoria/11-panel-configuracion.md, hallazgo 1). Son reglas que pone
+    la empresa (horario de atención, qué alertas mostrar), no una preferencia
+    personal del manager que las cargó — antes ligarlas a `manager_id` hacía
+    que dos obras de la misma empresa, con managers distintos, terminaran con
+    el chatbot operando en horarios completamente distintos."""
+
     __tablename__ = "system_settings"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    manager_id: Mapped[int] = mapped_column(
+    tenant_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
         unique=True,
         nullable=False,
         index=True,

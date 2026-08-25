@@ -34,6 +34,7 @@ from app.repositories.alert import AlertRepository
 from app.repositories.conversation_session import ConversationSessionRepository
 from app.repositories.historial import HistorialRepository
 from app.repositories.obra import ObraRepository
+from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
 from app.schemas.task import TaskStatusUpdate
 from app.services.message_templates import (
@@ -252,6 +253,7 @@ class ConversationService:
         self.obra_repo = ObraRepository(session)
         self.historial = HistorialRepository(session)
         self.alert_repo = AlertRepository(session)
+        self.settings_repo = SettingsRepository(session)
         self.session_repo = ConversationSessionRepository(session)
         self.task_service = TaskService(session)
 
@@ -715,12 +717,18 @@ class ConversationService:
                     f"{responsible.full_name} informó demora en '{task.title}'. "
                     f"Fecha sugerida: {suggested}."
                 )
-                await self.alert_repo.create_alert(
-                    alert_type=AlertType.RESCHEDULE_REQUESTED,
-                    message=alert_msg,
-                    obra_id=task.obra_id,
-                    task_id=task_id,
-                )
+                # notify_rescheduled era decorativo — se guardaba pero ningún
+                # servicio lo leía (docs/auditoria/11-panel-configuracion.md,
+                # hallazgo 2). El historial se sigue registrando siempre (es
+                # trazabilidad, no una notificación que se pueda apagar).
+                cfg = await self.settings_repo.get_for_obra(task.obra_id)
+                if cfg.notify_rescheduled:
+                    await self.alert_repo.create_alert(
+                        alert_type=AlertType.RESCHEDULE_REQUESTED,
+                        message=alert_msg,
+                        obra_id=task.obra_id,
+                        task_id=task_id,
+                    )
                 await self.historial.log(
                     obra_id=task.obra_id,
                     task_id=task_id,
