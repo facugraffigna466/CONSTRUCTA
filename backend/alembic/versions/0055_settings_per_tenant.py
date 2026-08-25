@@ -13,15 +13,15 @@ user_id) — es quien creó la empresa, la config más "oficial" disponible.
 Si el owner no tiene fila propia, gana la más antigua (created_at ASC)
 entre las que sí existen para ese tenant. El resto se borra.
 
-Revision ID: 0053
-Revises: 0052
+Revision ID: 0055
+Revises: 0054
 Create Date: 2026-08-25
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0053"
-down_revision = "0052"
+revision = "0055"
+down_revision = "0054"
 branch_labels = None
 depends_on = None
 
