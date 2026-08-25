@@ -7,6 +7,10 @@ export interface PlanLimitInfo {
   current?: number;
   limit?: number;
   plan?: string;
+  /** "plan_expired" = el plan venció (hay que RENOVAR el mismo plan, no subir
+   * de categoría); "plan_limit_reached" (u otro) = tocó techo del plan (ahí sí
+   * tiene sentido ofrecer subir de plan). */
+  code?: string;
 }
 
 /** Extrae la info de límite de plan de un error HTTP 402, o null si no es 402. */
@@ -17,7 +21,7 @@ export function getPlanLimitError(err: unknown): PlanLimitInfo | null {
   if (resp?.status !== 402) return null;
   const d = resp.data?.detail;
   if (d && typeof d === "object" && d.message) {
-    return { message: d.message, resource: d.resource, current: d.current, limit: d.limit, plan: d.plan };
+    return { message: d.message, resource: d.resource, current: d.current, limit: d.limit, plan: d.plan, code: d.code };
   }
   return { message: "Alcanzaste el límite de tu plan. Actualizá para continuar." };
 }
@@ -27,7 +31,9 @@ const PLAN_LABEL: Record<string, string> = {
 };
 
 export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: () => void }) {
+  const expired = info.code === "plan_expired";
   const nextPlan = info.plan === "basico" ? "Pro" : "Enterprise";
+  const currentPlanLabel = info.plan ? (PLAN_LABEL[info.plan] ?? info.plan) : "tu plan";
   const dialogRef = useDialog(onClose);
   return (
     <div style={{
@@ -54,7 +60,7 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: 16.5, fontWeight: 800, color: "#fff" }}>
-                Llegaste al límite de tu plan
+                {expired ? "Tu plan venció" : "Llegaste al límite de tu plan"}
               </h2>
               {info.plan && (
                 <p style={{ margin: "2px 0 0", fontSize: 12, color: "rgba(255,255,255,0.75)" }}>
@@ -92,8 +98,11 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
             background: "#FFF8F3", border: "1px solid #FDDFC8",
             fontSize: 12.5, color: "#9A5D08", lineHeight: 1.5,
           }}>
-            El plan <strong>{nextPlan}</strong> desbloquea más obras, usuarios y tareas.
-            Escribinos y lo activamos en el día.
+            {expired ? (
+              <>Renovando tu plan <strong>{currentPlanLabel}</strong> recuperás el acceso normal — no hace falta cambiar de plan, solo ponerlo al día.</>
+            ) : (
+              <>El plan <strong>{nextPlan}</strong> desbloquea más obras, usuarios y tareas. Escribinos y lo activamos en el día.</>
+            )}
           </div>
         </div>
 
@@ -105,7 +114,11 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
             Ahora no
           </button>
           <a
-            href="mailto:contacto@constructa.com.ar?subject=Quiero%20actualizar%20mi%20plan"
+            href={
+              expired
+                ? "mailto:contacto@constructa.com.ar?subject=Quiero%20renovar%20mi%20plan"
+                : "mailto:contacto@constructa.com.ar?subject=Quiero%20actualizar%20mi%20plan"
+            }
             style={{
               display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none",
               padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700,
@@ -114,7 +127,7 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
             }}
           >
             <Rocket style={{ width: 13, height: 13 }} />
-            Quiero el plan {nextPlan}
+            {expired ? "Renovar mi plan" : `Quiero el plan ${nextPlan}`}
           </a>
         </div>
       </div>

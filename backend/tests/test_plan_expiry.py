@@ -44,7 +44,12 @@ async def test_tenant_vencido_bloquea_crear_obra(db, client):
         headers=_auth(create_access_token(admin.id)),
     )
     assert r.status_code == 402, r.text
-    assert r.json()["detail"]["code"] == "plan_expired"
+    detail = r.json()["detail"]
+    assert detail["code"] == "plan_expired"
+    # El UpgradeModal del frontend necesita `plan` para calcular a qué plan
+    # sugerir el upgrade — sin esto caía siempre a "Enterprise" aunque el
+    # tenant fuera básico.
+    assert detail["plan"] == "test-expiry"
 
 
 async def test_tenant_vencido_bloquea_invitar(db, client):

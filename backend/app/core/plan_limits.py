@@ -49,11 +49,11 @@ async def check_plan_limit(
     if not tenant or not tenant.plan_id:
         return
 
-    _check_active_until(tenant)
-
     plan = await db.get(Plan, tenant.plan_id)
     if not plan:
         return
+
+    _check_active_until(tenant, plan)
 
     if resource == "obras":
         limit = plan.max_obras
@@ -139,13 +139,18 @@ async def check_plan_limit(
         )
 
 
-def _check_active_until(tenant: Tenant) -> None:
+def _check_active_until(tenant: Tenant, plan: Plan) -> None:
     """`tenant.active_until` se guarda pero hasta ahora no se hacía cumplir en
     ningún lado — un tenant con el plan vencido seguía operando normal (ver
     docs/auditoria/10-panel-admin.md, hallazgo 2). Se bloquea acá, en el mismo
     punto donde ya se chequean los límites de plan, así cualquier acción que
     cree recursos (obras, invitar usuarios, tareas) queda cubierta sin tener
-    que agregar el guard en cada endpoint por separado."""
+    que agregar el guard en cada endpoint por separado.
+
+    Incluye `plan` en el detail (igual que _raise_upgrade_error) — el
+    UpgradeModal del frontend lo necesita para calcular a qué plan sugerir el
+    upgrade (basico→Pro, cualquier otro→Enterprise); sin él caía siempre a
+    "Enterprise" por el fallback del ternario, aunque el tenant fuera básico."""
     if tenant.active_until is None:
         return
     active_until = tenant.active_until
@@ -156,6 +161,7 @@ def _check_active_until(tenant: Tenant) -> None:
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail={
                 "code": "plan_expired",
+                "plan": plan.name,
                 "active_until": tenant.active_until.isoformat(),
                 "message": "Tu plan venció. Renovalo para seguir creando obras, tareas o invitando gente.",
             },
