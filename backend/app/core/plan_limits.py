@@ -49,6 +49,8 @@ async def check_plan_limit(
     if not tenant or not tenant.plan_id:
         return
 
+    _check_active_until(tenant)
+
     plan = await db.get(Plan, tenant.plan_id)
     if not plan:
         return
@@ -134,6 +136,29 @@ async def check_plan_limit(
             _raise_upgrade_error("tareas por obra", current, limit, plan.name)
         _maybe_schedule_plan_warning(
             db, tenant, plan, "tareas por obra", current + requested, limit, requested,
+        )
+
+
+def _check_active_until(tenant: Tenant) -> None:
+    """`tenant.active_until` se guarda pero hasta ahora no se hacía cumplir en
+    ningún lado — un tenant con el plan vencido seguía operando normal (ver
+    docs/auditoria/10-panel-admin.md, hallazgo 2). Se bloquea acá, en el mismo
+    punto donde ya se chequean los límites de plan, así cualquier acción que
+    cree recursos (obras, invitar usuarios, tareas) queda cubierta sin tener
+    que agregar el guard en cada endpoint por separado."""
+    if tenant.active_until is None:
+        return
+    active_until = tenant.active_until
+    if active_until.tzinfo is None:  # SQLite devuelve naive
+        active_until = active_until.replace(tzinfo=timezone.utc)
+    if active_until < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "code": "plan_expired",
+                "active_until": tenant.active_until.isoformat(),
+                "message": "Tu plan venció. Renovalo para seguir creando obras, tareas o invitando gente.",
+            },
         )
 
 

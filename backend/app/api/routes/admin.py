@@ -34,28 +34,28 @@ async def get_tenant_usage(current_user: AdminUser, db: DbSession):
         plan=PlanRead.model_validate(plan) if plan else None,
     )
 
-    # Counts
-    obras_q = await db.execute(
-        select(func.count()).where(Obra.tenant_id == tenant_id) if tenant_id
-        else select(func.count(Obra.id))
-    )
-    users_q = await db.execute(
-        select(func.count()).where(User.tenant_id == tenant_id, User.is_active == True) if tenant_id
-        else select(func.count(User.id)).where(User.is_active == True)
-    )
-    # Consistente con obras/users: contar SOLO las tareas de este tenant. Antes
-    # contaba todas las del sistema (número equivocado en el panel del tenant +
-    # fuga del total global de tareas de otras empresas).
-    tasks_q = await db.execute(
-        select(func.count(Task.id)).where(Task.tenant_id == tenant_id) if tenant_id
-        else select(func.count(Task.id))
-    )
+    # Counts — SIEMPRE scopeados a este tenant. Sin tenant_id no hay "este
+    # tenant" que contar: 0, nunca la rama alternativa "contar todo el sistema"
+    # (ese patrón ya produjo un bug real de fuga cross-tenant en tasks_count;
+    # ver docs/auditoria/10-panel-admin.md, hallazgo 1).
+    if tenant_id:
+        obras_count = (await db.execute(
+            select(func.count()).where(Obra.tenant_id == tenant_id)
+        )).scalar_one()
+        users_count = (await db.execute(
+            select(func.count()).where(User.tenant_id == tenant_id, User.is_active == True)
+        )).scalar_one()
+        tasks_count = (await db.execute(
+            select(func.count(Task.id)).where(Task.tenant_id == tenant_id)
+        )).scalar_one()
+    else:
+        obras_count = users_count = tasks_count = 0
 
     return PlanUsage(
         tenant=tenant_read,
-        obras_count=obras_q.scalar_one(),
-        users_count=users_q.scalar_one(),
-        tasks_count=tasks_q.scalar_one(),
+        obras_count=obras_count,
+        users_count=users_count,
+        tasks_count=tasks_count,
         obras_limit=plan.max_obras if plan else None,
         users_limit=plan.max_users if plan else None,
         tasks_per_obra_limit=plan.max_tasks_per_obra if plan else None,
