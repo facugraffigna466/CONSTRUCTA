@@ -18,7 +18,10 @@ class TenantRead(BaseModel):
     name: str
     plan_id: int | None
     owner_user_id: int | None
-    created_at: datetime
+    # Optional porque /admin/usage arma un TenantRead "vacío" (Sin tenant) para
+    # el caso de un admin sin tenant_id — ver hallazgo 1 de docs/auditoria/
+    # 10-panel-admin.md.
+    created_at: datetime | None
     active_until: datetime | None
     plan: PlanRead | None = None
 

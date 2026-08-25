@@ -7,6 +7,7 @@ import { fetchMembers, inviteMember, removeMember, resendInvite } from "../api/u
 import type { ApiUser, ObraAssignmentInvite, ObraUserRoleType } from "../api/users";
 import type { Obra } from "../types";
 import { useConfirm } from "./ConfirmProvider";
+import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 
 interface Props {
   onClose: () => void;
@@ -65,6 +66,7 @@ export function InviteModal({ onClose, obras = [] }: Props) {
   const [error, setError]         = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<number | null>(null);
   const [resentId, setResentId]       = useState<number | null>(null);
+  const [planLimit, setPlanLimit]     = useState<PlanLimitInfo | null>(null);
   // Fase 4: rol por obra (opcional). Vacío = no asigna a esa obra.
   const [obraRoles, setObraRoles] = useState<Record<number, ObraUserRoleType | "">>({});
   const [obrasExpanded, setObrasExpanded] = useState(false);
@@ -111,6 +113,8 @@ export function InviteModal({ onClose, obras = [] }: Props) {
       loadMembers();
       setTimeout(() => setSent(false), 6000);
     } catch (e: unknown) {
+      const limitInfo = getPlanLimitError(e);
+      if (limitInfo) { setPlanLimit(limitInfo); setSending(false); return; }
       const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
       const msg = typeof detail === "string"
         ? detail
@@ -489,6 +493,7 @@ export function InviteModal({ onClose, obras = [] }: Props) {
           </div>
         )}
       </div>
+      {planLimit && <UpgradeModal info={planLimit} onClose={() => setPlanLimit(null)} />}
     </div>
   );
 }

@@ -50,3 +50,26 @@ async def test_usage_counts_are_tenant_scoped(client, two_tenants_with_tasks):
     assert body["tasks_count"] == 2, f"Fuga cross-tenant en tasks_count: {body['tasks_count']}"
     assert body["obras_count"] == 1
     assert body["users_count"] == 1
+
+
+async def test_usage_sin_tenant_no_filtra_conteo_global(db, client, two_tenants_with_tasks):
+    """Un admin sin tenant_id (estado roto, no debería pasar en producción) NO
+    debe ver los conteos de TODO el sistema — antes la rama `else` de la query
+    caía a `select(func.count(X.id))` sin filtro, que sumaba obras/tareas/users
+    de todas las empresas (docs/auditoria/10-panel-admin.md, hallazgo 1)."""
+    huerfano = User(
+        email="huerfano@x.com", hashed_password="x", full_name="Sin Tenant",
+        role="admin", is_active=True, tenant_id=None,
+    )
+    db.add(huerfano)
+    await db.flush()
+    await db.commit()
+
+    r = await client.get(f"{API}/admin/usage", headers=_auth(create_access_token(huerfano.id)))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    # Entre las dos tenants del fixture hay 2 obras, 2 users, 5 tareas en total —
+    # si la rama global sobreviviera, alguno de estos números sería > 0.
+    assert body["obras_count"] == 0
+    assert body["users_count"] == 0
+    assert body["tasks_count"] == 0
