@@ -146,8 +146,7 @@ class AlertRepository(BaseRepository[Alert]):
         if obra_id is not None:
             stmt = stmt.where(Alert.obra_id == obra_id)
         if tenant_id is not None:
-            from app.models.obra import Obra
-            stmt = stmt.join(Obra, Alert.obra_id == Obra.id).where(Obra.tenant_id == tenant_id)
+            stmt = stmt.where(Alert.tenant_id == tenant_id)
         alerts = list((await self.session.execute(stmt)).scalars().all())
         for alert in alerts:
             alert.is_read = True
@@ -167,8 +166,7 @@ class AlertRepository(BaseRepository[Alert]):
         if obra_id is not None:
             stmt = stmt.where(Alert.obra_id == obra_id)
         if tenant_id is not None:
-            from app.models.obra import Obra
-            stmt = stmt.join(Obra, Alert.obra_id == Obra.id).where(Obra.tenant_id == tenant_id)
+            stmt = stmt.where(Alert.tenant_id == tenant_id)
         stmt = stmt.order_by(Alert.created_at.desc())
         if limit is not None:
             stmt = stmt.limit(limit)

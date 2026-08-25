@@ -114,8 +114,11 @@ async def connect(sid: str, environ: dict, auth: dict | None) -> None:
             obras = await ObraRepository(db).list_all(tenant_id=user.tenant_id)
             for obra in obras:
                 await sio.enter_room(sid, f"obra_{obra.id}")
+            # Sala del tenant para eventos globales del portfolio (obra_created/updated/deleted).
+            if user.tenant_id is not None:
+                await sio.enter_room(sid, f"tenant_{user.tenant_id}")
 
-        await sio.save_session(sid, {"user_id": user_id})
+        await sio.save_session(sid, {"user_id": user_id, "tenant_id": user.tenant_id})
         _sessions[sid] = _user_card(user_id, user.full_name)
         await _broadcast_online()
         logger.info("connect OK sid=%s user_id=%d name=%s sessions=%d", sid, user_id, user.full_name, len(_sessions))
@@ -265,6 +268,49 @@ async def emit_task_deleted(task_id: int, obra_id: int, title: str, actor: dict 
     }
     await sio.emit("task_deleted", payload, room=f"obra_{obra_id}")
     logger.debug("task_deleted taskId=%d obraId=%d", task_id, obra_id)
+
+
+# ── Obra events (called from obra_service) ────────────────────────────────────
+
+def _obra_payload(obra) -> dict:
+    return {
+        "id": obra.id,
+        "name": obra.name,
+        "status": obra.status.value if hasattr(obra.status, "value") else obra.status,
+        "tenantId": obra.tenant_id,
+    }
+
+
+async def emit_obra_created(obra, actor: dict | None = None) -> None:
+    if obra.tenant_id is None:
+        return
+    payload = {**_obra_payload(obra), "actor": actor}
+    await sio.emit("obra_created", payload, room=f"tenant_{obra.tenant_id}")
+    # A los ya conectados del tenant les damos acceso a la sala de la nueva obra.
+    for sid, sess in list(_sessions.items()):
+        try:
+            session = await sio.get_session(sid)
+        except KeyError:
+            continue
+        if session.get("tenant_id") == obra.tenant_id:
+            await sio.enter_room(sid, f"obra_{obra.id}")
+    logger.debug("obra_created obraId=%d tenantId=%d", obra.id, obra.tenant_id)
+
+
+async def emit_obra_updated(obra, actor: dict | None = None) -> None:
+    if obra.tenant_id is None:
+        return
+    payload = {**_obra_payload(obra), "actor": actor}
+    await sio.emit("obra_updated", payload, room=f"tenant_{obra.tenant_id}")
+    logger.debug("obra_updated obraId=%d tenantId=%d", obra.id, obra.tenant_id)
+
+
+async def emit_obra_deleted(obra_id: int, tenant_id: int, actor: dict | None = None) -> None:
+    if tenant_id is None:
+        return
+    payload = {"id": obra_id, "tenantId": tenant_id, "actor": actor}
+    await sio.emit("obra_deleted", payload, room=f"tenant_{tenant_id}")
+    logger.debug("obra_deleted obraId=%d tenantId=%d", obra_id, tenant_id)
 
 
 async def emit_bitacora_created(

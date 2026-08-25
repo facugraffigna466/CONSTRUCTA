@@ -8,5 +8,5 @@ router = APIRouter(prefix="/presence", tags=["presence"])
 
 @router.get("/online")
 async def online_users(current_user: CurrentUser):
-    heartbeat(current_user.id, current_user.full_name)
-    return {"users": get_online()}
+    heartbeat(current_user.id, current_user.full_name, current_user.tenant_id)
+    return {"users": get_online(current_user.tenant_id)}

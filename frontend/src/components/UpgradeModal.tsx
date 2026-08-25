@@ -105,7 +105,7 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
             Ahora no
           </button>
           <a
-            href="mailto:ventas@constructa.app?subject=Quiero%20actualizar%20mi%20plan"
+            href="mailto:contacto@constructa.com.ar?subject=Quiero%20actualizar%20mi%20plan"
             style={{
               display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none",
               padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700,

@@ -16,7 +16,11 @@ interface PresencePayload {
   editing: Record<string, OnlineUser>;
 }
 
-/** Usuarios online globalmente (excluye al usuario actual). Polling HTTP cada 10s. */
+/** Usuarios online globalmente (excluye al usuario actual). Polling HTTP cada 10s.
+ *
+ * 6.10 de la auditoría del panel: cuando el tab está en background suspendemos
+ * el interval. Al volver a foreground refrescamos de una y reanudamos.
+ */
 export function useOnlineUsers(): OnlineUser[] {
   const { user } = useUser();
   const [online, setOnline] = useState<OnlineUser[]>([]);
@@ -25,6 +29,7 @@ export function useOnlineUsers(): OnlineUser[] {
 
   useEffect(() => {
     let cancelled = false;
+    let interval: number | null = null;
 
     async function poll() {
       try {
@@ -35,11 +40,31 @@ export function useOnlineUsers(): OnlineUser[] {
       }
     }
 
-    poll();
-    const interval = setInterval(poll, 10_000);
+    function start() {
+      if (interval !== null) return;
+      poll();
+      interval = window.setInterval(poll, 10_000);
+    }
+
+    function stop() {
+      if (interval !== null) {
+        window.clearInterval(interval);
+        interval = null;
+      }
+    }
+
+    function handleVisibility() {
+      if (document.hidden) stop();
+      else start();
+    }
+
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", handleVisibility);
+
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      stop();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
