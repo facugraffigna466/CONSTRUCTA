@@ -1,7 +1,8 @@
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import ForbiddenError, NotFoundError
-from app.models.obra import Obra
+from app.models.obra import Obra, ObraStatus
 from app.models.task import TaskStatus
 from app.repositories.historial import HistorialRepository
 from app.repositories.obra import ObraRepository
@@ -26,6 +27,8 @@ class ObraService:
             payload={"actor": actor} if actor else None,
             triggered_by="user",
         )
+        from app.core.socket_manager import emit_obra_created
+        await emit_obra_created(obra, actor=actor)
         return obra
 
     async def get_or_raise(self, obra_id: int, tenant_id: int | None = None) -> Obra:
@@ -82,6 +85,26 @@ class ObraService:
         if not changes:
             return obra
 
+        # Hallazgo 5.4 de docs/auditoria/02-panel-resumen.md: si el usuario pide
+        # "en_progreso" manualmente pero ninguna tarea justifica ese estado,
+        # el recompute automático lo revertía sin avisar. Rechazamos de una con
+        # 400 explícito para que el frontend muestre un toast útil.
+        requested_status = changes.get("status")
+        if requested_status == ObraStatus.EN_PROGRESO and obra.status != ObraStatus.EN_PROGRESO:
+            from app.repositories.task import TaskRepository
+            all_tasks = await TaskRepository(self.repo.session).list_by_obra(obra_id)
+            justifies = any(
+                t.status in (TaskStatus.EN_PROGRESO, TaskStatus.BLOQUEADA, TaskStatus.COMPLETADA)
+                or (t.estimated_progress or 0) > 0
+                for t in all_tasks
+                if t.status != TaskStatus.CANCELADA
+            )
+            if not justifies:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Iniciá al menos una tarea para marcar la obra en progreso.",
+                )
+
         updated = await self.repo.update_fields(obra_id, **changes)
         if actor is not None:
             changes_json["actor"] = actor
@@ -95,16 +118,23 @@ class ObraService:
         # Si el cambio manual devolvió la obra al tramo automático (reactivar/reabrir),
         # recalcular al toque el estado derivado (sin re-completar en el mismo acto)
         # y devolver la obra ya recalculada.
+        from app.core.socket_manager import emit_obra_updated
         if "status" in changes:
             from app.services.task_service import TaskService
             await TaskService(self.repo.session).recompute_obra_status(obra_id, allow_complete=False)
-            return await self.get_for_manager(obra_id, manager_id)
+            fresh = await self.get_for_manager(obra_id, manager_id)
+            await emit_obra_updated(fresh, actor=actor)
+            return fresh
+        await emit_obra_updated(updated, actor=actor)
         return updated  # type: ignore[return-value]
 
     async def delete(self, obra_id: int, manager_id: int) -> None:
-        await self.get_for_manager(obra_id, manager_id)
+        obra = await self.get_for_manager(obra_id, manager_id)
+        tenant_id = obra.tenant_id
         await self._cleanup_plano_files(obra_id)
         await self.repo.delete(obra_id)
+        from app.core.socket_manager import emit_obra_deleted
+        await emit_obra_deleted(obra_id, tenant_id)
 
     async def _cleanup_plano_files(self, obra_id: int) -> None:
         """El FK de Plano.obra_id es ON DELETE CASCADE — borra las filas solo, así

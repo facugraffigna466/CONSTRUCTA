@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { PlusIcon, MapPinIcon } from "@heroicons/react/24/outline";
 import { GooeyInput } from "@/components/ui/gooey-input";
 import { fetchObras, updateObraStatus, deleteObra } from "../api/obras";
+import { fetchPlanUsage } from "../api/admin";
+import { UpgradeModal, type PlanLimitInfo } from "../components/UpgradeModal";
+import type { PlanUsage } from "../types";
 import { fetchMembers, type ApiUser } from "../api/users";
 import { userAvatarColor } from "../context/UserContext";
 import { Spinner } from "../components/Spinner";
 import { usePermission } from "../hooks/usePermission";
+import { useObraSocket } from "../hooks/useObraSocket";
 import type { Obra, ObraStatus } from "../types";
 import { useConfirm } from "../components/ConfirmProvider";
 
@@ -312,6 +316,20 @@ const FILTER_OPTIONS: { id: ObraFilter; label: string }[] = [
   { id: "pausada",     label: "Pausadas"     },
   { id: "completada",  label: "Completadas"  },
 ];
+const VALID_FILTERS = new Set<string>(FILTER_OPTIONS.map(f => f.id));
+
+// 6.9: leer estado inicial de filtro y búsqueda desde ?filter=&q=.
+// Sin React Router: usamos URLSearchParams sobre location.search.
+function readInitialFilterFromUrl(): ObraFilter {
+  if (typeof window === "undefined") return "todas";
+  const raw = new URLSearchParams(window.location.search).get("filter");
+  return raw && VALID_FILTERS.has(raw) ? (raw as ObraFilter) : "todas";
+}
+
+function readInitialSearchFromUrl(): string {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("q") ?? "";
+}
 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 
@@ -366,8 +384,11 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
   const [, setRefreshing] = useState(false);
-  const [filter,     setFilter]     = useState<ObraFilter>("todas");
-  const [search,     setSearch]     = useState("");
+  const [filter,     setFilter]     = useState<ObraFilter>(readInitialFilterFromUrl);
+  const [search,     setSearch]     = useState<string>(readInitialSearchFromUrl);
+  // 6.8: si el tenant llegó al límite del plan, el ghost card se rendera en gris.
+  const [planUsage,  setPlanUsage]  = useState<PlanUsage | null>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<PlanLimitInfo | null>(null);
 
   const loadData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -388,14 +409,48 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
     } catch {
       // Silently ignored — collaborators don't have access to member list
     }
+    try {
+      // Solo admins tienen acceso a /admin/usage. Los collaborators no pueden
+      // crear obras igualmente, así que la ausencia de este dato no los afecta.
+      const usage = await fetchPlanUsage();
+      setPlanUsage(usage);
+    } catch {
+      // Silencio: collaborators → 403. El ghost card se muestra sin banner.
+    }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // 6.9: espejamos filtro + búsqueda en la URL para que el estado sea compartible
+  // y sobreviva a un F5. replaceState (no pushState) evita ensuciar el back button.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (filter === "todas") params.delete("filter"); else params.set("filter", filter);
+    const q = search.trim();
+    if (q === "") params.delete("q"); else params.set("q", q);
+    const qs = params.toString();
+    const next = `${window.location.pathname}${qs ? `?${qs}` : ""}${window.location.hash}`;
+    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState({}, "", next);
+    }
+  }, [filter, search]);
+
+  // Reflejar cambios en tiempo real (obra creada/editada/borrada por otro miembro
+  // del tenant) — hallazgo 5.1 de docs/auditoria/02-panel-resumen.md.
+  useObraSocket({
+    onObraCreated: () => loadData(true),
+    onObraUpdated: () => loadData(true),
+    onObraDeleted: (p) => setObras(prev => prev.filter(o => o.id !== p.id)),
+  });
+
   const pinnedIds = new Set(pinnedObras.map(o => o.id));
   const byStatus = (s: ObraStatus) => obras.filter(o => o.status === s).length;
 
-  const q = search.trim().toLowerCase();
+  // 6.7: diferimos el término de búsqueda para no re-filtrar en cada tecla
+  // cuando el tenant tiene muchas obras (React 19 useDeferredValue).
+  const deferredSearch = useDeferredValue(search);
+  const q = deferredSearch.trim().toLowerCase();
   const filteredObras = obras.filter(o => {
     if (filter !== "todas" && o.status !== filter) return false;
     if (!q) return true;
@@ -460,9 +515,8 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
         <Spinner />
       ) : (
         <>
-          {/* ── KPI Strip ── */}
-          {obras.length > 0 && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 22 }}>
+          {/* ── KPI Strip (siempre visibles: 6.6 de la auditoría) ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 22 }}>
               <KpiCard
                 label="Total obras"
                 value={obras.length}
@@ -479,7 +533,8 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                 iconBg="#E5EEFB" iconColor="#2A6FDB"
                 delta={(() => {
                   const conTareas = obras.filter(o => o.status === "en_progreso" && o.total_tasks > 0);
-                  if (conTareas.length === 0) return <>sin tareas cargadas</>;
+                  // 6.5: leyenda correcta cuando no hay ninguna obra en progreso.
+                  if (conTareas.length === 0) return <>sin obras en progreso</>;
                   const avg = Math.round(conTareas.reduce((a, o) => a + o.completed_tasks / o.total_tasks, 0) / conTareas.length * 100);
                   return <>avance medio <strong style={{ color: "#2A6FDB" }}>{avg}%</strong></>;
                 })()}
@@ -500,15 +555,19 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                 value={byStatus("completada")}
                 icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 11l4-4 3 3 5-6M14 4h-3M14 4v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>}
                 iconBg="#E4F3EC" iconColor="#1F8A5B"
-                delta={<><strong>+{byStatus("completada")}</strong> entregadas</>}
+                // 6.5: mostrar la línea del delta incluso cuando es 0.
+                delta={
+                  byStatus("completada") === 0
+                    ? <>ninguna entregada aún</>
+                    : <><strong>+{byStatus("completada")}</strong> entregadas</>
+                }
                 sparkColor="#1F8A5B"
                 sparkPath="M0 32 L25 30 L50 28 L75 24 L100 20 L125 18 L150 12 L175 10 L200 6"
               />
             </div>
-          )}
 
           {obras.length === 0 ? (
-            /* ── Empty state ── */
+            /* ── Empty state (dentro del layout normal: 6.6) ── */
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", gap: 16, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14 }}>
               <div style={{ width: 52, height: 52, borderRadius: 14, background: "#FFF1E9", display: "flex", alignItems: "center", justifyContent: "center", color: "#FF6B35" }}>
                 <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><path d="M2.5 13.5V6l5-3.5 5 3.5v7.5h-10z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/><path d="M6 13.5V10h3v3.5M5 7.5h5" stroke="currentColor" strokeWidth="1.4"/></svg>
@@ -594,7 +653,15 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                         try {
                           const updated = await updateObraStatus(obra.id, status);
                           setObras(prev => prev.map(o => o.id === obra.id ? updated : o));
-                        } catch { loadData(true); }
+                        } catch (err: unknown) {
+                          const detail =
+                            (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+                          if (typeof detail === "string" && detail.length > 0) {
+                            await alert({ title: "No se pudo cambiar el estado", message: detail });
+                          } else {
+                            loadData(true);
+                          }
+                        }
                       }}
                       onDelete={async () => {
                         if (!(await confirm({
@@ -616,49 +683,90 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                     />
                   ))}
 
-                  {/* "Nueva obra" ghost card */}
-                  {filter === "todas" && canCreateObra && (
-                    <article
-                      onClick={onNewObra}
-                      style={{
-                        border: "1.5px dashed #C7CAC6",
-                        background: "transparent",
-                        borderRadius: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        minHeight: 280,
-                        cursor: "pointer",
-                        textAlign: "center",
-                        color: "#5B6770",
-                        transition: "border-color 0.18s, background 0.18s, color 0.18s",
-                      }}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLElement).style.borderColor = "#FF6B35";
-                        (e.currentTarget as HTMLElement).style.background = "rgba(255,107,53,0.03)";
-                        (e.currentTarget as HTMLElement).style.color = "#FF6B35";
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLElement).style.borderColor = "#C7CAC6";
-                        (e.currentTarget as HTMLElement).style.background = "transparent";
-                        (e.currentTarget as HTMLElement).style.color = "#5B6770";
-                      }}
-                    >
-                      <div>
-                        <div style={{ width: 44, height: 44, borderRadius: 99, background: "rgba(255,107,53,0.10)", color: "#FF6B35", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
-                          <PlusIcon style={{ width: 18, height: 18 }} />
+                  {/* "Nueva obra" ghost card (6.8: disable si el tenant alcanzó el límite) */}
+                  {filter === "todas" && canCreateObra && (() => {
+                    const limit = planUsage?.obras_limit;
+                    const current = planUsage?.obras_count ?? obras.length;
+                    const atLimit = limit !== null && limit !== undefined && current >= limit;
+                    if (atLimit) {
+                      return (
+                        <article
+                          onClick={() => setUpgradeInfo({
+                            message: `Alcanzaste el límite de obras del plan ${planUsage?.tenant.plan?.name ?? ""}.`,
+                            resource: "obras",
+                            current,
+                            limit: limit ?? undefined,
+                            plan: planUsage?.tenant.plan?.name,
+                          })}
+                          style={{
+                            border: "1.5px dashed #D8DAD5",
+                            background: "#F6F7F5",
+                            borderRadius: 14,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minHeight: 280,
+                            cursor: "pointer",
+                            textAlign: "center",
+                            color: "#8E97A0",
+                          }}
+                        >
+                          <div>
+                            <div style={{ width: 44, height: 44, borderRadius: 99, background: "#ECEDEA", color: "#8E97A0", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                              <PlusIcon style={{ width: 18, height: 18 }} />
+                            </div>
+                            <h4 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, margin: "0 0 4px", color: "#5B6770" }}>Alcanzaste el límite</h4>
+                            <p style={{ margin: 0, fontSize: 12, color: "#8E97A0", maxWidth: 220 }}>
+                              {current} de {limit} obras del plan {planUsage?.tenant.plan?.name ?? ""}. Actualizá para crear más.
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    }
+                    return (
+                      <article
+                        onClick={onNewObra}
+                        style={{
+                          border: "1.5px dashed #C7CAC6",
+                          background: "transparent",
+                          borderRadius: 14,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          minHeight: 280,
+                          cursor: "pointer",
+                          textAlign: "center",
+                          color: "#5B6770",
+                          transition: "border-color 0.18s, background 0.18s, color 0.18s",
+                        }}
+                        onMouseEnter={e => {
+                          (e.currentTarget as HTMLElement).style.borderColor = "#FF6B35";
+                          (e.currentTarget as HTMLElement).style.background = "rgba(255,107,53,0.03)";
+                          (e.currentTarget as HTMLElement).style.color = "#FF6B35";
+                        }}
+                        onMouseLeave={e => {
+                          (e.currentTarget as HTMLElement).style.borderColor = "#C7CAC6";
+                          (e.currentTarget as HTMLElement).style.background = "transparent";
+                          (e.currentTarget as HTMLElement).style.color = "#5B6770";
+                        }}
+                      >
+                        <div>
+                          <div style={{ width: 44, height: 44, borderRadius: 99, background: "rgba(255,107,53,0.10)", color: "#FF6B35", display: "inline-flex", alignItems: "center", justifyContent: "center", marginBottom: 12 }}>
+                            <PlusIcon style={{ width: 18, height: 18 }} />
+                          </div>
+                          <h4 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, margin: "0 0 4px", color: "#1A2329" }}>Crear nueva obra</h4>
+                          <p style={{ margin: 0, fontSize: 12, color: "#6B7580", maxWidth: 200 }}>Empezá un proyecto desde cero.</p>
                         </div>
-                        <h4 style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 15, margin: "0 0 4px", color: "#1A2329" }}>Crear nueva obra</h4>
-                        <p style={{ margin: 0, fontSize: 12, color: "#6B7580", maxWidth: 200 }}>Empezá un proyecto desde cero.</p>
-                      </div>
-                    </article>
-                  )}
+                      </article>
+                    );
+                  })()}
                 </div>
               )}
             </>
           )}
         </>
       )}
+      {upgradeInfo && <UpgradeModal info={upgradeInfo} onClose={() => setUpgradeInfo(null)} />}
     </div>
   );
 }
