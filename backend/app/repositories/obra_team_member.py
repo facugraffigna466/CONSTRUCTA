@@ -42,8 +42,8 @@ class ObraTeamMemberRepository(BaseRepository[ObraTeamMember]):
     async def get_for_pair(
         self, obra_id: int, responsible_id: int
     ) -> ObraTeamMember | None:
-        """Fila `(obra, responsible)` si existe. Uso: chequear member_type,
-        plan_disciplines, o simplemente si está o no en el equipo."""
+        """Fila `(obra, responsible)` si existe. Uso: chequear
+        plan_disciplines o si está o no en el equipo de la obra."""
         result = await self.session.execute(
             select(ObraTeamMember).where(
                 ObraTeamMember.obra_id == obra_id,
@@ -51,16 +51,3 @@ class ObraTeamMemberRepository(BaseRepository[ObraTeamMember]):
             )
         )
         return result.scalar_one_or_none()
-
-    async def list_member_types_for_responsible(
-        self, responsible_id: int
-    ) -> list[str]:
-        """Todos los `member_type` con los que el responsable participa en
-        alguna obra. Uso: decidir capacidades globales (ej. bitácora audio,
-        que no es por-obra) — si tiene al menos una fila 'equipo' se
-        considera 'equipo'; si es 'contratista' en todas, se restringe."""
-        rows = (await self.session.execute(
-            select(ObraTeamMember.member_type)
-            .where(ObraTeamMember.responsible_id == responsible_id)
-        )).scalars().all()
-        return list(rows)

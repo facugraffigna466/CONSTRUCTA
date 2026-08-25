@@ -34,7 +34,6 @@ export interface ObraTeamMember {
   full_name: string;
   whatsapp_number: string;
   role: string | null;
-  member_type: "equipo" | "contratista";
   is_active: boolean;
   plan_disciplines: string[] | null; // null = acceso a todos los planos
 }

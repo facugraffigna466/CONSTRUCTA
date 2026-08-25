@@ -116,9 +116,11 @@ export function UpgradeModal({ info, onClose }: { info: PlanLimitInfo; onClose: 
           <a
             href={
               expired
-                ? "mailto:contacto@constructa.com.ar?subject=Quiero%20renovar%20mi%20plan"
-                : "mailto:contacto@constructa.com.ar?subject=Quiero%20actualizar%20mi%20plan"
+                ? "https://mail.google.com/mail/?view=cm&fs=1&to=ventas@constructa.com.ar&su=Quiero%20renovar%20mi%20plan"
+                : "https://mail.google.com/mail/?view=cm&fs=1&to=ventas@constructa.com.ar&su=Quiero%20actualizar%20mi%20plan"
             }
+            target="_blank"
+            rel="noopener noreferrer"
             style={{
               display: "inline-flex", alignItems: "center", gap: 7, textDecoration: "none",
               padding: "9px 18px", borderRadius: 10, fontSize: 13, fontWeight: 700,

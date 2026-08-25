@@ -1,12 +1,19 @@
 from datetime import datetime, timezone
 from typing import Any
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 
 class User(Base):
     __tablename__ = "users"
+    # Hallazgo 6.6 auditoría 04: si un mismo humano se carga dos veces con el
+    # mismo whatsapp dentro del mismo tenant, se rompe la resolución de sender
+    # en el bot. Unicidad por tenant sin afectar la posibilidad de que la misma
+    # persona sea staff de varias empresas (tenant_id distintos).
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "whatsapp_number", name="uq_users_tenant_whatsapp"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
