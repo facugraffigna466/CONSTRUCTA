@@ -1,17 +1,24 @@
 from datetime import date, datetime, time
+from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 from app.models.task import TaskStatus
 
 
+# Hallazgo 7.4 de docs/auditoria/03-tareas.md: sin Literal, dependency_type
+# aceptaba cualquier string ("XX" se guardaba). El motor de cascade solo
+# entiende FS/SS/FF/SF; cualquier otro valor caía en un default silencioso.
+DependencyType = Literal["FS", "SS", "FF", "SF"]
+
+
 class DependencyLinkInput(BaseModel):
     depends_on_id: int
-    dependency_type: str = "FS"
+    dependency_type: DependencyType = "FS"
     lag_days: int = Field(default=0, ge=-365, le=365)
 
 
 class DependencyLink(BaseModel):
     depends_on_id: int
-    dependency_type: str
+    dependency_type: DependencyType
     lag_days: int
 
 
