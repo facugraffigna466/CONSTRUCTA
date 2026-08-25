@@ -165,6 +165,25 @@ class AuthService:
                 )
         return effective
 
+    async def resend_invite(self, user_id: int, tenant_id: int | None) -> tuple[User, str]:
+        """Renueva una invitación pendiente: nuevo token, nuevo TTL de 72h. No
+        toca `pending_obra_assignments` (se mantienen las asignaciones originales).
+        Solo aplica a invitados que todavía no aceptaron (`is_active=False`)."""
+        from app.core.exceptions import NotFoundError
+        user = await self.repo.get(user_id)
+        # Mismo criterio de aislamiento que update_member_role/remove_member:
+        # "no existe" y "es de otro tenant" se colapsan en el mismo 404.
+        if not user or (tenant_id is not None and user.tenant_id != tenant_id):
+            raise NotFoundError("User", user_id)
+        if user.is_active:
+            raise ConflictError("Este usuario ya aceptó la invitación")
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=INVITE_TTL_HOURS)
+        updated = await self.repo.update_fields(
+            user.id, invitation_token=token, invitation_expires_at=expires_at
+        )
+        return updated, token
+
     async def get_invite_context(self, token: str) -> dict:
         """Contexto de una invitación pendiente (sin consumir el token): a qué
         empresa, con qué email y rol se une el invitado, y qué obras se le van
