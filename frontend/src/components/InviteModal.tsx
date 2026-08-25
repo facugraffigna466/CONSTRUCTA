@@ -3,7 +3,7 @@ import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
 import type { UserRole } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
 import { useDialog } from "../hooks/useDialog";
-import { fetchMembers, inviteMember, removeMember } from "../api/users";
+import { fetchMembers, inviteMember, removeMember, resendInvite } from "../api/users";
 import type { ApiUser, ObraAssignmentInvite, ObraUserRoleType } from "../api/users";
 import type { Obra } from "../types";
 import { useConfirm } from "./ConfirmProvider";
@@ -63,6 +63,8 @@ export function InviteModal({ onClose, obras = [] }: Props) {
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [error, setError]         = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<number | null>(null);
+  const [resentId, setResentId]       = useState<number | null>(null);
   // Fase 4: rol por obra (opcional). Vacío = no asigna a esa obra.
   const [obraRoles, setObraRoles] = useState<Record<number, ObraUserRoleType | "">>({});
   const [obrasExpanded, setObrasExpanded] = useState(false);
@@ -128,6 +130,20 @@ export function InviteModal({ onClose, obras = [] }: Props) {
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       await alert({ title: "No se pudo quitar al miembro", message: msg ?? "Intentá nuevamente." });
+    }
+  }
+
+  async function handleResend(memberId: number) {
+    setResendingId(memberId);
+    try {
+      await resendInvite(memberId);
+      setResentId(memberId);
+      setTimeout(() => setResentId(cur => (cur === memberId ? null : cur)), 3000);
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      await alert({ title: "No se pudo reenviar la invitación", message: msg ?? "Intentá nuevamente." });
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -394,6 +410,25 @@ export function InviteModal({ onClose, obras = [] }: Props) {
                             Pendiente
                           </span>
                         )}
+                        {!m.is_active && canInvite && (
+                          resentId === m.id ? (
+                            <span style={{ fontSize: 10, fontWeight: 600, color: C.good, flexShrink: 0 }}>✓ Reenviada</span>
+                          ) : (
+                            <button
+                              onClick={() => handleResend(m.id)}
+                              disabled={resendingId === m.id}
+                              title="Renueva el link de invitación (72h) y reenvía el email"
+                              style={{
+                                fontSize: 10, fontWeight: 600, background: "none", border: "none",
+                                color: C.secondary, cursor: resendingId === m.id ? "default" : "pointer",
+                                padding: 0, flexShrink: 0, opacity: resendingId === m.id ? 0.6 : 1,
+                                textDecoration: "underline",
+                              }}
+                            >
+                              {resendingId === m.id ? "Enviando…" : "Reenviar"}
+                            </button>
+                          )
+                        )}
                       </div>
                       <div style={{ fontSize: 11.5, color: C.text3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{m.email}</div>
                     </div>
@@ -425,8 +460,17 @@ export function InviteModal({ onClose, obras = [] }: Props) {
               Link de respaldo
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* No renderizamos el link completo (contiene el token de invitación) —
+                  solo el dominio, para no dejarlo expuesto en pantalla/DOM. El botón
+                  Copiar sí pone la URL completa en el portapapeles. */}
               <span style={{ fontSize: 11.5, color: C.text3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, background: C.bg, padding: "6px 10px", borderRadius: 7, border: `1px solid ${C.line}` }}>
-                {inviteUrl}
+                {(() => {
+                  try {
+                    return `${new URL(inviteUrl).origin}/invite/••••••••••••`;
+                  } catch {
+                    return "Link de invitación listo para copiar";
+                  }
+                })()}
               </span>
               <button
                 onClick={handleCopyLink}

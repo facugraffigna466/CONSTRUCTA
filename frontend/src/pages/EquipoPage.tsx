@@ -3,7 +3,7 @@ import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
 import { InviteModal } from "../components/InviteModal";
 import { MemberObraRolesModal } from "../components/MemberObraRolesModal";
-import { fetchMembers, removeMember, updateMemberRole } from "../api/users";
+import { fetchMembers, removeMember, resendInvite, updateMemberRole } from "../api/users";
 import type { ApiUser, ObraUserRoleType } from "../api/users";
 import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
@@ -45,10 +45,26 @@ export function EquipoPage() {
   const [error, setError]           = useState<string | null>(null);
   const [confirmRemoveId, setConfirmRemoveId] = useState<number | null>(null);
   const [editingRolesFor, setEditingRolesFor] = useState<ApiUser | null>(null);
+  const [resendingId, setResendingId] = useState<number | null>(null);
+  const [resentId, setResentId] = useState<number | null>(null);
 
   function apiError(e: unknown, fallback: string): string {
     const detail = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
     return typeof detail === "string" ? detail : fallback;
+  }
+
+  async function handleResend(id: number) {
+    setError(null);
+    setResendingId(id);
+    try {
+      await resendInvite(id);
+      setResentId(id);
+      setTimeout(() => setResentId((cur) => (cur === id ? null : cur)), 3000);
+    } catch (err) {
+      setError(apiError(err, "No se pudo reenviar la invitación."));
+    } finally {
+      setResendingId(null);
+    }
   }
 
   async function reload() {
@@ -160,6 +176,25 @@ export function EquipoPage() {
                     )}
                     {!m.is_active && (
                       <span style={{ fontSize: 9.5, fontWeight: 600, padding: "1px 6px", borderRadius: 99, background: "#FDF1DE", color: "#C97D0E", border: "1px solid #F0D5A0", flexShrink: 0 }}>Pendiente</span>
+                    )}
+                    {!m.is_active && canInvite && (
+                      resentId === m.id ? (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: C.good, flexShrink: 0 }}>✓ Reenviada</span>
+                      ) : (
+                        <button
+                          onClick={() => handleResend(m.id)}
+                          disabled={resendingId === m.id}
+                          title="Renueva el link de invitación (72h) y reenvía el email"
+                          style={{
+                            fontSize: 10, fontWeight: 600, background: "none", border: "none",
+                            color: C.secondary, cursor: resendingId === m.id ? "default" : "pointer",
+                            padding: 0, flexShrink: 0, opacity: resendingId === m.id ? 0.6 : 1,
+                            textDecoration: "underline",
+                          }}
+                        >
+                          {resendingId === m.id ? "Enviando…" : "Reenviar"}
+                        </button>
+                      )
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: C.text3 }}>{m.email}</div>

@@ -15,6 +15,7 @@ from app.schemas.user import (
     ChangePasswordRequest,
     InviteRequest,
     InviteResponse,
+    ObraAssignmentInvite,
     ObraRoleForUserRead,
     RoleUpdateRequest,
     UpdateProfileRequest,
@@ -105,6 +106,22 @@ async def invite_member(data: InviteRequest, current_user: AdminUser, db: DbSess
         invite_url=invite_url,
         obra_assignments=effective_assignments,
     )
+
+
+@router.post("/{user_id}/resend-invite", response_model=InviteResponse)
+async def resend_invite(user_id: int, current_user: AdminUser, db: DbSession):
+    """Renueva el token de una invitación pendiente (ej. si venció) y reenvía el
+    email — evita tener que borrar y volver a invitar a mano."""
+    try:
+        user, token = await AuthService(db).resend_invite(user_id, tenant_id=current_user.tenant_id)
+    except ConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    invite_url = f"{settings.FRONTEND_URL}/invite/{token}"
+    await send_invite_email(user.email, invite_url, user.role)
+    obra_assignments = [
+        ObraAssignmentInvite(**a) for a in (user.pending_obra_assignments or [])
+    ]
+    return InviteResponse(invite_token=token, invite_url=invite_url, obra_assignments=obra_assignments)
 
 
 @router.patch("/{user_id}/role", response_model=UserRead)

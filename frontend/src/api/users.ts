@@ -89,6 +89,12 @@ export async function removeMember(userId: number): Promise<void> {
   await apiClient.delete(`/users/${userId}`);
 }
 
+/** Renueva el token de una invitación pendiente (ej. si venció) y reenvía el email. */
+export async function resendInvite(userId: number): Promise<InviteResponse> {
+  const { data } = await apiClient.post<InviteResponse>(`/users/${userId}/resend-invite`);
+  return data;
+}
+
 export async function updateMemberRole(userId: number, role: "admin" | "collaborator"): Promise<ApiUser> {
   const { data } = await apiClient.patch<ApiUser>(`/users/${userId}/role`, { role });
   return data;
