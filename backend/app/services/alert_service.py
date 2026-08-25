@@ -7,6 +7,7 @@ from app.models.alert import Alert, AlertType
 from app.models.task import TaskStatus
 from app.repositories.alert import AlertRepository
 from app.repositories.historial import HistorialRepository
+from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
 
 
@@ -15,6 +16,7 @@ class AlertService:
         self.repo = AlertRepository(session)
         self.task_repo = TaskRepository(session)
         self.historial = HistorialRepository(session)
+        self.settings_repo = SettingsRepository(session)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -59,6 +61,14 @@ class AlertService:
 
         tasks = await self.task_repo.list_by_obra(obra_id)
         active_tasks = [t for t in tasks if t.status not in _inactive]
+        # notify_task_overdue/alert_overdue eran decorativos para este chequeo:
+        # esta función corre en cada carga del dashboard de la obra y creaba la
+        # alerta de "vencida" (DELAY_RISK) sin importar el setting — el toggle
+        # solo apagaba la vía del cron/simulate-overdue (TASK_OVERDUE), un
+        # chequeo DISTINTO sobre la misma condición (docs/auditoria/
+        # 11-panel-configuracion.md, hallazgo 2).
+        cfg = await self.settings_repo.get_for_obra(obra_id)
+        overdue_check_enabled = cfg.alert_overdue and cfg.notify_task_overdue
 
         created = 0
         overdue_tasks = []
@@ -69,11 +79,12 @@ class AlertService:
             # 1. Overdue task — requires due_date
             if task.due_date and task.due_date < today:
                 overdue_tasks.append(task)
-                fmt = task.due_date.strftime("%d/%m/%Y")
-                msg = f"La tarea \u00ab{task.title}\u00bb est\u00e1 vencida desde el {fmt}."
-                created += await self._task_alert(
-                    obra_id, task.id, msg, "overdue",
-                )
+                if overdue_check_enabled:
+                    fmt = task.due_date.strftime("%d/%m/%Y")
+                    msg = f"La tarea \u00ab{task.title}\u00bb est\u00e1 vencida desde el {fmt}."
+                    created += await self._task_alert(
+                        obra_id, task.id, msg, "overdue",
+                    )
 
             # 2. Missing responsible
             if task.responsible_id is None:

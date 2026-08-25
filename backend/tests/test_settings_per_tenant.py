@@ -144,6 +144,34 @@ async def test_notify_task_overdue_false_no_crea_alerta(db, client, obra_con_tar
     assert r.json()["alerts_created"] == 0
 
 
+async def test_notify_task_overdue_false_bloquea_delay_risk_automatico(db, client, obra_con_tarea_vencida):
+    """AlertService.evaluate_task_risks_for_obra corre en cada alta de tarea
+    (proactivo, sin esperar a "Simular vencidos") y creaba la alerta de
+    "vencida" (DELAY_RISK) sin mirar ningún setting — un chequeo DISTINTO al
+    del cron/simulate-overdue (TASK_OVERDUE), que sí quedó gateado desde el
+    principio. Encontrado probando en vivo: apagar el toggle no evitaba que
+    esta alerta apareciera."""
+    tenant, admin, obra, _task = obra_con_tarea_vencida
+    await client.patch(
+        f"{API}/settings", json={"notify_task_overdue": False},
+        headers=_auth(create_access_token(admin.id)),
+    )
+    yesterday = (date.today() - timedelta(days=2)).isoformat()
+    r = await client.post(
+        f"{API}/tasks",
+        headers=_auth(create_access_token(admin.id)),
+        json={
+            "obra_id": obra.id, "title": "vencida nueva",
+            "start_date": yesterday, "due_date": yesterday,
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    alerts = (await db.execute(select(Alert).where(Alert.obra_id == obra.id))).scalars().all()
+    vencida_alerts = [a for a in alerts if "vencida desde el" in a.message]
+    assert vencida_alerts == []
+
+
 async def test_notify_task_blocked_false_no_crea_alerta(db, client, obra_con_tarea_vencida):
     tenant, admin, obra, _task = obra_con_tarea_vencida
     task2 = Task(
