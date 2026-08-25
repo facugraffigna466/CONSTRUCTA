@@ -130,12 +130,21 @@ class TaskService:
         if obra.status != new:
             obra.status = new
 
-    async def _assert_responsible_active(self, responsible_id: int) -> None:
-        """Block assignment of inactive responsibles.
+    async def _assert_responsible_active(
+        self, responsible_id: int, obra_tenant_id: int | None = None
+    ) -> None:
+        """Block assignment of inactive responsibles + cross-tenant leaks.
 
         In Phase 2 the chatbot sends messages to the responsible's phone.
         An inactive responsible means they left the project — assigning them
         would cause silent failures when the webhook tries to contact them.
+
+        Hallazgo 7.2 de docs/auditoria/03-tareas.md: si `obra_tenant_id` viene,
+        validamos también que el responsable pertenezca al mismo tenant. Sin
+        esta guarda, un admin del tenant A podía asignar responsables del
+        tenant B a sus tareas (y por _ensure_team_member terminaban en el
+        team de una obra ajena). Devolvemos 404 (misma semántica que otros
+        cross-tenant leaks: no filtrar qué ids existen en otros tenants).
         """
         responsible = await self.resp_repo.get(responsible_id)
         if not responsible:
@@ -144,6 +153,12 @@ class TaskService:
             raise UnprocessableError(
                 "El responsable seleccionado está inactivo. Elegí uno activo o dejá la tarea sin asignar."
             )
+        if (
+            obra_tenant_id is not None
+            and responsible.tenant_id is not None
+            and responsible.tenant_id != obra_tenant_id
+        ):
+            raise NotFoundError("Responsible", responsible_id)
 
     async def _ensure_team_member(self, obra_id: int, responsible_id: int | None) -> None:
         """Valida que el responsable ya pertenezca al equipo de la obra
@@ -285,6 +300,23 @@ class TaskService:
                     f"{field_name.capitalize()}: {d.strftime('%d/%m/%Y')} ({reason}) → "
                     f"{snapped.strftime('%d/%m/%Y')} (día laboral más cercano)"
                 )
+        # Hallazgo 7.5 de docs/auditoria/03-tareas.md: si las fechas caen fuera
+        # del rango planificado de la obra, avisamos (sin bloquear — hay obras
+        # que se atrasan legítimamente y las tareas se corren).
+        obra = await self.obra_repo.get(obra_id)
+        if obra is not None:
+            s_final = result["inicio"]
+            d_final = result["vencimiento"]
+            if obra.start_date is not None and s_final is not None and s_final < obra.start_date:
+                notes.append(
+                    f"Advertencia: el inicio ({s_final.strftime('%d/%m/%Y')}) es anterior al "
+                    f"inicio planificado de la obra ({obra.start_date.strftime('%d/%m/%Y')})."
+                )
+            if obra.expected_end_date is not None and d_final is not None and d_final > obra.expected_end_date:
+                notes.append(
+                    f"Advertencia: el vencimiento ({d_final.strftime('%d/%m/%Y')}) supera la fecha "
+                    f"prevista de fin de la obra ({obra.expected_end_date.strftime('%d/%m/%Y')})."
+                )
         return result["inicio"], result["vencimiento"], notes
 
     # ── bulk create (paste masivo desde Excel) ────────────────────────────────
@@ -308,7 +340,7 @@ class TaskService:
         for i, row in enumerate(rows):
             try:
                 if row.responsible_id is not None:
-                    await self._assert_responsible_active(row.responsible_id)
+                    await self._assert_responsible_active(row.responsible_id, bulk_tenant)
                 s_date, d_date, _ = await self._snap_working_dates(obra_id, row.start_date, row.due_date)
                 task = Task(
                     obra_id=obra_id,
@@ -354,6 +386,17 @@ class TaskService:
                 },
                 triggered_by="user",
             )
+            # Hallazgo 7.7: emitir task_created por cada tarea nueva para que
+            # otras sesiones abiertas en la obra vean el import sin refrescar.
+            for tid in task_ids:
+                if tid is None:
+                    continue
+                fresh = await self.repo.get(tid)
+                if fresh is not None:
+                    await emit_task_created(fresh, actor)
+            # Hallazgo 7.8: evaluamos riesgos una sola vez al final para que
+            # las alertas de fechas vencidas del import aparezcan sin abrir la obra.
+            await self._evaluate_risks_safe(obra_id)
         return {"created": created, "failed": len(errors), "errors": errors, "task_ids": task_ids}
 
     # ── cascade reschedule ────────────────────────────────────────────────────
@@ -492,9 +535,10 @@ class TaskService:
 
     async def create(self, data: TaskCreate, manager_id: int, actor: dict | None = None) -> Task:
         await self._get_obra_and_assert_access(data.obra_id, manager_id)
+        obra_tenant = await tenant_for_obra(self.repo.session, data.obra_id)
 
         if data.responsible_id is not None:
-            await self._assert_responsible_active(data.responsible_id)
+            await self._assert_responsible_active(data.responsible_id, obra_tenant)
 
         if data.parent_task_id is not None:
             await self._assert_parent_valid(data.parent_task_id, data.obra_id)
@@ -509,7 +553,7 @@ class TaskService:
         task_data = data.model_dump(exclude={"dependency_links"})
         task_data["start_date"] = snap_start
         task_data["due_date"] = snap_due
-        task_data["tenant_id"] = await tenant_for_obra(self.repo.session, data.obra_id)
+        task_data["tenant_id"] = obra_tenant
         task = Task(**task_data)
         task = await self.repo.create(task)
         await self._ensure_team_member(task.obra_id, data.responsible_id)
@@ -531,7 +575,22 @@ class TaskService:
         task._date_adjustment = "; ".join(date_notes) if date_notes else None
         await emit_task_created(task, actor)
         await self.recompute_obra_status(task.obra_id)
+        # Hallazgo 7.8: evaluar riesgos al crear para que las alertas y el
+        # badge no dependan de que un humano abra la vista de tareas.
+        await self._evaluate_risks_safe(task.obra_id)
         return task
+
+    async def _evaluate_risks_safe(self, obra_id: int) -> None:
+        """Wrapper defensivo — un fallo en el cálculo de riesgos no debe
+        tumbar la operación de tarea que lo disparó."""
+        try:
+            from app.services.alert_service import AlertService
+            await AlertService(self.repo.session).evaluate_task_risks_for_obra(obra_id)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception(
+                "evaluate_task_risks_for_obra failed for obra_id=%d", obra_id
+            )
 
     async def get_or_raise(self, task_id: int) -> Task:
         task = await self.repo.get(task_id)
@@ -627,7 +686,10 @@ class TaskService:
         old_vals: dict[str, object] = {field: getattr(task, field) for field in changes}
 
         if changes.get("responsible_id") is not None:
-            await self._assert_responsible_active(changes["responsible_id"])
+            await self._assert_responsible_active(
+                changes["responsible_id"],
+                await tenant_for_obra(self.repo.session, task.obra_id),
+            )
             await self._ensure_team_member(task.obra_id, changes["responsible_id"])
 
         if changes.get("parent_task_id") is not None:
@@ -738,6 +800,10 @@ class TaskService:
         updated._date_adjustment = "; ".join(date_notes) if date_notes else None  # type: ignore[union-attr]
         await emit_task_updated(updated, actor)
         await self.recompute_obra_status(task.obra_id)
+        # Hallazgo 7.8: si cambió una fecha o el responsable, revisar riesgos
+        # (evitamos disparar el cálculo si solo se editó el título/descripción).
+        if any(f in changes for f in ("start_date", "due_date", "responsible_id", "status")):
+            await self._evaluate_risks_safe(task.obra_id)
         return updated  # type: ignore[return-value]
 
     async def delete(self, task_id: int, manager_id: int, actor: dict | None = None) -> None:
@@ -860,6 +926,9 @@ class TaskService:
                 )
 
         await self.recompute_obra_status(updated.obra_id)
+        # Hallazgo 7.8: al cambiar estado (bloqueada / vencida / etc.) recalculamos
+        # las alertas del scope de la obra sin esperar al próximo GET.
+        await self._evaluate_risks_safe(updated.obra_id)
         return updated  # type: ignore[return-value]
 
     async def apply_status_update_checked(
