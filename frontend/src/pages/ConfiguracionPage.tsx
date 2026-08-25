@@ -1003,10 +1003,6 @@ export function ConfiguracionPage() {
                       Recibiendo y enviando mensajes correctamente
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                    <button style={{ padding: "6px 11px", fontSize: 12, borderRadius: 8, background: "#fff", border: `1px solid ${C.goodBorder}`, color: "#0E5A37", cursor: "pointer" }}>Reconectar</button>
-                    <button style={{ padding: "6px 11px", fontSize: 12, borderRadius: 8, background: "#fff", border: `1px solid ${C.goodBorder}`, color: "#0E5A37", cursor: "pointer" }}>Ver registros</button>
-                  </div>
                 </div>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 12, background: C.warn50, border: `1px solid #F0D5A0`, borderRadius: 11, padding: "12px 14px", marginBottom: 18 }}>

@@ -81,13 +81,14 @@ class TaskRepository(BaseRepository[Task]):
         )
         return list(result.scalars().all())
 
-    async def list_overdue(self, as_of: date) -> list[Task]:
-        result = await self.session.execute(
-            select(Task).where(
-                Task.due_date < as_of,
-                Task.status.notin_([TaskStatus.COMPLETADA, TaskStatus.CANCELADA]),
-            )
+    async def list_overdue(self, as_of: date, tenant_id: int | None = None) -> list[Task]:
+        stmt = select(Task).where(
+            Task.due_date < as_of,
+            Task.status.notin_([TaskStatus.COMPLETADA, TaskStatus.CANCELADA]),
         )
+        if tenant_id is not None:
+            stmt = stmt.where(Task.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
     async def unassign_active_tasks_by_responsible(
