@@ -63,6 +63,22 @@ async def update_profile(data: UpdateProfileRequest, current_user: CurrentUser, 
     fields = {k: v for k, v in data.model_dump().items() if v is not None}
     if not fields:
         return UserRead.model_validate(current_user)
+    # Hallazgo 6.4 auditoría 04: si el usuario intenta setear un whatsapp_number
+    # que ya existe como Responsible del mismo tenant, el bot no puede resolver
+    # cuál es el emisor real. Rechazamos con 409 antes de guardar.
+    if "whatsapp_number" in fields:
+        from app.repositories.responsible import ResponsibleRepository
+        colision = await ResponsibleRepository(db).get_by_whatsapp_in_tenant(
+            fields["whatsapp_number"], current_user.tenant_id
+        )
+        if colision is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Ese número ya está registrado como responsable en tu empresa. "
+                    "Usá un número distinto o eliminá primero al responsable."
+                ),
+            )
     updated = await UserRepository(db).update_fields(current_user.id, **fields)
     out = UserRead.model_validate(updated)
     roles = (await _obra_roles_for_users(db, [current_user.id])).get(current_user.id, [])

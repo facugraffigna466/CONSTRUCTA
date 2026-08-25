@@ -1,17 +1,23 @@
 from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 
 class Responsible(Base):
     __tablename__ = "responsibles"
+    # Hallazgo 6.3 auditoría 04: whatsapp_number pasa de unique global a unique
+    # por tenant. Dos empresas distintas pueden tener el mismo contratista
+    # cargado sin colisionar.
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "whatsapp_number", name="uq_responsibles_tenant_whatsapp"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     # E.164 format: +5491112345678 — the chatbot key in Phase 2
     whatsapp_number: Mapped[str] = mapped_column(
-        String(20), unique=True, nullable=False, index=True
+        String(20), nullable=False, index=True
     )
     role: Mapped[str | None] = mapped_column(String(100))
     # directorio de equipo aislado por empresa (migration 0026)

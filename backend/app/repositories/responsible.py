@@ -28,6 +28,24 @@ class ResponsibleRepository(BaseRepository[Responsible]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_whatsapp_in_tenant(
+        self, number: str, tenant_id: int | None
+    ) -> Responsible | None:
+        """Lookup del mismo número dentro de un tenant específico.
+
+        Hallazgo 6.3 auditoría 04: el número es unique por tenant, así que este
+        es el chequeo correcto para "¿ya existe un responsable con este número
+        en MI empresa?". El lookup global (get_by_whatsapp_any) solo se usa para
+        el pipeline del webhook, donde el emisor no dice qué tenant es.
+        """
+        if not number:
+            return None
+        stmt = select(Responsible).where(Responsible.whatsapp_number == number)
+        if tenant_id is not None:
+            stmt = stmt.where(Responsible.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def get_by_whatsapp_any(self, number: str) -> Responsible | None:
         """Idem al anterior pero SIN filtrar por `is_active`. Uso: el webhook
         de mensajes lo llama para poder distinguir tres casos y dar mensajes

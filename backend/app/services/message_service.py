@@ -198,17 +198,19 @@ class MessageService:
             # comando queda bloqueado con el mismo pedido.
             reply = await self._handle_pending_confirmation(responsible, payload.Body or "")
         else:
-            # La ventana horaria / chatbot_enabled aplican a los recordatorios a
-            # responsables (evitar spam). El staff inicia la conversación, no se
-            # filtra por horario.
+            # `chatbot_enabled` sigue bloqueando (es un opt-out explícito del jefe
+            # sobre ese responsable en particular).
+            #
+            # Hallazgo 6.8 auditoría 04: `send_window` YA NO bloquea inbound. Antes
+            # un obrero que mandaba un mensaje fuera de horario recibía silencio
+            # total (el mensaje se guardaba pero no había reply). El nombre del
+            # campo (send_*) y su uso natural es outbound — recordatorios
+            # programados. Los mensajes iniciados por el responsable se responden
+            # siempre. La ventana sigue aplicándose al outbound (líneas 698, 705).
             if responsible is not None:
                 cfg = await self.settings_repo.get_for_responsible(responsible.id)
                 if not cfg.chatbot_enabled:
                     logger.info("Chatbot disabled — ignoring message from %s", payload.from_number)
-                    await self.msg_repo.update_fields(inbound.id, processing_status=MessageProcessingStatus.PROCESSED)
-                    return inbound
-                if not _within_send_window(cfg.send_hour_from, cfg.send_hour_to):
-                    logger.info("Message from %s outside send window — ignoring", payload.from_number)
                     await self.msg_repo.update_fields(inbound.id, processing_status=MessageProcessingStatus.PROCESSED)
                     return inbound
 
@@ -486,19 +488,13 @@ class MessageService:
         return (caption, url)
 
     async def _handle_bitacora_audio(self, payload: TwilioInboundPayload, sender, is_staff: bool) -> str:
-        """Nota de voz de WhatsApp → entrada de bitácora con IA. Sirve para
-        responsables y para staff (arquitecto/jefe). Si el emisor tiene varias
-        obras, la nota queda pendiente y el bot pregunta a cuál va.
+        """Nota de voz de WhatsApp → entrada de bitácora con IA.
 
-        **Gate por member_type (rediseño identidad WhatsApp — parte B).** La
-        bitácora puede contener información sensible de toda la obra (no solo
-        de la tarea asignada). Un contratista externo/puntual no debería tener
-        acceso libre a eso. Regla: si el responsable es 'contratista' en
-        TODAS las obras donde participa (o no es 'equipo' en NINGUNA), se
-        rechaza el audio con un mensaje explicativo.
-
-        Staff (User con whatsapp_number) siempre puede — está bajo el rol de
-        empresa admin/collaborator, ya autenticado y con acceso pleno."""
+        **Gate: solo staff.** La bitácora puede contener información sensible
+        de toda la obra. Se restringe a users con login (arquitecto/jefe/admin
+        del tenant, autenticados con contraseña). Los responsables (sin login)
+        NO pueden mandar audios a la bitácora; para reportar novedades usan el
+        menú de estados de tarea o hablan con su jefe."""
         import asyncio as _asyncio
         import uuid as _uuid
         from pathlib import Path as _Path
@@ -506,20 +502,14 @@ class MessageService:
         import requests as _requests
 
         from app.core.config import settings as _settings
-        from app.repositories.obra_team_member import ObraTeamMemberRepository
         from app.services.bitacora_service import BitacoraService
 
         if not is_staff:
-            member_types = await ObraTeamMemberRepository(self.db).list_member_types_for_responsible(
-                sender.id
+            return (
+                "La bitácora por audio es solo para el equipo administrativo. "
+                "Si necesitás dejar constancia de una novedad, avisale a tu "
+                "jefe de obra."
             )
-            # Regla: se necesita al menos una obra donde sea 'equipo'. Sin
-            # ninguna 'equipo' (todo 'contratista' o lista vacía) → bloquear.
-            if not any(mt == "equipo" for mt in member_types):
-                return (
-                    "La bitácora por audio no está disponible para tu tipo de acceso. "
-                    "Consultá con tu jefe de obra si necesitás registrar novedades."
-                )
 
         # 1. Descargar el audio de Twilio (basic auth SID:token).
         #    En un thread para no bloquear el event loop con I/O síncrono.

@@ -169,7 +169,9 @@ export function AdminPage() {
                   <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.text2 }}>El plan Pro tiene 20 obras, 30 usuarios y tareas ilimitadas.</p>
                 </div>
                 <a
-                  href="mailto:hola@constructa.app?subject=Quiero mejorar mi plan"
+                  href="https://mail.google.com/mail/?view=cm&fs=1&to=ventas@constructa.com.ar&su=Quiero%20actualizar%20mi%20plan"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   style={{ flexShrink: 0, padding: "9px 18px", borderRadius: 9, background: C.secondary, color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none", boxShadow: "0 4px 10px -4px rgba(255,107,53,0.5)" }}
                 >
                   Contactar

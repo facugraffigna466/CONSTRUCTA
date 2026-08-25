@@ -1498,7 +1498,12 @@ export function ConfiguracionPage() {
                   <button onClick={() => setShowUpgradeModal(false)} style={{ padding: "9px 16px", borderRadius: 9, border: `1px solid ${C.line}`, background: C.surface, color: C.text2, fontSize: 13, cursor: "pointer" }}>
                     Ahora no
                   </button>
-                  <a href="mailto:hola@constructa.app?subject=Quiero mejorar mi plan" style={{ padding: "9px 18px", borderRadius: 9, background: C.secondary, color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                  <a
+                    href="https://mail.google.com/mail/?view=cm&fs=1&to=ventas@constructa.com.ar&su=Quiero%20actualizar%20mi%20plan"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ padding: "9px 18px", borderRadius: 9, background: C.secondary, color: "#fff", fontSize: 13, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center" }}
+                  >
                     Contactar para upgrade
                   </a>
                 </div>

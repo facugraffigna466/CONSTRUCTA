@@ -21,7 +21,6 @@ class ObraTeamMemberRead(BaseModel):
     full_name: str
     whatsapp_number: str
     role: str | None
-    member_type: str  # "equipo" | "contratista"
     is_active: bool
     plan_disciplines: list[str] | None  # null = ve todos los planos
 
@@ -33,13 +32,11 @@ class AddTeamMemberPayload(BaseModel):
     full_name: str | None = None
     whatsapp_number: str | None = None
     role: str | None = None
-    member_type: str = "equipo"
     plan_disciplines: list[str] | None = None  # null = acceso total
 
 
 class UpdateTeamMemberPayload(BaseModel):
     role: str | None = None
-    member_type: str | None = None
     plan_disciplines: list[str] | None = None
 
 
@@ -49,7 +46,6 @@ def _to_read(m: ObraTeamMember, resp: Responsible) -> ObraTeamMemberRead:
         full_name=resp.full_name,
         whatsapp_number=resp.whatsapp_number,
         role=m.role,
-        member_type=m.member_type,
         is_active=resp.is_active,
         plan_disciplines=m.plan_disciplines,
     )
@@ -81,6 +77,15 @@ async def add_team_member(
         resp = await db.get(Responsible, payload.responsible_id)
         if not resp:
             raise HTTPException(status_code=404, detail="Responsible not found")
+        # Hallazgo 6.2 auditoría 04: sin este chequeo, un admin de tenant A podía
+        # inyectar responsables de tenant B a su equipo (y ver sus datos + hacer
+        # que el bot les hable de sus obras). 404 sin revelar existencia.
+        if (
+            resp.tenant_id is not None
+            and current_user.tenant_id is not None
+            and resp.tenant_id != current_user.tenant_id
+        ):
+            raise HTTPException(status_code=404, detail="Responsible not found")
     elif payload.full_name and payload.whatsapp_number:
         from app.repositories.responsible import ResponsibleRepository
         from app.schemas.responsible import ResponsibleCreate
@@ -109,7 +114,6 @@ async def add_team_member(
         tenant_id=current_user.tenant_id,
         responsible_id=resp.id,
         role=payload.role,
-        member_type=payload.member_type or "equipo",
         plan_disciplines=payload.plan_disciplines or None,
     )
     db.add(member)
@@ -145,8 +149,6 @@ async def update_team_member(
     if not member:
         raise HTTPException(status_code=404, detail="Not in this obra's team")
     member.role = payload.role
-    if payload.member_type is not None:
-        member.member_type = payload.member_type
     # lista vacía [] = sin acceso; None = acceso total
     member.plan_disciplines = payload.plan_disciplines if payload.plan_disciplines != [] else []
     await db.commit()

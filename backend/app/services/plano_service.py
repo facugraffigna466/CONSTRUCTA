@@ -336,45 +336,24 @@ class PlanoService:
     async def resolve_plan_access(
         self, responsible_id: int, obra_id: int
     ) -> tuple[bool, list[str] | None]:
-        """Devuelve `(is_member, disciplines)` para desambiguar los dos
-        significados que antes colapsaban en un solo `None`:
+        """Devuelve `(is_member, disciplines)`:
 
-          - `(False, None)` → el responsable NO está en el equipo de la obra.
+          - `(False, [])`   → el responsable NO está en el equipo de la obra.
             Sin acceso a ningún plano.
-          - `(True, None)`  → está en el equipo y la política de disciplinas es
-            "sin restricción explícita". Se resuelve según `member_type`:
-              * equipo       → acceso total (default histórico).
-              * contratista  → sin acceso (política nueva: al contratista hay
-                que asignarle disciplinas explícitas si queremos que vea
-                planos, por defecto no puede).
-          - `(True, [])`    → en el equipo pero sin ninguna disciplina asignada
-            (sin acceso a planos).
+          - `(True, None)`  → en el equipo, acceso total a todos los planos
+            (default cuando `plan_disciplines is None`).
+          - `(True, [])`    → en el equipo pero explícitamente sin acceso a planos.
           - `(True, [x,y])` → en el equipo con acceso solo a esas disciplinas.
-
-        Los callers deben interpretar `disciplines is None` **junto con** el
-        member_type que se devuelve implícitamente al ser miembro. Este método
-        ya resuelve la política — devuelve una lista concreta o `None` con la
-        semántica "acceso total en esta obra". Los "sin acceso" (contratista
-        con NULL, no en equipo) se colapsan devolviendo `(is_member=..., [])`.
         """
-        from app.models.obra_team_member import ObraTeamMember
         from app.repositories.obra_team_member import ObraTeamMemberRepository
 
         row = await ObraTeamMemberRepository(self.session).get_for_pair(
             obra_id, responsible_id
         )
         if row is None:
-            # No está en el equipo — colapsamos a "sin acceso".
             return False, []
-        # Miembro: interpretar plan_disciplines según member_type.
         if row.plan_disciplines is None:
-            # Semántica dependiente del tipo:
-            if row.member_type == "contratista":
-                # Contratista sin disciplinas explícitas → sin acceso.
-                return True, []
-            # Equipo (default) → acceso total. Convención: None = "todas".
             return True, None
-        # Lista concreta (puede ser [] = sin acceso) — devolver tal cual.
         return True, list(row.plan_disciplines)
 
     async def allowed_disciplines_for_responsible(

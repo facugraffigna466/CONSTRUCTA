@@ -44,6 +44,23 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalars().first()
 
+    async def get_by_whatsapp_in_tenant(
+        self, number: str, tenant_id: int | None
+    ) -> User | None:
+        """Lookup del mismo whatsapp dentro de un tenant específico.
+
+        Hallazgo 6.4 auditoría 04: para el chequeo cruzado User↔Responsible al
+        crear/editar, necesitamos saber si el número ya está tomado por un User
+        del mismo tenant (independientemente de is_active — la colisión también
+        importa contra users desactivados)."""
+        if not number:
+            return None
+        stmt = select(User).where(User.whatsapp_number == number)
+        if tenant_id is not None:
+            stmt = stmt.where(User.tenant_id == tenant_id)
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def list_all(self, tenant_id: int | None = None) -> list[User]:
         stmt = select(User).order_by(User.created_at)
         if tenant_id is not None:

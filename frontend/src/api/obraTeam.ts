@@ -11,7 +11,6 @@ export async function addObraTeamMember(obraId: number, payload: {
   full_name?: string;
   whatsapp_number?: string;
   role?: string | null;
-  member_type?: "equipo" | "contratista";
   plan_disciplines?: string[] | null;
 }): Promise<ObraTeamMember> {
   const { data } = await apiClient.post<ObraTeamMember>(`/obras/${obraId}/team`, payload);
@@ -20,7 +19,6 @@ export async function addObraTeamMember(obraId: number, payload: {
 
 export async function updateObraTeamMember(obraId: number, responsibleId: number, payload: {
   role?: string | null;
-  member_type?: "equipo" | "contratista";
   plan_disciplines?: string[] | null;
 }): Promise<ObraTeamMember> {
   const { data } = await apiClient.patch<ObraTeamMember>(`/obras/${obraId}/team/${responsibleId}`, payload);
