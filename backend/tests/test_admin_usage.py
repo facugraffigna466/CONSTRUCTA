@@ -6,6 +6,7 @@ from app.core.security import create_access_token
 from app.models.obra import Obra
 from app.models.task import Task
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -23,6 +24,11 @@ async def two_tenants_with_tasks(db):
     ub = User(email="b@x.com", hashed_password="x", full_name="B", role="admin",
               is_active=True, tenant_id=tb.id)
     db.add_all([ua, ub])
+    await db.flush()
+    db.add_all([
+        TenantMembership(user_id=ua.id, tenant_id=ta.id, role="admin", is_active=True),
+        TenantMembership(user_id=ub.id, tenant_id=tb.id, role="admin", is_active=True),
+    ])
     await db.flush()
     obra_a = Obra(name="Obra A", manager_id=ua.id, tenant_id=ta.id)
     obra_b = Obra(name="Obra B", manager_id=ub.id, tenant_id=tb.id)

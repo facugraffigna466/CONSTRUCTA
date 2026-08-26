@@ -65,6 +65,28 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class TenantOption(BaseModel):
+    id: int
+    name: str
+
+
+class LoginResponse(BaseModel):
+    """Fase 3: si el email tiene más de una empresa con membership activa,
+    login no emite tokens todavía — devuelve un pre_auth_token de vida corta
+    para canjear en /auth/select-tenant junto con la lista de empresas."""
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    requires_tenant_selection: bool = False
+    pre_auth_token: str | None = None
+    tenants: list[TenantOption] = Field(default_factory=list)
+
+
+class SelectTenantRequest(BaseModel):
+    pre_auth_token: str
+    tenant_id: int
+
+
 class RefreshRequest(BaseModel):
     refresh_token: str
 
@@ -105,7 +127,14 @@ class InviteResponse(BaseModel):
 
 class AcceptInviteRequest(BaseModel):
     token: str
-    full_name: str = Field(..., min_length=2, max_length=255)
+    # Requerido solo si el email invitado es una identidad nueva (sin cuenta
+    # previa en Constructa). Si ya existe cuenta, se ignora — se usa el
+    # full_name ya cargado. Ver AuthService.accept_invite.
+    full_name: str | None = Field(None, min_length=2, max_length=255)
+    # Identidad nueva: la contraseña que va a setear. Identidad existente
+    # (existing_account=True en el invite context): la contraseña ACTUAL de
+    # esa cuenta, para confirmar que quien acepta es el dueño — no se
+    # reemplaza el hash existente.
     password: str = Field(..., min_length=8)
 
 
@@ -114,6 +143,10 @@ class InviteContextResponse(BaseModel):
     email: str
     role: str
     company_name: str | None = None
+    # True si el email invitado ya tiene una cuenta Constructa (en otra
+    # empresa) — el frontend pide "confirmá tu contraseña" en vez de "creá
+    # tu cuenta".
+    existing_account: bool = False
     # Obras a las que el invitado se va a asignar al aceptar (Fase 3). El
     # frontend usa esto para mostrar "vas a entrar a estas obras como X".
     obra_assignments: list[ObraRoleForUserRead] = Field(default_factory=list)

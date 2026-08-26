@@ -106,7 +106,7 @@ class BitacoraService:
 
         from app.models.plan import Plan
         from app.models.tenant import Tenant
-        from app.models.user import User
+        from app.models.tenant_membership import TenantMembership
 
         limit: int | None = _BITACORA_DEFAULT_LIMIT
         tenant = await self.session.get(Tenant, tenant_id)
@@ -118,11 +118,14 @@ class BitacoraService:
             return  # plan ilimitado
 
         month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Join por TenantMembership, no por User.tenant_id (Fase 3: una
+        # identidad puede tener membership en más de un tenant, el puntero
+        # "última empresa activa" en User ya no alcanza para scopear esto).
         used = (await self.session.execute(
             select(func.count())
             .select_from(BitacoraEntry)
-            .join(User, BitacoraEntry.created_by == User.id)
-            .where(User.tenant_id == tenant_id, BitacoraEntry.created_at >= month_start)
+            .join(TenantMembership, BitacoraEntry.created_by == TenantMembership.user_id)
+            .where(TenantMembership.tenant_id == tenant_id, BitacoraEntry.created_at >= month_start)
         )).scalar_one()
 
         if used >= limit:
@@ -642,16 +645,27 @@ class BitacoraService:
         """Avisa por WhatsApp a quien mandó la nota (salvo que sea quien está aplicando).
         Nunca rompe el flujo si el envío falla."""
         from app.integrations.twilio.client import send_whatsapp_message
-        from app.models.user import User
+        from app.models.obra import Obra
+        from app.models.tenant_membership import TenantMembership
         number = None
         if entry.responsible_id is not None:
             number = (await self.session.execute(
                 select(Responsible.whatsapp_number).where(Responsible.id == entry.responsible_id)
             )).scalar_one_or_none()
         elif entry.created_by is not None and entry.created_by != manager_id:
-            number = (await self.session.execute(
-                select(User.whatsapp_number).where(User.id == entry.created_by)
-            )).scalar_one_or_none()
+            # whatsapp_number vive en TenantMembership (Fase 3) — resolvemos
+            # la membership de la obra de la entrada si la tiene; si no,
+            # cualquiera de sus membership sirve para este best-effort.
+            stmt = select(TenantMembership.whatsapp_number).where(
+                TenantMembership.user_id == entry.created_by
+            )
+            if entry.obra_id is not None:
+                obra_tenant_id = (await self.session.execute(
+                    select(Obra.tenant_id).where(Obra.id == entry.obra_id)
+                )).scalar_one_or_none()
+                if obra_tenant_id is not None:
+                    stmt = stmt.where(TenantMembership.tenant_id == obra_tenant_id)
+            number = (await self.session.execute(stmt)).scalars().first()
         if not number:
             return
         try:

@@ -1,15 +1,16 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.deps import AdminUser, CurrentUser, DbSession
 from app.core.exceptions import ConflictError
+from app.core.membership_context import AuthenticatedUser
 from app.core.plan_limits import check_plan_limit
 from app.core.security import hash_password, verify_password
 from app.models.obra import Obra
 from app.models.obra_user_role import ObraUserRole
 from app.models.user import User
+from app.repositories.tenant_membership import TenantMembershipRepository
 from app.repositories.user import UserRepository
 from app.schemas.user import (
     ChangePasswordRequest,
@@ -63,13 +64,14 @@ async def update_profile(data: UpdateProfileRequest, current_user: CurrentUser, 
     fields = {k: v for k, v in data.model_dump().items() if v is not None}
     if not fields:
         return UserRead.model_validate(current_user)
-    # Hallazgo 6.4 auditoría 04: si el usuario intenta setear un whatsapp_number
-    # que ya existe como Responsible del mismo tenant, el bot no puede resolver
-    # cuál es el emisor real. Rechazamos con 409 antes de guardar.
-    if "whatsapp_number" in fields:
+    whatsapp_number = fields.pop("whatsapp_number", None)
+    if whatsapp_number is not None:
+        # Hallazgo 6.4 auditoría 04: si el usuario intenta setear un whatsapp_number
+        # que ya existe como Responsible del mismo tenant, el bot no puede resolver
+        # cuál es el emisor real. Rechazamos con 409 antes de guardar.
         from app.repositories.responsible import ResponsibleRepository
         colision = await ResponsibleRepository(db).get_by_whatsapp_in_tenant(
-            fields["whatsapp_number"], current_user.tenant_id
+            whatsapp_number, current_user.tenant_id
         )
         if colision is not None:
             raise HTTPException(
@@ -79,14 +81,19 @@ async def update_profile(data: UpdateProfileRequest, current_user: CurrentUser, 
                     "Usá un número distinto o eliminá primero al responsable."
                 ),
             )
-    updated = await UserRepository(db).update_fields(current_user.id, **fields)
-    if "whatsapp_number" in fields and current_user.tenant_id is not None:
-        from app.repositories.tenant_membership import TenantMembershipRepository
-        membership_repo = TenantMembershipRepository(db)
-        mirror = await membership_repo.get_by_user_and_tenant(current_user.id, current_user.tenant_id)
-        if mirror is not None:
-            await membership_repo.update_fields(mirror.id, whatsapp_number=fields["whatsapp_number"])
-    out = UserRead.model_validate(updated)
+        # whatsapp_number vive en TenantMembership (Fase 3) — es por-empresa,
+        # no por-identidad.
+        membership_id = getattr(current_user, "membership_id", None)
+        if membership_id is not None:
+            await TenantMembershipRepository(db).update_fields(
+                membership_id, whatsapp_number=whatsapp_number
+            )
+    if fields:
+        await UserRepository(db).update_fields(current_user.id, **fields)
+    # current_user envuelve las mismas instancias trackeadas por `db` — los
+    # update_fields de arriba ya quedaron reflejados ahí (mismo session
+    # identity map), no hace falta releer nada.
+    out = UserRead.model_validate(current_user)
     roles = (await _obra_roles_for_users(db, [current_user.id])).get(current_user.id, [])
     return out.model_copy(update={"obra_roles": roles})
 
@@ -103,12 +110,21 @@ async def change_password(data: ChangePasswordRequest, current_user: CurrentUser
 
 @router.get("", response_model=list[UserRead])
 async def list_members(current_user: AdminUser, db: DbSession):
-    members = await UserRepository(db).list_all(tenant_id=current_user.tenant_id)
-    roles_by_user = await _obra_roles_for_users(db, [m.id for m in members])
+    membership_repo = TenantMembershipRepository(db)
+    memberships = await membership_repo.list_for_tenant(current_user.tenant_id)
+    user_ids = [m.user_id for m in memberships]
+    users_by_id: dict[int, User] = {}
+    if user_ids:
+        rows = await db.execute(select(User).where(User.id.in_(user_ids)))
+        users_by_id = {u.id: u for u in rows.scalars().all()}
+    roles_by_user = await _obra_roles_for_users(db, user_ids)
     out: list[UserRead] = []
-    for m in members:
-        base = UserRead.model_validate(m)
-        out.append(base.model_copy(update={"obra_roles": roles_by_user.get(m.id, [])}))
+    for m in memberships:
+        u = users_by_id.get(m.user_id)
+        if u is None:
+            continue
+        base = UserRead.model_validate(AuthenticatedUser(u, m))
+        out.append(base.model_copy(update={"obra_roles": roles_by_user.get(m.user_id, [])}))
     return out
 
 
@@ -138,10 +154,14 @@ async def resend_invite(user_id: int, current_user: AdminUser, db: DbSession):
         user, token = await AuthService(db).resend_invite(user_id, tenant_id=current_user.tenant_id)
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    membership = await TenantMembershipRepository(db).get_by_user_and_tenant(
+        user_id, current_user.tenant_id
+    )
     invite_url = f"{settings.FRONTEND_URL}/invite/{token}"
-    await send_invite_email(user.email, invite_url, user.role)
+    await send_invite_email(user.email, invite_url, membership.role if membership else "collaborator")
     obra_assignments = [
-        ObraAssignmentInvite(**a) for a in (user.pending_obra_assignments or [])
+        ObraAssignmentInvite(**a)
+        for a in ((membership.pending_obra_assignments if membership else None) or [])
     ]
     return InviteResponse(invite_token=token, invite_url=invite_url, obra_assignments=obra_assignments)
 
@@ -150,22 +170,15 @@ async def resend_invite(user_id: int, current_user: AdminUser, db: DbSession):
 async def update_member_role(user_id: int, data: RoleUpdateRequest, current_user: AdminUser, db: DbSession):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="No podés cambiar tu propio rol")
-    repo = UserRepository(db)
-    target = await repo.get(user_id)
+    membership_repo = TenantMembershipRepository(db)
     # Aislamiento por tenant: un admin solo opera sobre miembros de SU empresa.
-    # Se colapsa el caso cross-tenant en el mismo 404 para no filtrar existencia.
-    if not target or (
-        current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id
-    ):
+    # "no existe" y "es de otro tenant" se colapsan en el mismo 404.
+    target_membership = await membership_repo.get_by_user_and_tenant(user_id, current_user.tenant_id)
+    if target_membership is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    updated = await repo.update_fields(user_id, role=data.role)
-    if current_user.tenant_id is not None:
-        from app.repositories.tenant_membership import TenantMembershipRepository
-        membership_repo = TenantMembershipRepository(db)
-        mirror = await membership_repo.get_by_user_and_tenant(user_id, current_user.tenant_id)
-        if mirror is not None:
-            await membership_repo.update_fields(mirror.id, role=data.role)
-    out = UserRead.model_validate(updated)
+    updated_membership = await membership_repo.update_fields(target_membership.id, role=data.role)
+    target_user = await UserRepository(db).get(user_id)
+    out = UserRead.model_validate(AuthenticatedUser(target_user, updated_membership))
     roles = (await _obra_roles_for_users(db, [user_id])).get(user_id, [])
     return out.model_copy(update={"obra_roles": roles})
 
@@ -174,13 +187,12 @@ async def update_member_role(user_id: int, data: RoleUpdateRequest, current_user
 async def remove_member(user_id: int, current_user: AdminUser, db: DbSession):
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="No podés eliminarte a vos mismo")
-    repo = UserRepository(db)
-    target = await repo.get(user_id)
-    # Aislamiento por tenant: un admin solo opera sobre miembros de SU empresa.
-    if not target or (
-        current_user.tenant_id is not None and target.tenant_id != current_user.tenant_id
-    ):
+    membership_repo = TenantMembershipRepository(db)
+    target_membership = await membership_repo.get_by_user_and_tenant(user_id, current_user.tenant_id)
+    if target_membership is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if target.role == "admin":
+    if target_membership.role == "admin":
         raise HTTPException(status_code=400, detail="No se puede eliminar a otro administrador")
-    await repo.delete(user_id)
+    # Borra solo la membership de ESTA empresa — si la persona pertenece a
+    # otro tenant, su cuenta (identidad) sigue intacta ahí.
+    await membership_repo.delete(target_membership.id)

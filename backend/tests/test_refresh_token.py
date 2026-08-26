@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -27,6 +28,8 @@ async def user_with_tenant(db):
         tenant_id=t.id,
     )
     db.add(u)
+    await db.flush()
+    db.add(TenantMembership(user_id=u.id, tenant_id=t.id, role="admin", is_active=True))
     await db.flush()
     await db.commit()
     return u
@@ -76,10 +79,13 @@ async def test_refresh_token_expirado_es_401(client, db, user_with_tenant):
     login_r = await client.post(f"{API}/auth/login", json={"email": "refresh@test.com", "password": "pass1234"})
     token_val = login_r.json()["refresh_token"]
 
-    # Vencer el token directamente en la DB.
+    # Vencer el token directamente en la DB (refresh_token vive en la
+    # membership desde la Fase 3, no en User).
     await db.rollback()
-    u = (await db.execute(select(User).where(User.email == "refresh@test.com"))).scalar_one()
-    u.refresh_token_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    membership = (await db.execute(
+        select(TenantMembership).where(TenantMembership.refresh_token == token_val)
+    )).scalar_one()
+    membership.refresh_token_expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
     await db.commit()
 
     r = await client.post(f"{API}/auth/refresh", json={"refresh_token": token_val})
@@ -94,10 +100,13 @@ async def test_logout_invalida_refresh_token(client, db, user_with_tenant):
     r = await client.post(f"{API}/auth/logout", json={"refresh_token": refresh_token})
     assert r.status_code == 204
 
-    # El token está invalidado en DB.
+    # El token está invalidado en DB (refresh_token vive en la membership).
     await db.rollback()
     u = (await db.execute(select(User).where(User.email == "refresh@test.com"))).scalar_one()
-    assert u.refresh_token is None
+    membership = (await db.execute(
+        select(TenantMembership).where(TenantMembership.user_id == u.id)
+    )).scalar_one()
+    assert membership.refresh_token is None
 
     # El endpoint /auth/refresh también lo rechaza.
     r2 = await client.post(f"{API}/auth/refresh", json={"refresh_token": refresh_token})
@@ -114,10 +123,12 @@ async def test_usuario_inactivo_no_puede_refrescar(client, db, user_with_tenant)
     login_r = await client.post(f"{API}/auth/login", json={"email": "refresh@test.com", "password": "pass1234"})
     refresh_token = login_r.json()["refresh_token"]
 
-    # Desactivar el usuario.
+    # Desactivar la membership (Fase 3: refresh() gatea por membership.is_active).
     await db.rollback()
-    u = (await db.execute(select(User).where(User.email == "refresh@test.com"))).scalar_one()
-    u.is_active = False
+    membership = (await db.execute(
+        select(TenantMembership).where(TenantMembership.refresh_token == refresh_token)
+    )).scalar_one()
+    membership.is_active = False
     await db.commit()
 
     r = await client.post(f"{API}/auth/refresh", json={"refresh_token": refresh_token})

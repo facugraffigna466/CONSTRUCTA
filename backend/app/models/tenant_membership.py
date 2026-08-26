@@ -45,6 +45,10 @@ class TenantMembership(Base):
         JSON, nullable=True
     )
     whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    # Fase 3: la sesión (refresh token) es por membership, no por identidad —
+    # dos empresas de la misma persona son dos sesiones independientes.
+    refresh_token: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
+    refresh_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

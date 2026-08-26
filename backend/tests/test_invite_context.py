@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest_asyncio
 
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -14,9 +15,14 @@ async def _mk_invite(db, *, token: str, expires: datetime, active: bool = False)
     t = Tenant(name="Constructora Sur")
     db.add(t)
     await db.flush()
-    db.add(User(
-        email="invitado@x.com", hashed_password="", full_name="", role="collaborator",
-        is_active=active, tenant_id=t.id, invitation_token=token, invitation_expires_at=expires,
+    u = User(email="invitado@x.com", hashed_password="", full_name="", tenant_id=t.id)
+    db.add(u)
+    await db.flush()
+    # invitation_token/expires_at/role/is_active viven en TenantMembership
+    # (Fase 3 rediseño multi-tenant), no en User.
+    db.add(TenantMembership(
+        user_id=u.id, tenant_id=t.id, role="collaborator", is_active=active,
+        invitation_token=token, invitation_expires_at=expires,
     ))
     await db.flush()
     await db.commit()

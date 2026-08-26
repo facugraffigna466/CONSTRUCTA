@@ -8,9 +8,11 @@ from app.schemas.user import (
     ForgotPasswordRequest,
     InviteContextResponse,
     LoginRequest,
+    LoginResponse,
     LogoutRequest,
     RefreshRequest,
     ResetPasswordRequest,
+    SelectTenantRequest,
     TokenResponse,
     UserCreate,
     UserRead,
@@ -36,9 +38,18 @@ async def register(data: UserCreate, db: DbSession):
     return user
 
 
-@router.post("/login", response_model=TokenResponse, dependencies=[Depends(_login_limit)])
+@router.post("/login", response_model=LoginResponse, dependencies=[Depends(_login_limit)])
 async def login(data: LoginRequest, db: DbSession):
-    access_token, refresh_token = await AuthService(db).login(data.email, data.password)
+    return await AuthService(db).login(data.email, data.password)
+
+
+@router.post("/select-tenant", response_model=TokenResponse)
+async def select_tenant(data: SelectTenantRequest, db: DbSession):
+    """Canjea el pre_auth_token de un login con varias empresas por una
+    sesión real en la empresa elegida."""
+    access_token, refresh_token = await AuthService(db).select_tenant(
+        data.pre_auth_token, data.tenant_id
+    )
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -77,11 +88,11 @@ async def forgot_password(data: ForgotPasswordRequest, db: DbSession) -> dict[st
     return {"message": "Si el email existe, te enviamos un enlace para recuperar tu contraseña."}
 
 
-@router.post("/reset-password", response_model=TokenResponse, dependencies=[Depends(_reset_limit)])
+@router.post("/reset-password", response_model=LoginResponse, dependencies=[Depends(_reset_limit)])
 async def reset_password(data: ResetPasswordRequest, db: DbSession):
-    """Valida el token y setea la nueva contraseña; deja al usuario logueado."""
-    access_token, refresh_token = await AuthService(db).reset_password(data.token, data.new_password)
-    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+    """Valida el token y setea la nueva contraseña; deja a la persona logueada
+    (o le pide elegir empresa si tiene membership activa en más de una)."""
+    return await AuthService(db).reset_password(data.token, data.new_password)
 
 
 @router.post("/verify-email")

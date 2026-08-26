@@ -16,12 +16,6 @@ class UserRepository(BaseRepository[User]):
         )
         return result.scalar_one_or_none()
 
-    async def get_by_invitation_token(self, token: str) -> User | None:
-        result = await self.session.execute(
-            select(User).where(User.invitation_token == token)
-        )
-        return result.scalar_one_or_none()
-
     async def get_by_reset_token(self, token: str) -> User | None:
         result = await self.session.execute(
             select(User).where(User.reset_token == token)
@@ -31,12 +25,6 @@ class UserRepository(BaseRepository[User]):
     async def get_by_verification_token(self, token: str) -> User | None:
         result = await self.session.execute(
             select(User).where(User.verification_token == token)
-        )
-        return result.scalar_one_or_none()
-
-    async def get_by_refresh_token(self, token: str) -> User | None:
-        result = await self.session.execute(
-            select(User).where(User.refresh_token == token)
         )
         return result.scalar_one_or_none()
 
@@ -81,13 +69,6 @@ class UserRepository(BaseRepository[User]):
             stmt = stmt.where(TenantMembership.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
         return result.scalars().first()
-
-    async def list_all(self, tenant_id: int | None = None) -> list[User]:
-        stmt = select(User).order_by(User.created_at)
-        if tenant_id is not None:
-            stmt = stmt.where(User.tenant_id == tenant_id)
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
 
     async def count(self) -> int:
         from sqlalchemy import func

@@ -19,6 +19,7 @@ from app.core.security import create_access_token
 from app.models.obra import Obra
 from app.models.obra_user_role import ObraUserRole, ObraUserRoleType
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -131,12 +132,15 @@ async def test_invite_con_obras_guarda_pendientes(client, db, ctx):
     body = r.json()
     assert len(body["obra_assignments"]) == 2
 
-    # Se guardaron las pendientes en la columna JSON.
+    # Se guardaron las pendientes en la membership (Fase 3: ya no en User).
     user = (await db.execute(
         select(User).where(User.email == "conobras@a.com")
     )).scalar_one()
-    assert user.pending_obra_assignments is not None
-    pending_ids = {p["obra_id"] for p in user.pending_obra_assignments}
+    membership = (await db.execute(
+        select(TenantMembership).where(TenantMembership.user_id == user.id)
+    )).scalar_one()
+    assert membership.pending_obra_assignments is not None
+    pending_ids = {p["obra_id"] for p in membership.pending_obra_assignments}
     assert pending_ids == {ctx["obra_a1"], ctx["obra_a2"]}
 
     # Y NO se materializaron las filas en obra_user_roles todavía.
