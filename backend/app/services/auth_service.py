@@ -78,10 +78,11 @@ class AuthService:
         # de TenantMembership de abajo.
         user.tenant_id = tenant.id
         await self.repo.session.flush()
-        await self.membership_repo.create(TenantMembership(
+        membership = await self.membership_repo.create(TenantMembership(
             user_id=user.id, tenant_id=tenant.id, role="admin", is_active=True,
         ))
-        return user
+        from app.core.membership_context import AuthenticatedUser
+        return AuthenticatedUser(user, membership)  # type: ignore[return-value]
 
     async def login(self, email: str, password: str) -> LoginResponse:
         user = await self.repo.get_by_email(email)
