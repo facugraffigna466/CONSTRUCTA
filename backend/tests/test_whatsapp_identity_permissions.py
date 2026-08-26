@@ -11,13 +11,16 @@ Parte A — ObraTeamMember como fuente de verdad + is_active:
   - Responsable con tarea vieja pero sin ObraTeamMember → NO tiene acceso a esa obra.
   - `task_service.create` rechaza `responsible_id` que no está en el team de la obra.
 
-Parte B — `member_type` gatea capacidades:
+Parte B — `plan_disciplines` es el único filtro (ya no hay `member_type`):
   - `allowed_disciplines_for_responsible` desambigua correctamente:
       * no en el team → devuelve [] (sin acceso), no None.
-      * en el team + equipo + NULL → devuelve None (acceso total).
-      * en el team + contratista + NULL → devuelve [] (sin acceso, semántica invertida).
-      * en el team + contratista + lista → devuelve la lista.
-  - Bitácora audio: contratista puro es bloqueado; equipo procesa normalmente.
+      * en el team + NULL → devuelve None (acceso total), sin importar de qué
+        responsable se trate — la migración 0054 borró la distinción
+        equipo/contratista, `plan_disciplines=NULL` es acceso total para todos.
+      * en el team + lista explícita → devuelve esa lista.
+  - Bitácora audio: el gate es "solo staff" (users con login). Cualquier
+    `Responsible` —tenga o no rol de "equipo" en el team— queda bloqueado;
+    solo un `User` (staff) puede mandar audios a la bitácora.
 
 Parte C — confirmación:
   - Responsable con confirmed_at=None: cualquier mensaje distinto de SI
@@ -68,6 +71,7 @@ async def ctx(db):
     admin = User(
         email="admin@wa.com", hashed_password="x", full_name="Admin",
         role="admin", is_active=True, tenant_id=tenant.id,
+        whatsapp_number="+5493510000099",
     )
     db.add(admin)
     await db.flush()
@@ -120,11 +124,11 @@ async def ctx(db):
     db.add_all([
         ObraTeamMember(
             obra_id=obra_a.id, tenant_id=tenant.id, responsible_id=juan.id,
-            role="Jefe", member_type="equipo", plan_disciplines=None,
+            role="Jefe", plan_disciplines=None,
         ),
         ObraTeamMember(
             obra_id=obra_a.id, tenant_id=tenant.id, responsible_id=ana.id,
-            role=None, member_type="contratista", plan_disciplines=None,
+            role=None, plan_disciplines=None,
         ),
     ])
     # Tarea VIEJA en obra B asignada a Juan sin ObraTeamMember en B — este es
@@ -149,6 +153,7 @@ async def ctx(db):
         "ana_phone": ana.whatsapp_number,
         "baja_phone": baja.whatsapp_number,
         "lucia_phone": lucia.whatsapp_number,
+        "admin_phone": admin.whatsapp_number,
     }
 
 
@@ -219,13 +224,15 @@ async def test_allowed_disciplinas_equipo_null_devuelve_none_acceso_total(db, ct
     assert result is None
 
 
-async def test_allowed_disciplinas_contratista_null_devuelve_vacio(db, ctx):
-    """Ana es 'contratista' en A con plan_disciplines=NULL → SIN acceso
-    (semántica invertida vs equipo)."""
+async def test_allowed_disciplinas_null_sin_distincion_de_tipo_de_responsable(db, ctx):
+    """Ana, igual que Juan, está en el team de A con plan_disciplines=NULL →
+    acceso total. La migración 0054 borró `member_type`: ya no hay semántica
+    invertida por "contratista", el resultado es el mismo para cualquier
+    responsable en el team."""
     result = await PlanoService(db).allowed_disciplines_for_responsible(
         ctx["ana_id"], ctx["obra_a_id"]
     )
-    assert result == []
+    assert result is None
 
 
 async def test_allowed_disciplinas_contratista_con_lista_devuelve_lista(db, ctx):
@@ -266,9 +273,10 @@ async def test_resolve_plan_access_devuelve_tupla(db, ctx):
     is_member, disc = await svc.resolve_plan_access(ctx["juan_id"], ctx["obra_b_id"])
     assert (is_member, disc) == (False, [])
 
-    # Ana en A: (True, []) = contratista con NULL → sin acceso.
+    # Ana en A: (True, None) = miembro con acceso total, igual que Juan (ya
+    # no hay semántica invertida por "contratista", ver migración 0054).
     is_member, disc = await svc.resolve_plan_access(ctx["ana_id"], ctx["obra_a_id"])
-    assert (is_member, disc) == (True, [])
+    assert (is_member, disc) == (True, None)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -318,12 +326,13 @@ async def test_create_task_sin_responsible_no_valida_team(db, ctx):
 
 
 # ─────────────────────────────────────────────────────────────
-# Parte B — bitácora bloqueada para contratista puro
+# Parte B — bitácora por audio: gate "solo staff" (ver migración 0054)
 # ─────────────────────────────────────────────────────────────
 
 
-async def test_contratista_puro_bloqueado_en_bitacora_audio(db, ctx):
-    """Ana solo es 'contratista' en A → bloqueada."""
+async def test_responsible_bloqueado_en_bitacora_audio_no_es_staff(db, ctx):
+    """Ana es un Responsible (sin login) → bloqueada, sin importar su rol en
+    el team. El gate ya no distingue equipo/contratista: es "solo staff"."""
     svc = MessageService(db)
     payload = TwilioInboundPayload(
         From=f"whatsapp:{ctx['ana_phone']}",
@@ -347,13 +356,13 @@ async def test_contratista_puro_bloqueado_en_bitacora_audio(db, ctx):
         ).order_by(Message.id.desc())
     )).scalars().first()
     assert out is not None
-    assert "no está disponible para tu tipo de acceso" in out.body
+    assert "solo para el equipo administrativo" in out.body
 
 
-async def test_equipo_no_bloqueado_en_bitacora_audio(db, ctx):
-    """Juan es 'equipo' en A → NO bloqueado. La bitácora entra a procesarse
-    (no verificamos el resultado del análisis IA — solo que NO respondió con
-    el mensaje de bloqueo)."""
+async def test_responsible_equipo_tambien_bloqueado_en_bitacora_audio(db, ctx):
+    """Juan también es un Responsible (no un User con login), aunque su rol en
+    el team sea de mayor confianza — el gate "solo staff" lo bloquea igual
+    que a Ana. Antes de la migración 0054 "equipo" quedaba exento; ya no."""
     svc = MessageService(db)
     payload = TwilioInboundPayload(
         From=f"whatsapp:{ctx['juan_phone']}",
@@ -364,11 +373,7 @@ async def test_equipo_no_bloqueado_en_bitacora_audio(db, ctx):
         MediaUrl0="https://api.twilio.com/fake-audio.ogg",
         MediaContentType0="audio/ogg",
     )
-    # Mockeamos la descarga del audio para que falle limpio, así no llamamos a
-    # OpenAI. Lo que importa es que la respuesta NO sea la del bloqueo.
     with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
-        with patch("app.services.message_service._asyncio", None, create=True):
-            pass  # dummy — no rompemos la ruta real
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -379,8 +384,37 @@ async def test_equipo_no_bloqueado_en_bitacora_audio(db, ctx):
         ).order_by(Message.id.desc())
     )).scalars().first()
     assert out is not None
-    # No es el mensaje de bloqueo.
-    assert "no está disponible para tu tipo de acceso" not in out.body
+    assert "solo para el equipo administrativo" in out.body
+
+
+async def test_staff_no_bloqueado_en_bitacora_audio(db, ctx):
+    """El admin es un User (staff con login) con whatsapp_number cargado →
+    NO bloqueado por el gate. No verificamos el resultado del análisis IA
+    (la descarga del audio fake falla limpio) — solo que la respuesta NO sea
+    la de bloqueo, es decir que pasó el gate "solo staff"."""
+    svc = MessageService(db)
+    payload = TwilioInboundPayload(
+        From=f"whatsapp:{ctx['admin_phone']}",
+        To="whatsapp:+14155238886",
+        MessageSid="SM_test_admin_audio", AccountSid="AC_test",
+        Body="",
+        NumMedia="1",
+        MediaUrl0="https://api.twilio.com/fake-audio.ogg",
+        MediaContentType0="audio/ogg",
+    )
+    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+        await svc.process_inbound(payload, raw_params={})
+    from sqlalchemy import select
+    from app.models.message import Message, MessageDirection
+    out = (await db.execute(
+        select(Message).where(
+            Message.direction == MessageDirection.OUTBOUND,
+            Message.to_number == ctx["admin_phone"],
+        ).order_by(Message.id.desc())
+    )).scalars().first()
+    assert out is not None
+    # No es el mensaje de bloqueo (pasó el gate "solo staff").
+    assert "solo para el equipo administrativo" not in out.body
 
 
 # ─────────────────────────────────────────────────────────────

@@ -93,7 +93,7 @@ async def test_add_team_rejects_cross_tenant_responsible(client, two_tenants_ctx
         r = await client.post(
             f"{API}/obras/{two_tenants_ctx['obra_a_id']}/team",
             headers=_auth(two_tenants_ctx["admin_a_token"]),
-            json={"responsible_id": two_tenants_ctx["resp_b_id"], "member_type": "contratista"},
+            json={"responsible_id": two_tenants_ctx["resp_b_id"]},
         )
     assert r.status_code == 404, r.text
 
@@ -181,7 +181,6 @@ async def test_deactivate_responsible_removes_team_memberships(
         obra_id=two_tenants_ctx["obra_a_id"],
         tenant_id=two_tenants_ctx["tA_id"],
         responsible_id=two_tenants_ctx["resp_a_id"],
-        member_type="equipo",
     )
     db.add(otm)
     await db.commit()
@@ -210,9 +209,8 @@ async def test_send_window_not_used_in_inbound_path():
     silencio total.
     """
     import re
-    src = open(
-        "/Users/facundograffigna/Desktop/CONSTRUCTA/backend/app/services/message_service.py"
-    ).read()
+    import app.services.message_service as message_service_module
+    src = open(message_service_module.__file__).read()
     # Contamos ocurrencias de _within_send_window en el archivo. Antes del fix
     # había 4 (definición + 1 en inbound + 2 en outbound). Ahora deben ser 3
     # (definición + 2 en outbound).
