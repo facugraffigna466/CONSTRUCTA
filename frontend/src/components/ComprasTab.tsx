@@ -915,7 +915,9 @@ function AddMaterialModal({ tasks, teamMembers, onClose, onAdded }: {
   const [error, setError]           = useState<string | null>(null);
   const [addAnother, setAddAnother] = useState(true);
 
-  const contratistas = teamMembers.filter(m => m.member_type === "contratista");
+  // La distinción equipo/contratista se eliminó del backend (migration 0054):
+  // ahora hay una sola entidad "responsable de obra", cualquiera es candidato.
+  const contratistas = teamMembers;
 
   async function handleSave() {
     if (!taskId) { setError("Elegí a qué tarea pertenece el material."); return; }
@@ -1025,7 +1027,9 @@ function SolicitudAllModal({
   } | null>(null);
   const [manualPhone, setManualPhone] = useState("");
 
-  const contratistas = teamMembers.filter(m => m.member_type === "contratista");
+  // La distinción equipo/contratista se eliminó del backend (migration 0054):
+  // ahora hay una sola entidad "responsable de obra", cualquiera es candidato.
+  const contratistas = teamMembers;
   const hasProviders = suppliers.length > 0 || contratistas.length > 0;
 
   const groups = useMemo(() => {
