@@ -150,11 +150,12 @@ async def invite_member(data: InviteRequest, current_user: AdminUser, db: DbSess
     except ConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     invite_url = f"{settings.FRONTEND_URL}/invite/{token}"
-    await send_invite_email(data.email, invite_url, data.role)
+    email_sent = await send_invite_email(data.email, invite_url, data.role)
     return InviteResponse(
         invite_token=token,
         invite_url=invite_url,
         obra_assignments=effective_assignments,
+        email_sent=email_sent,
     )
 
 
@@ -170,12 +171,19 @@ async def resend_invite(user_id: int, current_user: AdminUser, db: DbSession):
         user_id, current_user.tenant_id
     )
     invite_url = f"{settings.FRONTEND_URL}/invite/{token}"
-    await send_invite_email(user.email, invite_url, membership.role if membership else "collaborator")
+    email_sent = await send_invite_email(
+        user.email, invite_url, membership.role if membership else "collaborator"
+    )
     obra_assignments = [
         ObraAssignmentInvite(**a)
         for a in ((membership.pending_obra_assignments if membership else None) or [])
     ]
-    return InviteResponse(invite_token=token, invite_url=invite_url, obra_assignments=obra_assignments)
+    return InviteResponse(
+        invite_token=token,
+        invite_url=invite_url,
+        obra_assignments=obra_assignments,
+        email_sent=email_sent,
+    )
 
 
 @router.patch("/{user_id}/role", response_model=UserRead)

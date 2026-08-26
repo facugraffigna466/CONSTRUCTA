@@ -47,6 +47,7 @@ export interface InviteResponse {
   invite_token: string;
   invite_url: string;
   obra_assignments: ObraAssignmentInvite[];
+  email_sent: boolean;
 }
 
 export async function inviteMember(

@@ -181,14 +181,14 @@ async def test_sin_api_key_devuelve_false_y_no_hace_request(monkeypatch):
     assert mock.calls == []  # nunca llamó
 
 
-async def test_sin_api_key_invite_devuelve_none_sin_explotar(monkeypatch):
+async def test_sin_api_key_invite_devuelve_false_sin_explotar(monkeypatch):
     monkeypatch.setattr(settings, "BREVO_API_KEY", "", raising=False)
     mock = _MockAsyncClient([])
     with patch("app.services.email_service.httpx.AsyncClient", return_value=mock):
         result = await email_service.send_invite_email(
             "x@y.com", "https://irrelevante", "collaborator",
         )
-    assert result is None
+    assert result is False
     assert mock.calls == []
 
 

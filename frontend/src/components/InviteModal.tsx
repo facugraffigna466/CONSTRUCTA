@@ -61,6 +61,7 @@ export function InviteModal({ onClose, obras = [] }: Props) {
   const [sending, setSending]     = useState(false);
   const [sent, setSent]           = useState(false);
   const [sentEmail, setSentEmail] = useState<string | null>(null);
+  const [emailSent, setEmailSent] = useState(true);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [error, setError]         = useState<string | null>(null);
@@ -107,6 +108,7 @@ export function InviteModal({ onClose, obras = [] }: Props) {
       const res = await inviteMember(email.trim(), role, assignments);
       setInviteUrl(res.invite_url);
       setSentEmail(email.trim());
+      setEmailSent(res.email_sent);
       setSent(true);
       setEmail("");
       setObraRoles({});
@@ -209,15 +211,27 @@ export function InviteModal({ onClose, obras = [] }: Props) {
               </div>
 
               {sent ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: C.good50, border: `1px solid ${C.goodBorder}`, borderRadius: 10 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.good, fontWeight: 600 }}>
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5L13 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    Email enviado a {sentEmail}
+                emailSent ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: C.good50, border: `1px solid ${C.goodBorder}`, borderRadius: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.good, fontWeight: 600 }}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3.5 3.5L13 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      Email enviado a {sentEmail}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#136E47", lineHeight: 1.4 }}>
+                      El invitado recibirá un email con el link para crear su cuenta. El link expira en 72 horas.
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12, color: "#136E47", lineHeight: 1.4 }}>
-                    El invitado recibirá un email con el link para crear su cuenta. El link expira en 72 horas.
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: C.secondary50, border: `1px solid ${C.secondary}`, borderRadius: 10 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: C.secondary, fontWeight: 600 }}>
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 4.5v4M8 11.2h.01" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+                      No pudimos enviar el email a {sentEmail}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#8A4A1E", lineHeight: 1.4 }}>
+                      La invitación se creó igual — usá el "Link de respaldo" de abajo para compartírselo manualmente.
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <>
                   <div style={{ display: "flex", gap: 8 }}>

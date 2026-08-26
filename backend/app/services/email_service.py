@@ -264,7 +264,7 @@ def _build_plan_warning_html(
 # ─────────────────────────────────────────────────────────────────────
 
 
-async def send_invite_email(to_email: str, invite_url: str, role: str) -> None:
+async def send_invite_email(to_email: str, invite_url: str, role: str) -> bool:
     role_label = "Administrador" if role == "admin" else "Colaborador"
     payload = {
         "sender": {"name": settings.BREVO_SENDER_NAME, "email": settings.BREVO_SENDER_EMAIL},
@@ -277,7 +277,7 @@ async def send_invite_email(to_email: str, invite_url: str, role: str) -> None:
             "Este link expira en 72 horas."
         ),
     }
-    await _send_via_brevo(payload, to_email)
+    return await _send_via_brevo(payload, to_email)
 
 
 async def send_email(to_email: str, subject: str, html: str, text: str = "") -> bool:
