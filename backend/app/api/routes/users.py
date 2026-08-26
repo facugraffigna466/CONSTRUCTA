@@ -56,7 +56,19 @@ async def me(current_user: CurrentUser, db: DbSession):
         if tenant:
             out = out.model_copy(update={"tenant_name": tenant.name})
     roles = (await _obra_roles_for_users(db, [current_user.id])).get(current_user.id, [])
-    return out.model_copy(update={"obra_roles": roles})
+    # Empresas donde esta identidad tiene membership activa (Fase 4: alimenta
+    # el switcher del Sidebar cuando hay más de una).
+    from app.models.tenant import Tenant
+    from app.schemas.user import TenantOption
+    memberships = await TenantMembershipRepository(db).list_active_for_user(current_user.id)
+    tenant_names = dict((await db.execute(
+        select(Tenant.id, Tenant.name).where(Tenant.id.in_([m.tenant_id for m in memberships]))
+    )).all())
+    available_tenants = [
+        TenantOption(id=m.tenant_id, name=tenant_names.get(m.tenant_id, "?"))
+        for m in memberships
+    ]
+    return out.model_copy(update={"obra_roles": roles, "available_tenants": available_tenants})
 
 
 @router.patch("/me", response_model=UserRead)

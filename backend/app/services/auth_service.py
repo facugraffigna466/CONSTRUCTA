@@ -152,6 +152,16 @@ class AuthService:
             raise HTTPException(status_code=404, detail="No pertenecés a esa empresa")
         return await self._issue_tokens(user, membership)
 
+    async def switch_tenant(self, user_id: int, tenant_id: int) -> tuple[str, str]:
+        """Variante autenticada de select_tenant: cambiar de empresa sin
+        volver a loguearse (switcher del Sidebar, Fase 4). Requiere un Bearer
+        de sesión vigente en vez de un pre_auth_token."""
+        user = await self.repo.get(user_id)
+        membership = await self.membership_repo.get_by_user_and_tenant(user_id, tenant_id)
+        if user is None or membership is None or not membership.is_active:
+            raise HTTPException(status_code=404, detail="No pertenecés a esa empresa")
+        return await self._issue_tokens(user, membership)
+
     async def invite(
         self, data: InviteRequest, tenant_id: int | None = None
     ) -> tuple[User, str, list[ObraAssignmentInvite]]:

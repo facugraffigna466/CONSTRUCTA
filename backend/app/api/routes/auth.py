@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.core.config import settings
-from app.core.deps import DbSession
+from app.core.deps import CurrentUser, DbSession
 from app.core.rate_limit import rate_limit
 from app.schemas.user import (
     AcceptInviteRequest,
@@ -13,6 +13,7 @@ from app.schemas.user import (
     RefreshRequest,
     ResetPasswordRequest,
     SelectTenantRequest,
+    SwitchTenantRequest,
     TokenResponse,
     UserCreate,
     UserRead,
@@ -49,6 +50,15 @@ async def select_tenant(data: SelectTenantRequest, db: DbSession):
     sesión real en la empresa elegida."""
     access_token, refresh_token = await AuthService(db).select_tenant(
         data.pre_auth_token, data.tenant_id
+    )
+    return TokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post("/switch-tenant", response_model=TokenResponse)
+async def switch_tenant(data: SwitchTenantRequest, current_user: CurrentUser, db: DbSession):
+    """Cambiar de empresa activa sin desloguearse (switcher del Sidebar)."""
+    access_token, refresh_token = await AuthService(db).switch_tenant(
+        current_user.id, data.tenant_id
     )
     return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 

@@ -153,3 +153,62 @@ async def test_remove_member_no_borra_la_identidad_de_otro_tenant(db, client):
     )
     assert login_a.status_code == 200
     assert login_a.json().get("access_token"), "debe seguir pudiendo entrar a Empresa A"
+
+
+async def test_users_me_lista_available_tenants(db, client):
+    """El switcher del Sidebar (Fase 4) se alimenta de /users/me."""
+    tenant_a, persona = await _mk_tenant_admin(db, "Empresa A", "switch@x.com", "clave123")
+    tenant_b, admin_b = await _mk_tenant_admin(db, "Empresa B", "adminSw@x.com", "clave456")
+    await db.commit()
+
+    inv = await client.post(
+        f"{API}/users/invite",
+        json={"email": "switch@x.com", "role": "collaborator"},
+        headers=_auth(create_access_token(admin_b.id, tenant_id=tenant_b.id)),
+    )
+    token = inv.json()["invite_token"]
+    acc = await client.post(f"{API}/auth/accept-invite", json={"token": token, "password": "clave123"})
+    access_b = acc.json()["access_token"]
+
+    r = await client.get(f"{API}/users/me", headers=_auth(access_b))
+    assert r.status_code == 200
+    names = {t["name"] for t in r.json()["available_tenants"]}
+    assert names == {"Empresa A", "Empresa B"}
+
+
+async def test_switch_tenant_cambia_de_empresa_sin_reloguearse(db, client):
+    tenant_a, persona = await _mk_tenant_admin(db, "Empresa A", "sw2@x.com", "clave123")
+    tenant_b, admin_b = await _mk_tenant_admin(db, "Empresa B", "adminSw2@x.com", "clave456")
+    await db.commit()
+
+    inv = await client.post(
+        f"{API}/users/invite",
+        json={"email": "sw2@x.com", "role": "collaborator"},
+        headers=_auth(create_access_token(admin_b.id, tenant_id=tenant_b.id)),
+    )
+    token = inv.json()["invite_token"]
+    acc = await client.post(f"{API}/auth/accept-invite", json={"token": token, "password": "clave123"})
+    access_b = acc.json()["access_token"]
+
+    me_b = await client.get(f"{API}/users/me", headers=_auth(access_b))
+    tenant_a_id = next(
+        t["id"] for t in me_b.json()["available_tenants"] if t["name"] == "Empresa A"
+    )
+
+    sw = await client.post(
+        f"{API}/auth/switch-tenant", json={"tenant_id": tenant_a_id}, headers=_auth(access_b),
+    )
+    assert sw.status_code == 200, sw.text
+    access_a = sw.json()["access_token"]
+
+    me_a = await client.get(f"{API}/users/me", headers=_auth(access_a))
+    assert me_a.json()["tenant_name"] == "Empresa A"
+
+    # No puede "switchear" a una empresa donde no tiene membership.
+    otra = Tenant(name="Empresa Ajena")
+    db.add(otra)
+    await db.commit()
+    bad = await client.post(
+        f"{API}/auth/switch-tenant", json={"tenant_id": otra.id}, headers=_auth(access_a),
+    )
+    assert bad.status_code == 404

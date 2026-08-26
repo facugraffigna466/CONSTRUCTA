@@ -12,6 +12,11 @@ class UserCreate(BaseModel):
     company_name: str | None = Field(None, max_length=255)
 
 
+class TenantOption(BaseModel):
+    id: int
+    name: str
+
+
 class ObraRoleForUserRead(BaseModel):
     """Rol que el usuario tiene sobre una obra específica.
 
@@ -34,6 +39,9 @@ class UserRead(BaseModel):
     avatar_url: str | None = None
     whatsapp_number: str | None = None
     tenant_name: str | None = None  # solo poblado en /users/me
+    # Todas las empresas donde esta identidad tiene membership activa (Fase 4).
+    # Solo poblado en /users/me — alimenta el switcher del Sidebar.
+    available_tenants: list[TenantOption] = Field(default_factory=list)
     created_at: datetime
     # Asignaciones de obra actuales (Fase 3). Vacío = no está asignado a ninguna
     # obra concreta; en ese caso un non-admin no ve ninguna obra en su portfolio
@@ -65,11 +73,6 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
-class TenantOption(BaseModel):
-    id: int
-    name: str
-
-
 class LoginResponse(BaseModel):
     """Fase 3: si el email tiene más de una empresa con membership activa,
     login no emite tokens todavía — devuelve un pre_auth_token de vida corta
@@ -84,6 +87,10 @@ class LoginResponse(BaseModel):
 
 class SelectTenantRequest(BaseModel):
     pre_auth_token: str
+    tenant_id: int
+
+
+class SwitchTenantRequest(BaseModel):
     tenant_id: int
 
 
