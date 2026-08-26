@@ -8,24 +8,36 @@ CONSTRUCTA es un sistema de gestión de obras de construcción orientado a traza
 
 ## 2. Estado actual
 
-**Actualizado:** 2026-04-25
+**Actualizado:** 2026-08-26
+
+> Nota: entre el 2026-04-25 y el 2026-07-24 esta tabla no se mantuvo al día durante el sprint de features (Gantt, presupuestos, compras, planes/monetización, bitácora IA); ver `CLAUDE.md` para el detalle módulo por módulo de esa etapa. Desde acá se retoma la actualización regular.
 
 | Componente | Estado |
 |---|---|
-| Backend — autenticación JWT | Completo |
-| Backend — obras (CRUD) | Completo |
-| Backend — tareas (estados, avance, dependencias) | Completo |
-| Backend — responsables (CRUD + desactivación) | Completo |
-| Backend — alertas (generación automática + lectura) | Completo |
+| Backend — autenticación JWT + refresh token con rotación | Completo |
+| Backend — multi-tenant: identidad separada de membership (`TenantMembership`) | Completo — login/invite/switch-tenant reales, dedup de invitaciones a un email ya existente |
+| Backend — obras (CRUD) + comitentes | Completo |
+| Backend — tareas (estados, avance, dependencias FS/SS/FF/SF, WBS, ruta crítica CPM, baseline) | Completo |
+| Backend — roles por obra y permisos granulares | Completo (2026-08-24) |
+| Backend — responsables / equipo global + reenvío de invitación | Completo |
+| Backend — alertas (generación automática, filtro server-side, lectura) | Completo |
 | Backend — historial (registro automático + endpoint por obra) | Completo |
-| Backend — webhooks WhatsApp (recepción de mensajes) | Estructura base lista |
-| Backend — intérprete de mensajes (reglas) | Parcial |
-| Frontend — Login | Completo |
+| Backend — planos (versionado explícito, guards de acceso) | Completo |
+| Backend — presupuestos y módulo Compras (solicitudes de cotización, IA comparativa) | Completo |
+| Backend — bitácora de obra con IA (audio por WhatsApp → transcripción → análisis, procesado en background) | Completo |
+| Backend — webhooks WhatsApp (chatbot por reglas + desambiguación de tenant) | Completo |
+| Backend — planes/tenants/límites (402 al tope de plan) | Completo |
+| Backend — aislamiento cross-tenant (IDOR) | Cluster P0 cerrado (2026-07-18) + remediaciones P1 posteriores (ver sección 3); auditoría de seguimiento en curso |
+| Frontend — Login + selección de empresa (multi-tenant) | Completo |
 | Frontend — Portfolio (panel con todas las obras) | Completo |
-| Frontend — Obra Detail con tabs | Completo |
-| Frontend — Responsables (tabla, edición, desactivación) | Completo |
+| Frontend — Obra Detail con tabs (Resumen, Tareas, Responsables, Alertas, Historial, Presupuesto) | Completo |
+| Frontend — Gantt (drag, resize, dependencias, ruta crítica, baseline, WBS) | Completo |
+| Frontend — Responsables / Equipo (tabla, edición, desactivación) | Completo |
+| Frontend — Switcher de empresa en el Sidebar | Completo (2026-08-26) |
 | Frontend — Design system CONSTRUCTA | Completo |
-| Frontend — Configuración | Placeholder |
+| Frontend — Configuración (settings por tenant, proveedores) | Completo |
+
+**Deuda técnica conocida y diferida a propósito:** limpieza de columnas vestigiales en `users` (`role`, `is_active`, `whatsapp_number`, etc. — Fase 5 del rediseño multi-tenant); ver memoria de sesión `project_multitenant_email` para el criterio de cuándo retomarla.
 
 ---
 
@@ -2004,3 +2016,163 @@ Precisar el gasto mensual informado por el equipo para las suscripciones persona
 - Incorporar comprobantes e impuestos si la cátedra solicita costo efectivamente pagado y no solo precio base.
 - Definir un criterio razonable para imputar al proyecto suscripciones que también tengan uso personal.
 - Reconstruir el esfuerzo por rangos y completar los escenarios de operación y retorno de inversión.
+
+---
+
+> **Nota de mantenimiento (2026-08-26):** entre el 2026-07-24 y esta fecha se mergearon 37 PRs sin registrar sesión por sesión en esta bitácora. Las siguientes entradas son un resumen condensado por tema (no una por cada PR) reconstruido a partir del historial de git para cerrar el bache; el detalle línea por línea de cada commit está en `git log`.
+
+## 2026-07-28 a 2026-07-30 — Remediación P1 post-auditoría + hardening de infraestructura
+
+### Objective
+Cerrar el resto del backlog abierto por `auditoria-sistema-consolidada.md` (los P1 de robustez/negocio que quedaron fuera del cluster P0 del 2026-07-18) y endurecer el arranque del backend antes del sprint de preparación de la defensa.
+
+### Changes made
+- **IDOR #16/#17** — guard de tenant en cambiar-rol/eliminar-miembro y en Compras (aislamiento + idempotencia de purchase orders).
+- **Imports (#18)** — robustez del importador Excel/CSV/MS Project ante archivos malformados o maliciosos.
+- **Bitácora (#19)** — control de costo de la IA (límite de consumo) + validación del audio recibido antes de mandarlo a transcripción.
+- **Ruta crítica (#20)** — las tareas sin fecha se excluyen del cálculo de CPM en vez de romperlo, y se reportan aparte.
+- **Panel admin (#21)** — `tasks_count` del panel de uso quedó scopeado a tenant (antes contaba entre tenants).
+- **Alertas (F5, #22)** — filtro por obra pasado al servidor + `limit`, en vez de traer todo y filtrar en el cliente (revierte la decisión original de Fase 7, ya no se sostenía con el volumen real).
+- **Invitaciones (F9, #23)** — la pantalla de aceptar invitación muestra empresa/email/rol antes de confirmar.
+- **Sidebar (F8, #24)** — se sacaron affordances muertas (switcher estático que no hacía nada); dejó paso al switcher real de empresa de Fase 4 del rediseño multi-tenant.
+- **Upload (#25)** — `VITE_API_URL` faltante en `upload.ts`.
+- **Infra (`chore/startup-validation-cors`, `chore/infra-whatsapp-cleanup`)** — validación de secretos obligatorios al arranque, CORS configurado por variable de entorno, rate-limit en el webhook de WhatsApp, limpieza de sesiones, Sentry y logging estructurado en JSON.
+- **Auth (2026-08-03)** — refresh token con rotación real + logout que invalida el token.
+
+### Files modified
+Repositorios/servicios de `team`, `purchase_order`, `imports`, `bitacora`, `critical_path`, `admin`; `AlertasTab.tsx` + `api/alerts.ts`; `AcceptInvitePage.tsx`; `Sidebar.tsx`; `upload.ts`; `app/core/config.py`/`security.py` (nuevo); `app/integrations/whatsapp` (rate-limit); logging/Sentry init.
+
+### Problems found
+El backlog de la auditoría del 2026-07-17 tenía ~28 P1; este barrido cerró el subconjunto priorizado para la entrega de agosto (docs de handoff y backlog actualizados en `#53` y `#64` para no perder el resto).
+
+### Validation
+Cada PR con su propio test/verificación puntual (no hay una corrida consolidada registrada para todo el barrido); CI en verde en cada merge.
+
+### Pending / next steps
+Ver `docs/estado-proyecto-agosto-2026.md` y el backlog post-audit para lo que quedó fuera de este barrido.
+
+---
+
+## 2026-08-12 — Documentación técnica y figuras del IPI para la defensa
+
+### Objective
+Poner al día los diagramas técnicos y las capturas del IPI de cara a la defensa del 13/15 de agosto.
+
+### Changes made
+- Diagramas actualizados: DER, casos de uso, diagrama de estados y diagrama de secuencia del chatbot (`docs/diagramas/`).
+- Se cablearon las 4 capturas faltantes (Figuras 2–5) en `docs/IPI-CONSTRUCTA.md` y se avanzó el resto del informe.
+
+### Files modified
+- `docs/diagramas/*.svg`
+- `docs/IPI-CONSTRUCTA.md`
+
+### Validation
+Regeneración del DOCX con `build_ipi_docx.py` (diagramas rasterizados con `qlmanage`).
+
+---
+
+## 2026-08-15 — Defensa de tesis
+
+Defensa de tesis rendida. Demo de 4 escenarios: Gantt, chatbot de WhatsApp, Bitácora IA, Presupuestos con análisis comparativo. Detalle completo (qué se resolvió en la sesión previa — Twilio, SDK de Anthropic, seed de datos — y cómo volver a levantar el entorno de demo) en la memoria de sesión `project_thesis_defense`.
+
+---
+
+## 2026-08-18 — Bitácora: procesar audio en background
+
+### Objective
+El webhook de Twilio quedaba bloqueado mientras se transcribía y analizaba una nota de voz larga, con riesgo de timeout en el proveedor.
+
+### Changes made
+Se movió el procesamiento del audio (transcripción + análisis IA) a una tarea en background: el webhook responde de inmediato y el resultado se aplica de forma asíncrona.
+
+### Files modified
+Módulo de bitácora (integración WhatsApp/Twilio + servicio de procesamiento de audio).
+
+---
+
+## 2026-08-18 a 2026-08-25 — Segunda auditoría sistemática (post-defensa) y su remediación
+
+### Objective
+Repetir el ejercicio de auditoría del 2026-07-17 sobre el sistema ya con la carga de features de la defensa, módulo por módulo, y cerrar los hallazgos priorizados antes de seguir sumando features.
+
+### Changes made
+- **Auditoría (11 reportes, `docs/auditoria/`)**: 01 login/usuarios/planes, 02 panel resumen, 03 tareas + bot WhatsApp, 04 responsables (User + Responsible + ObraTeamMember), 05 planos (PDFs técnicos), 06–11 alertas, historial, bitácora, equipo, admin, configuración.
+- **Remediación cerrada de esta ronda:**
+  - **Auditoría 02 (panel resumen)** — cierre completo (`#81`/`fix(panel-resumen)`).
+  - **Auditoría 03 (tareas)** — cierre completo (`#82`/`fix(tareas)`).
+  - **Auditoría 04 (responsables)** — se eliminó el concepto de "contratista" que había quedado suelto entre `User`/`Responsible`/`ObraTeamMember` (`#86`).
+  - **Auditoría 05 (planos)** — hallazgos críticos de seguridad cerrados, versionado explícito de planos + guards que faltaban, y la pantalla pasó a mostrar planos versionados en vez de archivos sueltos (`#74`, `#75`, `#78`, y `#80` que ocultó "Nueva versión" a quien no puede subir).
+  - **Auditoría 09** — reenvío de invitación pendiente + se dejó de exponer el token de invitación en la UI (`#83`); luego un segundo fix porque `is_verified` no tenía default seguro y el feedback de "email enviado" no reflejaba si realmente se había enviado (`#89`, 2026-08-26).
+  - **Auditoría 10** — los conteos del panel admin quedaron siempre scopeados a tenant + enforcement real de `active_until`; el modal de límite distingue "plan vencido" de "límite de plan alcanzado" (`#84`).
+  - **Auditoría 11** — settings pasaron a ser por tenant (antes globales), alertas de "prueba" reemplazadas por generación real, y se cerró una fuga en el endpoint de simular tareas vencidas (`#85`).
+  - Fix relacionado de alertas: `notify_task_overdue` ahora también gatea el chequeo proactivo (antes solo el manual).
+- También se aprovechó para sincronizar `IPI-CONSTRUCTA.md` con la última versión del DOCX y cerrar objeciones puntuales de la revisión de tesis (Presentación, Diagnóstico, Objetivos, Marco teórico).
+
+### Files modified
+Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/IPI-CONSTRUCTA.md`.
+
+### Pending / next steps
+Reportes 06 (alertas), 07 (historial), 08 (bitácora) no tienen remediación explícita registrada en el git log todavía — confirmar si siguen abiertos o se resolvieron como parte de otro cambio antes de darlos por cerrados.
+
+---
+
+## 2026-08-21 — Fix Gantt: flecha de dependencia superpuesta a la barra sucesora
+
+### Objective
+Cuando una tarea dependiente empezaba inmediatamente después de su predecesora (sin espacio entre barras), la flecha de dependencia SVG se dibujaba encima de la barra sucesora en vez de terminar prolijamente en su borde.
+
+### Changes made
+Iteración de varios estilos hasta converger en el definitivo: primero se probó un codo redondeado al entrar a la sucesora, luego un estilo minimal sin puntos de conexión, luego se volvió a los puntos pero más chicos, y la versión final dejó la sucesora solo con la punta de flecha (sin punto de conexión) y la línea más fina.
+
+### Files modified
+- `frontend/src/components/GanttTimeline.tsx` — geometría de las flechas SVG de dependencia.
+
+---
+
+## 2026-08-24 — Roles por obra y permisos granulares
+
+### Objective
+Hasta acá los permisos eran solo `admin`/`collaborator` a nivel tenant. Se agregó un sistema de roles a nivel obra para poder distinguir, dentro de una misma empresa, quién puede ver, editar o administrar cada obra puntual.
+
+### Changes made
+Sistema de roles por obra y permisos granulares (nueva capa de autorización además de `AdminUser`/`CurrentUser` a nivel tenant).
+
+### Files modified
+Backend: nuevo modelo/lógica de permisos por obra. Frontend: guards condicionados al rol en la obra activa.
+
+### Pending / next steps
+Revisar interacción con el rediseño multi-tenant (Fases 1-4, mergeado dos días después) para confirmar que los guards de rol por obra siguen siendo consistentes con `TenantMembership`.
+
+---
+
+## 2026-08-25 — Fix: colisión de revisión Alembic 0053 duplicada
+
+### Objective
+Dos ramas en paralelo generaron una migración `0053` cada una, con el mismo `down_revision` — Alembic no podía resolver una cadena lineal.
+
+### Changes made
+Se renumeró/resolvió la colisión de revisión duplicada y se actualizaron los tests que dependían de la migración 0054 (drop de `member_type`).
+
+### Files modified
+- `backend/alembic/versions/0053_*.py` (colisión resuelta)
+- Tests rotos por el drop de `member_type` en la migración 0054.
+
+---
+
+## 2026-08-26 — Rediseño multi-tenant: identidad separada de membership
+
+RESUELTO en la rama `feature/membership-table`, en 4 fases (mergeado a `main` en `#88`). Una misma persona (mismo email, misma password) ya puede pertenecer a varias empresas en Constructa — antes, invitar a alguien que ya tenía cuenta en otra empresa fallaba con 409 o duplicaba el `User`.
+
+Detalle completo de las 4 fases (tabla `tenant_memberships`, corte de lecturas a `TenantMembership`, login/invite/switch-tenant reales, frontend de selección/switcher de empresa) y de la Fase 5 (limpieza de columnas vestigiales en `users`, diferida a propósito) está en la memoria de sesión `project_multitenant_email` — no se repite acá para no desincronizarse de esa fuente.
+
+### Files modified (resumen)
+- Migraciones `0056`-`0058`.
+- `backend/app/services/auth_service.py`, `backend/app/api/routes/users.py`, `backend/app/core/deps.py`, `backend/app/core/obra_permissions.py`, `backend/app/core/plan_limits.py`, `backend/app/core/membership_context.py` (nuevo).
+- `frontend/src/pages/LoginPage.tsx`, `AcceptInvitePage.tsx`, `components/Sidebar.tsx`.
+- Fixes de acompañamiento el mismo día: `/auth/register` mostraba `role=collaborator` para el admin recién creado; `ComprasTab` filtraba contratistas por un `member_type` que ya no existe; la pantalla de selección de empresa no compartía layout con el login.
+
+### Validation
+Tests de aislamiento de tenant y de límites de plan actualizados con fixtures de `TenantMembership` espejo (mismo patrón en `test_tenant_isolation.py`, `test_plan_limits.py`, etc.).
+
+### Pending / next steps
+Fase 5 (drop de columnas vestigiales en `users`) queda deliberadamente pendiente — ver memoria `project_multitenant_email` para el criterio de cuándo retomarla.
