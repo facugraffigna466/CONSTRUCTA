@@ -107,65 +107,6 @@ export function LoginPage({ onLogin }: LoginPageProps) {
     }
   }
 
-  if (tenantChoice) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-constructa-bg px-8 py-12">
-        <div className="w-full max-w-[420px]">
-          <div className="bg-white rounded-2xl shadow-card-md border border-constructa-surface px-8 py-8">
-            <div className="flex items-center gap-3 mb-7">
-              <img src="/logo.png" alt="Constructa" className="w-8 h-8 rounded object-cover flex-shrink-0" />
-              <span className="font-display font-bold text-constructa-text tracking-tight">CONSTRUCTA</span>
-            </div>
-            <div className="mb-6">
-              <h2 className="font-display text-2xl font-bold text-constructa-text tracking-tight mb-1.5">
-                Elegí con qué empresa entrar
-              </h2>
-              <p className="text-sm text-constructa-secondaryText">
-                Tu cuenta pertenece a más de una empresa en Constructa.
-              </p>
-            </div>
-            <div className="space-y-2">
-              {tenantChoice.tenants.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  disabled={selecting}
-                  onClick={() => handleSelectTenant(t.id)}
-                  className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-lg border border-constructa-border hover:border-constructa-primary hover:bg-constructa-primary/5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span
-                    className="w-8 h-8 rounded-md flex-shrink-0 flex items-center justify-center text-white font-bold text-xs"
-                    style={{ background: "linear-gradient(135deg, #FF8856, #FF6B35)" }}
-                  >
-                    {t.name.slice(0, 2).toUpperCase()}
-                  </span>
-                  <span className="text-sm font-semibold text-constructa-text">{t.name}</span>
-                  <ArrowRightIcon className="w-4 h-4 text-constructa-border ml-auto flex-shrink-0" />
-                </button>
-              ))}
-            </div>
-            {error && (
-              <div className="mt-4" style={{
-                display: "flex", alignItems: "center", gap: 10,
-                background: "#FEF2F2", border: "1px solid #FECACA",
-                borderRadius: 10, padding: "12px 14px",
-              }}>
-                <span style={{ fontSize: 13, color: "#B91C1C", fontWeight: 500 }}>{error}</span>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => { setTenantChoice(null); setError(null); }}
-              className="mt-5 text-center w-full text-xs text-constructa-primary font-semibold hover:underline"
-            >
-              Volver a ingresar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-screen w-full">
 
@@ -261,7 +202,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
       </div>
 
-      {/* ── Right panel — form ─────────────────────────────── */}
+      {/* ── Right panel — form / selección de empresa ─────── */}
       <div
         className="flex-1 flex items-center justify-center px-8 py-12 bg-constructa-bg"
         style={{
@@ -281,6 +222,61 @@ export function LoginPage({ onLogin }: LoginPageProps) {
             <span className="font-display font-bold text-constructa-text tracking-tight">CONSTRUCTA</span>
           </div>
 
+          {tenantChoice ? (
+          <>
+            {/* Heading — selección de empresa */}
+            <div className="mb-8">
+              <h2 className="font-display text-2xl xl:text-3xl font-bold text-constructa-text tracking-tight mb-1.5">
+                Elegí con qué empresa entrar
+              </h2>
+              <p className="text-sm text-constructa-secondaryText">
+                Tu cuenta pertenece a más de una empresa en Constructa.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              {tenantChoice.tenants.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  disabled={selecting}
+                  onClick={() => handleSelectTenant(t.id)}
+                  className="w-full flex items-center gap-3 text-left px-4 py-3 bg-white border rounded-lg focus-within:ring-2 transition-all duration-200 border-constructa-border hover:border-constructa-primary hover:bg-constructa-primary/5 disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  <span
+                    className="w-8 h-8 rounded-md flex-shrink-0 flex items-center justify-center text-white font-bold text-xs"
+                    style={{ background: "linear-gradient(135deg, #FF8856, #FF6B35)" }}
+                  >
+                    {t.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <span className="text-sm font-semibold text-constructa-text">{t.name}</span>
+                  <ArrowRightIcon className="w-4 h-4 text-constructa-border ml-auto flex-shrink-0" />
+                </button>
+              ))}
+            </div>
+
+            {error && (
+              <div className="mt-4" style={{
+                display: "flex", alignItems: "center", gap: 10,
+                background: "#FEF2F2", border: "1px solid #FECACA",
+                borderRadius: 10, padding: "12px 14px",
+              }}>
+                <span style={{ fontSize: 13, color: "#B91C1C", fontWeight: 500 }}>{error}</span>
+              </div>
+            )}
+
+            <p className="text-center text-xs text-constructa-secondaryText mt-5 mb-0">
+              <button
+                type="button"
+                onClick={() => { setTenantChoice(null); setError(null); }}
+                className="text-constructa-primary font-semibold hover:underline"
+              >
+                Volver a ingresar
+              </button>
+            </p>
+          </>
+          ) : (
+          <>
           {/* Heading */}
           <div className="mb-8">
             <h2 className="font-display text-2xl xl:text-3xl font-bold text-constructa-text tracking-tight mb-1.5">
@@ -491,6 +487,8 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               )}
             </div>
           </form>
+          </>
+          )}
 
           </div>{/* /card blanca */}
 
