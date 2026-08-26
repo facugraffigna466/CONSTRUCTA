@@ -27,12 +27,33 @@ async def get_current_user(
         )
     from app.repositories.user import UserRepository
     user = await UserRepository(db).get(user_id)
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
-    return user
+
+    # Fase 2 rediseño multi-tenant: tenant_id/role/is_active/whatsapp_number
+    # se resuelven desde la TenantMembership, no desde las columnas de User.
+    # Hasta la Fase 3 cada User tiene a lo sumo una membership (todavía no se
+    # puede invitar el mismo email a dos tenants), así que alcanza con
+    # resolverla por su tenant_id actual. Ver membership_context.py.
+    from app.repositories.tenant_membership import TenantMembershipRepository
+    authenticated: User = user
+    if user.tenant_id is not None:
+        membership = await TenantMembershipRepository(db).get_by_user_and_tenant(
+            user.id, user.tenant_id
+        )
+        if membership is not None:
+            from app.core.membership_context import AuthenticatedUser
+            authenticated = AuthenticatedUser(user, membership)  # type: ignore[assignment]
+
+    if not authenticated.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    return authenticated
 
 
 async def get_current_user_id(user: User = Depends(get_current_user)) -> int:
