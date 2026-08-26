@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { TenantOption } from "../types";
 
 export type ObraUserRoleType = "jefe_obra" | "colaborador" | "solo_lectura";
 
@@ -22,6 +23,9 @@ export interface ApiUser {
   avatar_url: string | null;
   whatsapp_number?: string | null;
   tenant_name?: string | null; // solo poblado en /users/me
+  // Empresas donde esta identidad tiene membership activa (Fase 4). Solo
+  // poblado en /users/me — alimenta el switcher del Sidebar.
+  available_tenants?: TenantOption[];
   created_at: string;
   // Asignaciones por-obra del usuario (Fase 3/4). Vacío = no está asignado a
   // ninguna obra (los admin de empresa siempre vienen con [] y se resuelven
@@ -62,6 +66,10 @@ export interface InviteContext {
   email: string;
   role: string;
   company_name: string | null;
+  // True si el email invitado ya tiene una cuenta Constructa (en otra
+  // empresa) — la pantalla de accept pide confirmar la contraseña actual en
+  // vez de crear una cuenta nueva.
+  existing_account: boolean;
   // Obras a las que el invitado se va a asignar al aceptar. Se hidrata con el
   // nombre de la obra para que la pantalla de accept pueda mostrar "vas a
   // entrar a X obras" antes de tipear la clave.
@@ -75,12 +83,12 @@ export async function fetchInviteContext(token: string): Promise<InviteContext> 
 
 export async function acceptInvite(
   token: string,
-  full_name: string,
-  password: string
+  password: string,
+  full_name?: string,
 ): Promise<{ access_token: string; refresh_token: string }> {
   const { data } = await apiClient.post<{ access_token: string; refresh_token: string }>(
     "/auth/accept-invite",
-    { token, full_name, password }
+    { token, password, ...(full_name ? { full_name } : {}) }
   );
   return data;
 }

@@ -1,12 +1,38 @@
 import { apiClient } from "./client";
+import type { TenantOption } from "../types";
 
 interface TokenPair {
   access_token: string;
   refresh_token: string;
 }
 
-export async function login(email: string, password: string): Promise<TokenPair> {
-  const { data } = await apiClient.post<TokenPair>("/auth/login", { email, password });
+/** Si el email tiene membership activa en más de una empresa, login no
+ * devuelve tokens todavía — hay que elegir con selectTenant(). */
+export interface TenantSelectionRequired {
+  requires_tenant_selection: true;
+  pre_auth_token: string;
+  tenants: TenantOption[];
+}
+
+export type LoginResult = (TokenPair & { requires_tenant_selection?: false }) | TenantSelectionRequired;
+
+export async function login(email: string, password: string): Promise<LoginResult> {
+  const { data } = await apiClient.post<LoginResult>("/auth/login", { email, password });
+  return data;
+}
+
+/** Canjea el pre_auth_token de un login con varias empresas por la sesión real. */
+export async function selectTenant(preAuthToken: string, tenantId: number): Promise<TokenPair> {
+  const { data } = await apiClient.post<TokenPair>("/auth/select-tenant", {
+    pre_auth_token: preAuthToken,
+    tenant_id: tenantId,
+  });
+  return data;
+}
+
+/** Cambia la empresa activa sin desloguearse (switcher del Sidebar). */
+export async function switchTenant(tenantId: number): Promise<TokenPair> {
+  const { data } = await apiClient.post<TokenPair>("/auth/switch-tenant", { tenant_id: tenantId });
   return data;
 }
 
@@ -24,9 +50,11 @@ export async function requestPasswordReset(email: string): Promise<void> {
   await apiClient.post("/auth/forgot-password", { email });
 }
 
-/** Setea la nueva contraseña con el token del link; devuelve access + refresh token. */
-export async function resetPassword(token: string, newPassword: string): Promise<TokenPair> {
-  const { data } = await apiClient.post<TokenPair>("/auth/reset-password", {
+/** Setea la nueva contraseña con el token del link. Devuelve tokens, salvo
+ * que el email tenga membership activa en más de una empresa — en ese caso
+ * (raro) pide iniciar sesión normalmente para elegir cuál. */
+export async function resetPassword(token: string, newPassword: string): Promise<LoginResult> {
+  const { data } = await apiClient.post<LoginResult>("/auth/reset-password", {
     token,
     new_password: newPassword,
   });

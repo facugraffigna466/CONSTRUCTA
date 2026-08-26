@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { clearRefreshToken, clearToken, getToken } from "./lib/tokenStorage";
+import { clearRefreshToken, clearToken, getToken, setRefreshToken, setToken } from "./lib/tokenStorage";
+import { switchTenant } from "./api/auth";
 import { fetchObra } from "./api/obras";
 import { fetchBitacoraPendingCount } from "./api/bitacora";
 import { AppLayout } from "./components/layout/AppLayout";
@@ -178,6 +179,20 @@ function App() {
     setActivePage("panel");
   }
 
+  async function handleSwitchTenant(tenantId: number) {
+    try {
+      const tokens = await switchTenant(tenantId);
+      setToken(tokens.access_token);
+      setRefreshToken(tokens.refresh_token);
+      // Todo el estado visible (obras, alertas, tareas...) es de la empresa
+      // anterior — recargar es más simple y confiable que invalidar cada
+      // hook/cache uno por uno.
+      window.location.reload();
+    } catch {
+      // silencioso: si falla, el usuario sigue en la empresa actual
+    }
+  }
+
   function handleTogglePin(obra: Obra) {
     setPinnedObras(prev => {
       const next = prev.some(o => o.id === obra.id)
@@ -256,6 +271,7 @@ function App() {
         onTabChange={handleTabChange}
         obraCounts={obraCounts}
         bitacoraPending={bitacoraPending}
+        onSwitchTenant={handleSwitchTenant}
       >
         {renderPage()}
       </AppLayout>

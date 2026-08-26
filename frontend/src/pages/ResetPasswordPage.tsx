@@ -13,6 +13,7 @@ export function ResetPasswordPage({ token, onDone }: Props) {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
   const [focused, setFocused]   = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   const inputStyle = (field: string, hasError = false) => ({
     width: "100%", height: 42, padding: "0 14px",
@@ -31,9 +32,16 @@ export function ResetPasswordPage({ token, onDone }: Props) {
 
     setLoading(true);
     try {
-      const tokens = await resetPassword(token, password);
-      setToken(tokens.access_token);
-      setRefreshToken(tokens.refresh_token);
+      const result = await resetPassword(token, password);
+      if (result.requires_tenant_selection) {
+        // Caso raro: la identidad pertenece a más de una empresa — la
+        // contraseña ya quedó cambiada, pero para elegir empresa hay que
+        // pasar por el login normal (que sí sabe mostrar el selector).
+        setNeedsLogin(true);
+        return;
+      }
+      setToken(result.access_token);
+      setRefreshToken(result.refresh_token);
       onDone();
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
@@ -74,10 +82,26 @@ export function ResetPasswordPage({ token, onDone }: Props) {
             Nueva contraseña
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#6B7580" }}>
-            Elegí una contraseña nueva para tu cuenta
+            {needsLogin
+              ? "Tu contraseña se actualizó. Iniciá sesión para elegir con qué empresa entrar."
+              : "Elegí una contraseña nueva para tu cuenta"}
           </p>
         </div>
 
+        {needsLogin ? (
+          <button
+            onClick={onDone}
+            style={{
+              width: "100%", height: 44, borderRadius: 11,
+              background: "#FF6B35", color: "#fff", border: "none",
+              fontSize: 14.5, fontWeight: 600, cursor: "pointer",
+              fontFamily: "'Plus Jakarta Sans', sans-serif",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 14px -6px rgba(255,107,53,0.5)",
+            }}
+          >
+            Ir a iniciar sesión
+          </button>
+        ) : (
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
@@ -133,6 +157,7 @@ export function ResetPasswordPage({ token, onDone }: Props) {
             {loading ? "Guardando…" : "Guardar contraseña"}
           </button>
         </form>
+        )}
       </div>
     </div>
   );

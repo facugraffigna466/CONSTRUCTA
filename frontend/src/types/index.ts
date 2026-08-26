@@ -144,6 +144,11 @@ export interface ObraRoleForUser {
   role: ObraUserRoleType;
 }
 
+export interface TenantOption {
+  id: number;
+  name: string;
+}
+
 export interface CurrentUser {
   id: number;
   name: string;
@@ -154,6 +159,10 @@ export interface CurrentUser {
   avatar_url?: string | null;
   whatsapp_number?: string | null;
   tenant_name?: string | null;
+  // Todas las empresas donde esta identidad tiene membership activa (una
+  // misma persona puede pertenecer a varias). Alimenta el switcher del
+  // Sidebar cuando tiene más de una.
+  available_tenants: TenantOption[];
   // Obras a las que el usuario está asignado, con su rol en cada una. Se
   // pobla desde /users/me. Vacío = admin de empresa (superset absoluto) o
   // colaborador sin asignaciones. La UI resuelve la diferencia con `role`.
