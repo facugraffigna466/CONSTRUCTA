@@ -15,6 +15,35 @@ from app.services.conversation_service import ConversationService
 logger = logging.getLogger(__name__)
 
 
+def _match_numbered_option(body: str, names: list[str]) -> int | None:
+    """Índice (0-based) de la opción elegida en un menú tipo "1) Nombre A\n2)
+    Nombre B". Acepta el número (el caso normal) o el nombre de la opción en
+    texto libre — alguien puede contestar "Edificio Norte" en vez de "1"
+    porque el propio mensaje se lo mostró como opción; antes eso caía en un
+    loop de "No entendí" para siempre."""
+    import re
+    m = re.search(r"\d+", body)
+    if m and 1 <= int(m.group()) <= len(names):
+        return int(m.group()) - 1
+    from app.services.plano_service import _norm
+    body_n = _norm(body).strip()
+    if not body_n:
+        return None
+    # Match exacto primero: si un nombre es prefijo de otro (p. ej. "Edificio
+    # Norte" y "Edificio Norte — Demo"), contestar el nombre exacto no debe
+    # volverse ambiguo solo porque también es substring del otro.
+    exact = [i for i, name in enumerate(names) if body_n == _norm(name)]
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        return None
+    partial = [
+        i for i, name in enumerate(names)
+        if body_n in _norm(name) or _norm(name) in body_n
+    ]
+    return partial[0] if len(partial) == 1 else None
+
+
 def _sanitize_for_caption(text: str, max_len: int = 120) -> str:
     """Limpia un string generado por el usuario (ej. el `name` de un plano) antes de
     interpolarlo en un mensaje que el bot manda como si fuera propio. Sin esto, un
@@ -524,7 +553,6 @@ class MessageService:
 
     async def _handle_plano_obra_selection(self, sender, is_staff: bool, body: str) -> tuple[str, str | None]:
         """El responsable eligió una obra del menú de desambiguación de planos."""
-        import re
         from app.core.config import settings
         from app.models.conversation_session import ConversationStep
         from app.repositories.conversation_session import ConversationSessionRepository
@@ -540,12 +568,12 @@ class MessageService:
         opts = ctx.get("options", [])
         disc = ctx.get("discipline")
 
-        m = re.search(r"\d+", body)
-        if not m or not (1 <= int(m.group()) <= len(opts)):
+        idx = _match_numbered_option(body, [o["name"] for o in opts])
+        if idx is None:
             lineas = "\n".join(f"{i+1}) {o['name']}" for i, o in enumerate(opts))
             return (f"No entendí. ¿De cuál obra?\n\n{lineas}", None)
 
-        elegida = opts[int(m.group()) - 1]
+        elegida = opts[idx]
         await sess_repo.upsert(sender.id, ConversationStep.IDLE)
 
         svc = PlanoService(self.db)
@@ -817,15 +845,18 @@ class MessageService:
         return sent
 
     async def _handle_obra_selection(self, sender, is_staff: bool, body: str) -> str:
-        import re
         entry = await self._pending_bitacora_obra(sender, is_staff)
         if not entry:
             return self._staff_menu(sender) if is_staff else "No tengo ninguna nota de voz pendiente."
         obra_ids = await self._sender_obra_ids(sender, is_staff)
-        m = re.search(r"\d+", body)
-        if not m or not (1 <= int(m.group()) <= len(obra_ids)):
+        from sqlalchemy import select as _select
+        from app.models.obra import Obra as _Obra
+        _rows = (await self.db.execute(_select(_Obra.id, _Obra.name).where(_Obra.id.in_(obra_ids)))).all()
+        _names_map = {r[0]: r[1] for r in _rows}
+        idx = _match_numbered_option(body, [_names_map.get(oid, f"Obra #{oid}") for oid in obra_ids])
+        if idx is None:
             return "No entendí. ¿Para qué obra es la nota?\n" + await self._obra_options(obra_ids)
-        entry.obra_id = obra_ids[int(m.group()) - 1]
+        entry.obra_id = obra_ids[idx]
         entry.status = "pendiente_analisis" if entry.transcript else "pendiente_transcripcion"
         from app.services.bitacora_service import BitacoraService
         if entry.transcript:
