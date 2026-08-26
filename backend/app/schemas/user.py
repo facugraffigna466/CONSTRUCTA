@@ -35,7 +35,7 @@ class UserRead(BaseModel):
     full_name: str
     role: str
     is_active: bool
-    is_verified: bool = True
+    is_verified: bool = False
     avatar_url: str | None = None
     whatsapp_number: str | None = None
     tenant_name: str | None = None  # solo poblado en /users/me
@@ -130,6 +130,11 @@ class InviteResponse(BaseModel):
     # Puede diferir del input si alguna obra_id era inválida (ver
     # docs/roles-redesign/fase-3-invitacion.md sobre el edge case).
     obra_assignments: list[ObraAssignmentInvite] = Field(default_factory=list)
+    # False si Brevo no está configurado o el envío falló (ver
+    # docs/auditoria/09-gestion-equipo.md §9.7). El "Link de respaldo" en
+    # InviteModal sigue funcionando igual; esto solo evita que el admin crea
+    # que el email salió cuando en realidad no salió.
+    email_sent: bool = True
 
 
 class AcceptInviteRequest(BaseModel):
