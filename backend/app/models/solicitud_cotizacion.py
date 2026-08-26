@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -49,6 +49,13 @@ class SolicitudCotizacion(Base):
     """
 
     __tablename__ = "solicitudes_cotizacion"
+    # ref_code ("COT-01", "COT-02"...) se genera por obra (_next_ref_code cuenta
+    # solicitudes de esa obra) — la unicidad tiene que ser (obra_id, ref_code),
+    # no global, o la primera solicitud de cualquier obra choca contra el
+    # COT-01 de otra.
+    __table_args__ = (
+        UniqueConstraint("obra_id", "ref_code", name="uq_solicitud_obra_refcode"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     obra_id: Mapped[int] = mapped_column(
@@ -61,7 +68,7 @@ class SolicitudCotizacion(Base):
     created_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
-    ref_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    ref_code: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="borrador", nullable=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     pdf_url: Mapped[str | None] = mapped_column(Text, nullable=True)
