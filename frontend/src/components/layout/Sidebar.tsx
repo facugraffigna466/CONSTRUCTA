@@ -13,7 +13,8 @@ import {
   BanknotesIcon,
   MapIcon,
 } from "@heroicons/react/24/outline";
-import type { Obra, ObraStatus, ObraTab, Page } from "../../types";
+import { useState } from "react";
+import type { Obra, ObraStatus, ObraTab, Page, TenantOption } from "../../types";
 import { useUser } from "../../context/UserContext";
 
 const HERO_DOT_COLORS = ["#FF8856","#3D8BFF","#2AC58A","#B07CF7","#8FA8B5","#E8B14A","#5DA8B5"];
@@ -39,6 +40,10 @@ interface SidebarProps {
   bitacoraPending?: number;
   currentUser?: { name: string; initials: string; color: string; roleLabel: string };
   workspaceName?: string | null;
+  // Empresas donde la identidad tiene membership activa (Fase 4). Con más de
+  // una, la tarjeta de Workspace se vuelve un switcher.
+  availableTenants?: TenantOption[];
+  onSwitchTenant?: (tenantId: number) => void;
   collapsed?: boolean;
   onToggle?: () => void;
 }
@@ -116,11 +121,13 @@ function NavItem({
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], onSelectObra, selectedObra, activeTab, onTabChange, obraCounts, bitacoraPending, currentUser, workspaceName, collapsed = false, onToggle }: SidebarProps) {
+export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], onSelectObra, selectedObra, activeTab, onTabChange, obraCounts, bitacoraPending, currentUser, workspaceName, availableTenants = [], onSwitchTenant, collapsed = false, onToggle }: SidebarProps) {
   const wsName = workspaceName || "Mi empresa";
   const wsInitials = wsName.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "ME";
   const { role } = useUser();
   const isAdmin = role === "admin";
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const canSwitch = availableTenants.length > 1 && !!onSwitchTenant;
   return (
     <>
     <aside style={{
@@ -170,25 +177,72 @@ export function Sidebar({ activePage, onNavigate, onLogout, pinnedObras = [], on
         </button>
       </div>
 
-      {/* ── Workspace (empresa actual — informativo, no hay multi-workspace) ── */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 9,
-        background: "rgba(255,255,255,0.04)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 10, padding: "8px 10px",
-        margin: "0 2px 14px",
-      }}>
-        <div style={{
-          width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-          background: "linear-gradient(135deg, #FF8856, #FF6B35)",
-          color: "#fff", fontWeight: 700, fontSize: 11,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-        }}>{wsInitials}</div>
-        <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2 }}>
-          <div style={{ color: "#fff", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wsName}</div>
-          <div style={{ fontSize: 10.5, color: "#8C969C", letterSpacing: "0.04em" }}>Workspace</div>
-        </div>
+      {/* ── Workspace: empresa actual. Con más de una membership activa
+           (misma persona, varias empresas) se vuelve un switcher. ── */}
+      <div style={{ position: "relative", margin: "0 2px 14px" }}>
+        <button
+          type="button"
+          disabled={!canSwitch}
+          onClick={() => setSwitcherOpen(v => !v)}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 9,
+            background: "rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.07)",
+            borderRadius: 10, padding: "8px 10px",
+            cursor: canSwitch ? "pointer" : "default",
+            textAlign: "left",
+          }}
+        >
+          <div style={{
+            width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+            background: "linear-gradient(135deg, #FF8856, #FF6B35)",
+            color: "#fff", fontWeight: 700, fontSize: 11,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          }}>{wsInitials}</div>
+          <div style={{ flex: 1, minWidth: 0, lineHeight: 1.2 }}>
+            <div style={{ color: "#fff", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{wsName}</div>
+            <div style={{ fontSize: 10.5, color: "#8C969C", letterSpacing: "0.04em" }}>
+              {canSwitch ? "Cambiar de empresa" : "Workspace"}
+            </div>
+          </div>
+          {canSwitch && (
+            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" style={{ flexShrink: 0, opacity: 0.6, transform: switcherOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+              <path d="M1 1l4 4 4-4" stroke="#CFD4D7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+
+        {canSwitch && switcherOpen && (
+          <div style={{
+            position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 60,
+            background: "#3A464C", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 10, padding: 4,
+            boxShadow: "0 12px 28px -8px rgba(0,0,0,0.45)",
+          }}>
+            {availableTenants.map(t => {
+              const active = t.name === wsName;
+              return (
+                <div
+                  key={t.id}
+                  onClick={() => { setSwitcherOpen(false); if (!active) onSwitchTenant?.(t.id); }}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "7px 8px", borderRadius: 7, fontSize: 12.5,
+                    color: active ? "#fff" : "#CFD4D7",
+                    background: active ? "rgba(255,107,53,0.18)" : "transparent",
+                    cursor: active ? "default" : "pointer",
+                  }}
+                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; }}
+                  onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                >
+                  <span style={{ width: 5, height: 5, borderRadius: 99, background: active ? "#FF6B35" : "transparent", flexShrink: 0 }} />
+                  <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── WORKSPACE section ── */}

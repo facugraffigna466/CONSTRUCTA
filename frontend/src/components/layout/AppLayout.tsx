@@ -30,6 +30,7 @@ interface AppLayoutProps {
   onTabChange?: (tab: ObraTab) => void;
   obraCounts?: { tasks: number; alerts: number; responsibles: number };
   bitacoraPending?: number;
+  onSwitchTenant?: (tenantId: number) => void;
 }
 
 export function AppLayout({
@@ -48,6 +49,7 @@ export function AppLayout({
   onTabChange,
   obraCounts,
   bitacoraPending,
+  onSwitchTenant,
 }: AppLayoutProps) {
   const { user, role } = useUser();
   const onlineUsers = useOnlineUsers();
@@ -102,6 +104,8 @@ export function AppLayout({
         bitacoraPending={bitacoraPending}
         currentUser={{ name: displayUser.name, initials: displayUser.initials, color: displayUser.color, roleLabel: ROLE_LABELS[role] }}
         workspaceName={user.tenant_name}
+        availableTenants={user.available_tenants}
+        onSwitchTenant={onSwitchTenant}
         collapsed={sidebarCollapsed}
         onToggle={() => setSidebarCollapsed(v => !v)}
       />

@@ -95,6 +95,8 @@ async def connect(sid: str, environ: dict, auth: dict | None) -> None:
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])
+        if payload.get("typ") == "pre_auth":
+            raise ValueError("pre_auth token is not a session token")
     except jwt.ExpiredSignatureError:
         logger.warning("connect rejected sid=%s reason=token_expired", sid)
         raise ConnectionRefusedError("token expired")
@@ -105,20 +107,28 @@ async def connect(sid: str, environ: dict, auth: dict | None) -> None:
     try:
         async with AsyncSessionLocal() as db:
             from app.repositories.user import UserRepository
+            from app.repositories.tenant_membership import TenantMembershipRepository
             from app.repositories.obra import ObraRepository
             user = await UserRepository(db).get(user_id)
-            if not user or not user.is_active:
+            if not user:
+                logger.warning("connect rejected sid=%s user_id=%d reason=user_not_found", sid, user_id)
+                raise ConnectionRefusedError("user inactive")
+            tenant_id = payload.get("tenant_id", user.tenant_id)
+            membership = (
+                await TenantMembershipRepository(db).get_by_user_and_tenant(user_id, tenant_id)
+                if tenant_id is not None else None
+            )
+            if membership is None or not membership.is_active:
                 logger.warning("connect rejected sid=%s user_id=%d reason=user_inactive_or_not_found", sid, user_id)
                 raise ConnectionRefusedError("user inactive")
-            # Solo las obras del tenant del usuario (evita fuga cross-tenant en tiempo real).
-            obras = await ObraRepository(db).list_all(tenant_id=user.tenant_id)
+            # Solo las obras del tenant de la membership (evita fuga cross-tenant en tiempo real).
+            obras = await ObraRepository(db).list_all(tenant_id=tenant_id)
             for obra in obras:
                 await sio.enter_room(sid, f"obra_{obra.id}")
             # Sala del tenant para eventos globales del portfolio (obra_created/updated/deleted).
-            if user.tenant_id is not None:
-                await sio.enter_room(sid, f"tenant_{user.tenant_id}")
+            await sio.enter_room(sid, f"tenant_{tenant_id}")
 
-        await sio.save_session(sid, {"user_id": user_id, "tenant_id": user.tenant_id})
+        await sio.save_session(sid, {"user_id": user_id, "tenant_id": tenant_id})
         _sessions[sid] = _user_card(user_id, user.full_name)
         await _broadcast_online()
         logger.info("connect OK sid=%s user_id=%d name=%s sessions=%d", sid, user_id, user.full_name, len(_sessions))

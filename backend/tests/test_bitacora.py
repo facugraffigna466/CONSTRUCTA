@@ -9,6 +9,7 @@ from app.core.security import create_access_token
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 from app.services.bitacora_service import _BITACORA_DEFAULT_LIMIT
 
@@ -24,6 +25,8 @@ async def ctx(db):
     u = User(email="jefe@x.com", hashed_password="x", full_name="Jefe", role="admin",
              is_active=True, tenant_id=t.id)
     db.add(u)
+    await db.flush()
+    db.add(TenantMembership(user_id=u.id, tenant_id=t.id, role="admin", is_active=True))
     await db.flush()
     obra = Obra(name="Obra Bitácora", manager_id=u.id, tenant_id=t.id)
     db.add(obra)

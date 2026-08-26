@@ -49,3 +49,9 @@ class User(Base):
 
     obras: Mapped[list["Obra"]] = relationship("Obra", back_populates="manager")
     tenant: Mapped["Tenant | None"] = relationship("Tenant", back_populates="users", foreign_keys=[tenant_id])
+    # Fase 1 del rediseño multi-tenant (ver tenant_membership.py): espejo de
+    # role/is_active/whatsapp/invitación por tenant, en paralelo a las columnas
+    # de arriba mientras dura el dual-write.
+    memberships: Mapped[list["TenantMembership"]] = relationship(
+        "TenantMembership", back_populates="user"
+    )

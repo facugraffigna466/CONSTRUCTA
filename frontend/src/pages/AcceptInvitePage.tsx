@@ -44,27 +44,35 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
     fontFamily: "'Plus Jakarta Sans', sans-serif",
   });
 
+  const existingAccount = context?.existing_account ?? false;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!fullName.trim()) { setError("Ingresá tu nombre completo"); return; }
-    if (password.length < 8) { setError("La contraseña debe tener al menos 8 caracteres"); return; }
-    if (password !== confirm) { setError("Las contraseñas no coinciden"); return; }
+    if (!existingAccount && !fullName.trim()) { setError("Ingresá tu nombre completo"); return; }
+    if (!existingAccount && password.length < 8) { setError("La contraseña debe tener al menos 8 caracteres"); return; }
+    if (!existingAccount && password !== confirm) { setError("Las contraseñas no coinciden"); return; }
+    if (existingAccount && !password) { setError("Ingresá tu contraseña"); return; }
 
     setLoading(true);
     try {
-      const tokens = await acceptInvite(token, fullName.trim(), password);
+      const tokens = await acceptInvite(
+        token, password, existingAccount ? undefined : fullName.trim(),
+      );
       setToken(tokens.access_token);
       setRefreshToken(tokens.refresh_token);
       onAccepted();
     } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
       const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-      const msg = typeof detail === "string"
-        ? detail
-        : Array.isArray(detail)
-          ? (detail[0] as { msg?: string })?.msg ?? "Datos inválidos"
-          : "El link de invitación es inválido o expiró";
+      const msg = status === 401
+        ? "Contraseña incorrecta."
+        : typeof detail === "string"
+          ? detail
+          : Array.isArray(detail)
+            ? (detail[0] as { msg?: string })?.msg ?? "Datos inválidos"
+            : "El link de invitación es inválido o expiró";
       setError(msg);
     } finally {
       setLoading(false);
@@ -101,16 +109,19 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
             margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif",
             fontSize: 22, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.025em",
           }}>
-            {contextError ? "Invitación no válida" : "Activá tu cuenta"}
+            {contextError ? "Invitación no válida" : existingAccount ? "Sumate a esta empresa" : "Activá tu cuenta"}
           </h1>
           <p style={{ margin: "6px 0 0", fontSize: 13.5, color: "#6B7580" }}>
             {contextError
               ? contextError
               : contextLoading
                 ? "Verificando invitación…"
-                : context?.company_name
-                  ? <>Te invitaron a unirte a <strong style={{ color: "#1A2329" }}>{context.company_name}</strong></>
-                  : "Completá tus datos para unirte al equipo"}
+                : existingAccount
+                  ? <>Ya tenés una cuenta Constructa. Confirmá tu contraseña para sumarte a{" "}
+                      <strong style={{ color: "#1A2329" }}>{context?.company_name}</strong> con el mismo login.</>
+                  : context?.company_name
+                    ? <>Te invitaron a unirte a <strong style={{ color: "#1A2329" }}>{context.company_name}</strong></>
+                    : "Completá tus datos para unirte al equipo"}
           </p>
         </div>
 
@@ -133,54 +144,59 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
           </div>
         )}
         <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
-              Nombre completo
-            </label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={e => setFullName(e.target.value)}
-              placeholder="Juan García"
-              autoFocus
-              onFocus={() => setFocused("name")}
-              onBlur={() => setFocused(null)}
-              style={inputStyle("name")}
-            />
-          </div>
+          {!existingAccount && (
+            <div>
+              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
+                Nombre completo
+              </label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                placeholder="Juan García"
+                autoFocus
+                onFocus={() => setFocused("name")}
+                onBlur={() => setFocused(null)}
+                style={inputStyle("name")}
+              />
+            </div>
+          )}
 
           <div>
             <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
-              Contraseña
+              {existingAccount ? "Tu contraseña" : "Contraseña"}
             </label>
             <input
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Mínimo 8 caracteres"
+              placeholder={existingAccount ? "La contraseña de tu cuenta" : "Mínimo 8 caracteres"}
+              autoFocus={existingAccount}
               onFocus={() => setFocused("password")}
               onBlur={() => setFocused(null)}
               style={inputStyle("password")}
             />
           </div>
 
-          <div>
-            <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
-              Confirmar contraseña
-            </label>
-            <input
-              type="password"
-              value={confirm}
-              onChange={e => setConfirm(e.target.value)}
-              placeholder="Repetí la contraseña"
-              onFocus={() => setFocused("confirm")}
-              onBlur={() => setFocused(null)}
-              style={inputStyle("confirm", !!confirm && confirm !== password)}
-            />
-            {confirm && confirm !== password && (
-              <p style={{ margin: "4px 0 0", fontSize: 12, color: "#D03A3A" }}>Las contraseñas no coinciden</p>
-            )}
-          </div>
+          {!existingAccount && (
+            <div>
+              <label style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "#5B6770", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
+                Confirmar contraseña
+              </label>
+              <input
+                type="password"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                placeholder="Repetí la contraseña"
+                onFocus={() => setFocused("confirm")}
+                onBlur={() => setFocused(null)}
+                style={inputStyle("confirm", !!confirm && confirm !== password)}
+              />
+              {confirm && confirm !== password && (
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#D03A3A" }}>Las contraseñas no coinciden</p>
+              )}
+            </div>
+          )}
 
           {error && (
             <div style={{
@@ -205,7 +221,9 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
               transition: "background .15s",
             }}
           >
-            {loading ? "Activando…" : "Activar cuenta"}
+            {loading
+              ? (existingAccount ? "Confirmando…" : "Activando…")
+              : (existingAccount ? "Confirmar y sumarme" : "Activar cuenta")}
           </button>
         </form>
         </>

@@ -6,7 +6,7 @@ from app.models.obra import Obra
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.tenant import Tenant
-from app.models.user import User
+from app.models.tenant_membership import TenantMembership
 from app.schemas.plan import PlanUsage, TenantRead, PlanRead
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -43,7 +43,9 @@ async def get_tenant_usage(current_user: AdminUser, db: DbSession):
             select(func.count()).where(Obra.tenant_id == tenant_id)
         )).scalar_one()
         users_count = (await db.execute(
-            select(func.count()).where(User.tenant_id == tenant_id, User.is_active == True)
+            select(func.count()).where(
+                TenantMembership.tenant_id == tenant_id, TenantMembership.is_active == True
+            )
         )).scalar_one()
         tasks_count = (await db.execute(
             select(func.count(Task.id)).where(Task.tenant_id == tenant_id)

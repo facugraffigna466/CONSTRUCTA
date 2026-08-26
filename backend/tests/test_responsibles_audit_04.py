@@ -16,6 +16,7 @@ from app.models.obra import Obra
 from app.models.obra_team_member import ObraTeamMember
 from app.models.responsible import Responsible
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -38,6 +39,13 @@ async def two_tenants_ctx(db):
     admin_b = User(email="b@x.com", hashed_password="x", full_name="Admin B",
                    role="admin", is_active=True, tenant_id=tB.id)
     db.add_all([admin_a, admin_b])
+    await db.flush()
+    # Espejo en TenantMembership (Fase 2 rediseño multi-tenant): la colisión
+    # User<->Responsible por whatsapp y el conteo de plan_limits leen de acá.
+    db.add_all([
+        TenantMembership(user_id=admin_a.id, tenant_id=tA.id, role="admin", is_active=True),
+        TenantMembership(user_id=admin_b.id, tenant_id=tB.id, role="admin", is_active=True),
+    ])
     await db.flush()
     obra_a = Obra(name="Obra A", manager_id=admin_a.id, tenant_id=tA.id)
     obra_b = Obra(name="Obra B", manager_id=admin_b.id, tenant_id=tB.id)
@@ -93,7 +101,7 @@ async def test_add_team_rejects_cross_tenant_responsible(client, two_tenants_ctx
         r = await client.post(
             f"{API}/obras/{two_tenants_ctx['obra_a_id']}/team",
             headers=_auth(two_tenants_ctx["admin_a_token"]),
-            json={"responsible_id": two_tenants_ctx["resp_b_id"], "member_type": "contratista"},
+            json={"responsible_id": two_tenants_ctx["resp_b_id"]},
         )
     assert r.status_code == 404, r.text
 
@@ -144,6 +152,12 @@ async def test_creating_responsible_with_user_number_returns_conflict(
         await db.execute(select(User.id).where(User.email == "a@x.com"))
     ).scalar_one())
     admin_a.whatsapp_number = "+5490000000555"
+    # whatsapp_number vive en TenantMembership (Fase 2) — mismo mirror que
+    # hace PATCH /users/me en producción.
+    membership = (await db.execute(
+        select(TenantMembership).where(TenantMembership.user_id == admin_a.id)
+    )).scalar_one()
+    membership.whatsapp_number = "+5490000000555"
     await db.commit()
 
     with patch("app.services.responsible_confirmation.send_welcome_confirmation", new=AsyncMock()):
@@ -181,7 +195,6 @@ async def test_deactivate_responsible_removes_team_memberships(
         obra_id=two_tenants_ctx["obra_a_id"],
         tenant_id=two_tenants_ctx["tA_id"],
         responsible_id=two_tenants_ctx["resp_a_id"],
-        member_type="equipo",
     )
     db.add(otm)
     await db.commit()
@@ -210,9 +223,8 @@ async def test_send_window_not_used_in_inbound_path():
     silencio total.
     """
     import re
-    src = open(
-        "/Users/facundograffigna/Desktop/CONSTRUCTA/backend/app/services/message_service.py"
-    ).read()
+    import app.services.message_service as message_service_module
+    src = open(message_service_module.__file__).read()
     # Contamos ocurrencias de _within_send_window en el archivo. Antes del fix
     # había 4 (definición + 1 en inbound + 2 en outbound). Ahora deben ser 3
     # (definición + 2 en outbound).

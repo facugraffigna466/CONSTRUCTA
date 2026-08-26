@@ -13,6 +13,7 @@ from app.models.obra import Obra
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -110,10 +111,11 @@ async def check_plan_limit(
         now = datetime.now(timezone.utc)
         count_result = await db.execute(
             select(func.count()).where(
-                User.tenant_id == tenant_id,
+                TenantMembership.tenant_id == tenant_id,
                 or_(
-                    User.is_active == True,  # noqa: E712
-                    (User.invitation_token.isnot(None)) & (User.invitation_expires_at > now),
+                    TenantMembership.is_active == True,  # noqa: E712
+                    (TenantMembership.invitation_token.isnot(None))
+                    & (TenantMembership.invitation_expires_at > now),
                 ),
             )
         )

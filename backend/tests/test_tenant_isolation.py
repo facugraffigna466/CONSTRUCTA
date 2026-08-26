@@ -10,6 +10,7 @@ from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
 from app.models.supplier import Supplier
 from app.models.task import Task
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -32,6 +33,10 @@ async def _mk_user(db, tenant_id: int, email: str, role: str = "admin") -> User:
         tenant_id=tenant_id,
     )
     db.add(u)
+    await db.flush()
+    # Espejo en TenantMembership (Fase 3 rediseño multi-tenant): role/is_active
+    # y el aislamiento por tenant en /users se resuelven desde acá.
+    db.add(TenantMembership(user_id=u.id, tenant_id=tenant_id, role=role, is_active=True))
     await db.flush()
     return u
 

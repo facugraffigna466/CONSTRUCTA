@@ -37,13 +37,14 @@ function buildUser(api: ApiUser): CurrentUser {
     avatar_url: api.avatar_url,
     whatsapp_number: api.whatsapp_number ?? null,
     tenant_name: api.tenant_name ?? null,
+    available_tenants: api.available_tenants ?? [],
     obra_roles: api.obra_roles ?? [],
   };
 }
 
 const PLACEHOLDER: CurrentUser = {
   id: 0, name: "", email: "", initials: "?", color: "#6B7580", role: "collaborator",
-  avatar_url: null, obra_roles: [],
+  avatar_url: null, available_tenants: [], obra_roles: [],
 };
 
 interface UserContextValue {

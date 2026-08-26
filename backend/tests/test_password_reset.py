@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -25,6 +26,8 @@ async def a_user(db):
         tenant_id=t.id,
     )
     db.add(u)
+    await db.flush()
+    db.add(TenantMembership(user_id=u.id, tenant_id=t.id, role="admin", is_active=True))
     await db.flush()
     await db.commit()
     return u

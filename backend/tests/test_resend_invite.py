@@ -7,6 +7,7 @@ import pytest_asyncio
 
 from app.core.security import create_access_token, hash_password
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -26,15 +27,21 @@ async def _mk_admin(db, tenant_id: int) -> User:
     )
     db.add(u)
     await db.flush()
+    db.add(TenantMembership(user_id=u.id, tenant_id=tenant_id, role="admin", is_active=True))
+    await db.flush()
     return u
 
 
 async def _mk_pending(db, tenant_id: int, *, token: str, expires: datetime) -> User:
-    u = User(
-        email="pendiente@x.com", hashed_password="", full_name="", role="collaborator",
-        is_active=False, tenant_id=tenant_id, invitation_token=token, invitation_expires_at=expires,
-    )
+    u = User(email="pendiente@x.com", hashed_password="", full_name="", tenant_id=tenant_id)
     db.add(u)
+    await db.flush()
+    # role/is_active/invitation_token/expires_at viven en TenantMembership
+    # desde la Fase 3, no en User.
+    db.add(TenantMembership(
+        user_id=u.id, tenant_id=tenant_id, role="collaborator", is_active=False,
+        invitation_token=token, invitation_expires_at=expires,
+    ))
     await db.flush()
     return u
 
@@ -78,6 +85,10 @@ async def test_resend_invite_bloquea_si_ya_acepto(db, client, tenant_and_admin):
         role="collaborator", is_active=True, tenant_id=tenant.id,
     )
     db.add(active_user)
+    await db.flush()
+    db.add(TenantMembership(
+        user_id=active_user.id, tenant_id=tenant.id, role="collaborator", is_active=True,
+    ))
     await db.flush()
     await db.commit()
 

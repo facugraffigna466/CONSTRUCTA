@@ -27,3 +27,6 @@ class Tenant(Base):
     plan: Mapped["Plan"] = relationship("Plan", back_populates="tenants")
     users: Mapped[list["User"]] = relationship("User", back_populates="tenant", foreign_keys="User.tenant_id")
     obras: Mapped[list["Obra"]] = relationship("Obra", back_populates="tenant", foreign_keys="Obra.tenant_id")
+    memberships: Mapped[list["TenantMembership"]] = relationship(
+        "TenantMembership", back_populates="tenant"
+    )

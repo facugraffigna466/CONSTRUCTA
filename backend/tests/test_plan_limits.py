@@ -15,6 +15,7 @@ from app.models.obra import Obra
 from app.models.plan import Plan
 from app.models.task import Task
 from app.models.tenant import Tenant
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 
 API = "/api/v1"
@@ -55,6 +56,12 @@ async def small_plan_ctx(db):
         tenant_id=tenant.id,
     )
     db.add(admin)
+    await db.flush()
+    # Espejo en TenantMembership (Fase 2 rediseño multi-tenant): plan_limits
+    # cuenta contra esta tabla, no contra `users` directamente.
+    db.add(TenantMembership(
+        user_id=admin.id, tenant_id=tenant.id, role="admin", is_active=True,
+    ))
     await db.flush()
 
     obra = Obra(name="Obra Limitada", manager_id=admin.id, tenant_id=tenant.id)
@@ -114,7 +121,7 @@ async def test_invitaciones_vencidas_no_cuentan(client, db, small_plan_ctx):
     tenant_id = small_plan_ctx["tenant_id"]
     past = datetime.now(timezone.utc) - timedelta(hours=1)
     for i in range(2):
-        db.add(User(
+        expired_user = User(
             email=f"expired{i}@limit.com",
             hashed_password="",
             full_name="",
@@ -123,6 +130,13 @@ async def test_invitaciones_vencidas_no_cuentan(client, db, small_plan_ctx):
             invitation_token=f"tok-expired-{i}",
             invitation_expires_at=past,
             tenant_id=tenant_id,
+        )
+        db.add(expired_user)
+        await db.flush()
+        db.add(TenantMembership(
+            user_id=expired_user.id, tenant_id=tenant_id, role="collaborator",
+            is_active=False, invitation_token=f"tok-expired-{i}",
+            invitation_expires_at=past,
         ))
     await db.commit()
 

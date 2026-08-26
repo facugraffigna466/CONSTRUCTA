@@ -49,7 +49,9 @@ class MessageService:
         self.resp_repo = ResponsibleRepository(session)
         self.settings_repo = SettingsRepository(session)
         from app.repositories.user import UserRepository
+        from app.repositories.whatsapp_tenant_context import WhatsappTenantContextRepository
         self.user_repo = UserRepository(session)
+        self.wa_ctx_repo = WhatsappTenantContextRepository(session)
 
     async def process_inbound(
         self, payload: TwilioInboundPayload, raw_params: dict[str, Any]
@@ -80,12 +82,14 @@ class MessageService:
         # en el path menos común.
         responsible = await self.resp_repo.get_by_whatsapp(payload.from_number)
         deactivated_responsible = None
+        staff = None
+        forced_reply: str | None = None
         if responsible is None:
             any_resp = await self.resp_repo.get_by_whatsapp_any(payload.from_number)
             if any_resp is not None and not any_resp.is_active:
                 deactivated_responsible = any_resp
-        staff = None if (responsible or deactivated_responsible) else \
-            await self.user_repo.get_by_whatsapp(payload.from_number)
+            else:
+                staff, forced_reply = await self._resolve_staff(payload.from_number, payload.Body or "")
         sender = responsible or staff
         is_staff = responsible is None and staff is not None
 
@@ -108,6 +112,28 @@ class MessageService:
 
         media_url: str | None = None
         task_id = None
+
+        # ── 3b. Ambigüedad de tenant sin resolver (Fase 3) ─────────────────────
+        # El número quedó en más de una empresa y hay que preguntar (o ya
+        # preguntamos y esto es la confirmación) — no seguimos con el flujo
+        # normal, el mensaje original se pide reenviar después de elegir.
+        if forced_reply is not None:
+            await self.msg_repo.update_fields(
+                inbound.id, processing_status=MessageProcessingStatus.PROCESSED,
+            )
+            outbound_sid = await send_whatsapp_message(payload.from_number, forced_reply)
+            await self._save_message(
+                MessageCreateInternal(
+                    direction=MessageDirection.OUTBOUND,
+                    message_type=MessageType.TEXT,
+                    from_number=payload.to_number,
+                    to_number=payload.from_number,
+                    body=forced_reply,
+                    external_message_id=outbound_sid,
+                    processing_status=MessageProcessingStatus.PROCESSED,
+                )
+            )
+            return inbound
 
         # ── 4a. Proveedor enviando PDF de cotización ───────────────────────────
         # detected_type devuelve UNKNOWN para application/pdf y otros docs
@@ -272,6 +298,79 @@ class MessageService:
         )
 
         return inbound
+
+    async def _resolve_staff(self, from_number: str, body: str):
+        """Resuelve el (los) User dueño(s) de este whatsapp_number. Devuelve
+        `(sender, forced_reply)`:
+
+          - `(AuthenticatedUser, None)` — resuelto sin ambigüedad (0 o 1
+            match, o ya había un tenant elegido de una desambiguación previa).
+          - `(None, None)` — el número no es de ningún staff.
+          - `(None, texto)` — hay que mandar `texto` (menú o confirmación) y
+            cortar el procesamiento normal de este mensaje.
+
+        Constructa usa un único número de Twilio para toda la plataforma
+        (`settings.TWILIO_WHATSAPP_NUMBER`) — no hay señal de infraestructura
+        para saber "a qué empresa le están escribiendo", así que cuando el
+        mismo número tiene membership activa en más de un tenant (una
+        identidad, dos empresas, ambas con este whatsapp cargado) se
+        desambigua preguntando una vez y recordando la respuesta en
+        `whatsapp_tenant_context`."""
+        from app.core.membership_context import AuthenticatedUser
+
+        matches = await self.user_repo.get_memberships_by_whatsapp(from_number)
+        if not matches:
+            return None, None
+        if len(matches) == 1:
+            user, membership = matches[0]
+            return AuthenticatedUser(user, membership), None
+
+        by_tenant = {m.tenant_id: (u, m) for u, m in matches}
+        ctx = await self.wa_ctx_repo.get(from_number)
+
+        if ctx and ctx.active_tenant_id in by_tenant:
+            user, membership = by_tenant[ctx.active_tenant_id]
+            return AuthenticatedUser(user, membership), None
+
+        if ctx and ctx.pending_options:
+            choice = self._match_menu_choice(body, ctx.pending_options)
+            if choice is not None:
+                await self.wa_ctx_repo.upsert(
+                    from_number, active_tenant_id=choice["tenant_id"], pending_options=None,
+                )
+                return None, (
+                    f"Listo, quedaste en {choice['tenant_name']}. "
+                    "Reenviá tu mensaje para continuar."
+                )
+            return None, self._render_tenant_menu(ctx.pending_options)
+
+        # Primera vez que este número resulta ambiguo: armamos el menú.
+        from sqlalchemy import select
+        from app.models.tenant import Tenant
+        tenant_rows = (await self.db.execute(
+            select(Tenant.id, Tenant.name).where(Tenant.id.in_(by_tenant.keys()))
+        )).all()
+        options = [
+            {"idx": i + 1, "tenant_id": tid, "tenant_name": name}
+            for i, (tid, name) in enumerate(tenant_rows)
+        ]
+        await self.wa_ctx_repo.upsert(from_number, pending_options=options, active_tenant_id=None)
+        return None, self._render_tenant_menu(options)
+
+    def _render_tenant_menu(self, options: list[dict]) -> str:
+        lines = "\n".join(f"{o['idx']}) {o['tenant_name']}" for o in options)
+        return (
+            "Tu número de WhatsApp está registrado en más de una empresa de Constructa:\n"
+            f"{lines}\n"
+            "Respondé con el número de la empresa para continuar."
+        )
+
+    def _match_menu_choice(self, body: str, options: list[dict]) -> dict | None:
+        body = (body or "").strip()
+        if not body.isdigit():
+            return None
+        idx = int(body)
+        return next((o for o in options if o["idx"] == idx), None)
 
     async def _sender_obra_ids(self, sender, is_staff: bool) -> list[int]:
         """Obras del emisor: para el staff, las que administra (manager); para un

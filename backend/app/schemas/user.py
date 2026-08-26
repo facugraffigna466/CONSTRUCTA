@@ -12,6 +12,11 @@ class UserCreate(BaseModel):
     company_name: str | None = Field(None, max_length=255)
 
 
+class TenantOption(BaseModel):
+    id: int
+    name: str
+
+
 class ObraRoleForUserRead(BaseModel):
     """Rol que el usuario tiene sobre una obra específica.
 
@@ -34,6 +39,9 @@ class UserRead(BaseModel):
     avatar_url: str | None = None
     whatsapp_number: str | None = None
     tenant_name: str | None = None  # solo poblado en /users/me
+    # Todas las empresas donde esta identidad tiene membership activa (Fase 4).
+    # Solo poblado en /users/me — alimenta el switcher del Sidebar.
+    available_tenants: list[TenantOption] = Field(default_factory=list)
     created_at: datetime
     # Asignaciones de obra actuales (Fase 3). Vacío = no está asignado a ninguna
     # obra concreta; en ese caso un non-admin no ve ninguna obra en su portfolio
@@ -63,6 +71,27 @@ class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class LoginResponse(BaseModel):
+    """Fase 3: si el email tiene más de una empresa con membership activa,
+    login no emite tokens todavía — devuelve un pre_auth_token de vida corta
+    para canjear en /auth/select-tenant junto con la lista de empresas."""
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "bearer"
+    requires_tenant_selection: bool = False
+    pre_auth_token: str | None = None
+    tenants: list[TenantOption] = Field(default_factory=list)
+
+
+class SelectTenantRequest(BaseModel):
+    pre_auth_token: str
+    tenant_id: int
+
+
+class SwitchTenantRequest(BaseModel):
+    tenant_id: int
 
 
 class RefreshRequest(BaseModel):
@@ -105,7 +134,14 @@ class InviteResponse(BaseModel):
 
 class AcceptInviteRequest(BaseModel):
     token: str
-    full_name: str = Field(..., min_length=2, max_length=255)
+    # Requerido solo si el email invitado es una identidad nueva (sin cuenta
+    # previa en Constructa). Si ya existe cuenta, se ignora — se usa el
+    # full_name ya cargado. Ver AuthService.accept_invite.
+    full_name: str | None = Field(None, min_length=2, max_length=255)
+    # Identidad nueva: la contraseña que va a setear. Identidad existente
+    # (existing_account=True en el invite context): la contraseña ACTUAL de
+    # esa cuenta, para confirmar que quien acepta es el dueño — no se
+    # reemplaza el hash existente.
     password: str = Field(..., min_length=8)
 
 
@@ -114,6 +150,10 @@ class InviteContextResponse(BaseModel):
     email: str
     role: str
     company_name: str | None = None
+    # True si el email invitado ya tiene una cuenta Constructa (en otra
+    # empresa) — el frontend pide "confirmá tu contraseña" en vez de "creá
+    # tu cuenta".
+    existing_account: bool = False
     # Obras a las que el invitado se va a asignar al aceptar (Fase 3). El
     # frontend usa esto para mostrar "vas a entrar a estas obras como X".
     obra_assignments: list[ObraRoleForUserRead] = Field(default_factory=list)

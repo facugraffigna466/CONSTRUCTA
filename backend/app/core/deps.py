@@ -25,14 +25,46 @@ async def get_current_user(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Un pre_auth_token (Fase 3, emitido cuando el login tiene que
+    # desambiguar entre varias empresas) NO es un Bearer de sesión válido —
+    # solo sirve para canjear en /auth/select-tenant.
+    if payload.get("typ") == "pre_auth":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     from app.repositories.user import UserRepository
     user = await UserRepository(db).get(user_id)
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
         )
-    return user
+
+    # Fase 2/3 rediseño multi-tenant: tenant_id/role/is_active/whatsapp_number
+    # se resuelven desde la TenantMembership, no desde las columnas de User.
+    # El JWT lleva el tenant_id de la sesión explícito cuando login tuvo que
+    # elegir entre varias empresas; si no vino (tokens viejos, o el usuario
+    # solo tiene una membership) cae de vuelta a User.tenant_id ("última
+    # empresa activa"). Ver membership_context.py.
+    tenant_id = payload.get("tenant_id", user.tenant_id)
+    from app.repositories.tenant_membership import TenantMembershipRepository
+    authenticated: User = user
+    if tenant_id is not None:
+        membership = await TenantMembershipRepository(db).get_by_user_and_tenant(
+            user.id, tenant_id
+        )
+        if membership is not None:
+            from app.core.membership_context import AuthenticatedUser
+            authenticated = AuthenticatedUser(user, membership)  # type: ignore[assignment]
+
+    if not authenticated.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    return authenticated
 
 
 async def get_current_user_id(user: User = Depends(get_current_user)) -> int:
