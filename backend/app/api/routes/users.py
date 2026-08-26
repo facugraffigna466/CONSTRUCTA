@@ -80,6 +80,12 @@ async def update_profile(data: UpdateProfileRequest, current_user: CurrentUser, 
                 ),
             )
     updated = await UserRepository(db).update_fields(current_user.id, **fields)
+    if "whatsapp_number" in fields and current_user.tenant_id is not None:
+        from app.repositories.tenant_membership import TenantMembershipRepository
+        membership_repo = TenantMembershipRepository(db)
+        mirror = await membership_repo.get_by_user_and_tenant(current_user.id, current_user.tenant_id)
+        if mirror is not None:
+            await membership_repo.update_fields(mirror.id, whatsapp_number=fields["whatsapp_number"])
     out = UserRead.model_validate(updated)
     roles = (await _obra_roles_for_users(db, [current_user.id])).get(current_user.id, [])
     return out.model_copy(update={"obra_roles": roles})
@@ -153,6 +159,12 @@ async def update_member_role(user_id: int, data: RoleUpdateRequest, current_user
     ):
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     updated = await repo.update_fields(user_id, role=data.role)
+    if current_user.tenant_id is not None:
+        from app.repositories.tenant_membership import TenantMembershipRepository
+        membership_repo = TenantMembershipRepository(db)
+        mirror = await membership_repo.get_by_user_and_tenant(user_id, current_user.tenant_id)
+        if mirror is not None:
+            await membership_repo.update_fields(mirror.id, role=data.role)
     out = UserRead.model_validate(updated)
     roles = (await _obra_roles_for_users(db, [user_id])).get(user_id, [])
     return out.model_copy(update={"obra_roles": roles})

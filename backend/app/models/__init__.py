@@ -26,6 +26,7 @@ from app.models.conversation_session import ConversationSession, ConversationSte
 from app.models.settings import SystemSettings
 from app.models.obra_team_member import ObraTeamMember
 from app.models.obra_user_role import ObraUserRole, ObraUserRoleType
+from app.models.tenant_membership import TenantMembership
 from app.models.ai_mapping_cache import AiMappingCache
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "ObraTeamMember",
     "ObraUserRole",
     "ObraUserRoleType",
+    "TenantMembership",
     "AiMappingCache",
     "SolicitudCotizacion",
     "SolicitudSupplier",

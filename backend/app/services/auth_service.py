@@ -11,7 +11,9 @@ from app.core.plan_limits import check_plan_limit
 from app.core.security import create_access_token, create_refresh_token, hash_password, verify_password
 from app.models.obra import Obra
 from app.models.obra_user_role import ObraUserRole, ObraUserRoleType
+from app.models.tenant_membership import TenantMembership
 from app.models.user import User
+from app.repositories.tenant_membership import TenantMembershipRepository
 from app.repositories.user import UserRepository
 from app.schemas.user import (
     AcceptInviteRequest,
@@ -30,6 +32,11 @@ VERIFY_TTL_HOURS = 48
 class AuthService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = UserRepository(session)
+        # Fase 1 rediseño multi-tenant: dual-write hacia TenantMembership en
+        # paralelo a las columnas de User (role/is_active/whatsapp/invite),
+        # mientras el resto del código sigue leyendo de User. Ver
+        # tenant_membership.py.
+        self.membership_repo = TenantMembershipRepository(session)
 
     async def register(self, data: UserCreate) -> User:
         if await self.repo.get_by_email(data.email):
@@ -65,6 +72,12 @@ class AuthService:
         await self.repo.session.flush()
         user.tenant_id = tenant.id
         await self.repo.session.flush()
+        await self.membership_repo.create(TenantMembership(
+            user_id=user.id,
+            tenant_id=tenant.id,
+            role=user.role,
+            is_active=user.is_active,
+        ))
         return user
 
     async def login(self, email: str, password: str) -> tuple[str, str]:
@@ -123,6 +136,16 @@ class AuthService:
             ),
         )
         created = await self.repo.create(user)
+        if tenant_id is not None:
+            await self.membership_repo.create(TenantMembership(
+                user_id=created.id,
+                tenant_id=tenant_id,
+                role=created.role,
+                is_active=created.is_active,
+                invitation_token=created.invitation_token,
+                invitation_expires_at=created.invitation_expires_at,
+                pending_obra_assignments=created.pending_obra_assignments,
+            ))
         return created, token, effective_assignments
 
     async def _validate_assignments(
@@ -182,6 +205,12 @@ class AuthService:
         updated = await self.repo.update_fields(
             user.id, invitation_token=token, invitation_expires_at=expires_at
         )
+        if tenant_id is not None:
+            mirror = await self.membership_repo.get_by_user_and_tenant(user.id, tenant_id)
+            if mirror is not None:
+                await self.membership_repo.update_fields(
+                    mirror.id, invitation_token=token, invitation_expires_at=expires_at
+                )
         return updated, token
 
     async def get_invite_context(self, token: str) -> dict:
@@ -254,6 +283,16 @@ class AuthService:
             refresh_token_expires_at=refresh_expires,
             pending_obra_assignments=None,
         )
+        if user.tenant_id is not None:
+            mirror = await self.membership_repo.get_by_user_and_tenant(user.id, user.tenant_id)
+            if mirror is not None:
+                await self.membership_repo.update_fields(
+                    mirror.id,
+                    is_active=True,
+                    invitation_token=None,
+                    invitation_expires_at=None,
+                    pending_obra_assignments=None,
+                )
         # Materializar las asignaciones en la misma transacción. Re-validamos
         # que cada obra siga existiendo/perteneciendo al tenant (defensive: en
         # el hueco entre invite y accept el admin podría haber borrado una
