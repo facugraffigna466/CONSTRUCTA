@@ -672,6 +672,21 @@ class MessageService:
             return ("Recibí tu nota de voz, pero no tengo obras asociadas a tu número todavía. "
                     "Avisale al jefe de obra para que te vincule.")
 
+        # Control de costo de IA: cota mensual por tenant, antes de gastar en
+        # Whisper/Claude. El chatbot no tenía este chequeo — era el canal que
+        # más quedaba afuera del control de costo (audit 08-bitácora §8.1).
+        from fastapi import HTTPException as _HTTPException
+        from sqlalchemy import select as _select
+        from app.models.obra import Obra as _Obra
+        obra_tenant_id = (await self.db.execute(
+            _select(_Obra.tenant_id).where(_Obra.id == obra_ids[0])
+        )).scalar_one_or_none()
+        try:
+            await service.assert_within_ai_quota(obra_tenant_id)
+        except _HTTPException:
+            return ("Este mes ya se alcanzó el límite de análisis de bitácora con IA del plan. "
+                    "Podés seguir dejando la novedad por escrito desde la app, o subir de plan para más.")
+
         # 3a. Una sola obra → guardar y procesar IA en background para no exceder
         #     el timeout de 15 s del webhook de Twilio (Whisper + Claude ~ 30-40 s).
         if len(obra_ids) == 1:
@@ -859,7 +874,20 @@ class MessageService:
         entry.obra_id = obra_ids[idx]
         entry.status = "pendiente_analisis" if entry.transcript else "pendiente_transcripcion"
         from app.services.bitacora_service import BitacoraService
+        from app.core.tenant_denorm import tenant_for_obra
+        entry.tenant_id = await tenant_for_obra(self.db, entry.obra_id)
         if entry.transcript:
+            # Recién acá se sabe a qué obra (y tenant) pertenece la nota — es
+            # el punto donde se dispara el análisis con Claude, así que es acá
+            # donde corresponde chequear la cota de IA (audit 08-bitácora §8.1).
+            from fastapi import HTTPException as _HTTPException
+            try:
+                await BitacoraService(self.db).assert_within_ai_quota(entry.tenant_id)
+            except _HTTPException:
+                entry.status = "pendiente_analisis"
+                await self.db.flush()
+                return ("Este mes ya se alcanzó el límite de análisis de bitácora con IA del plan. "
+                        "Tu nota quedó guardada — la podés revisar por escrito desde la app.")
             await self.db.flush()
             entry_id = entry.id
             sender_phone = sender.whatsapp_number if hasattr(sender, "whatsapp_number") else None

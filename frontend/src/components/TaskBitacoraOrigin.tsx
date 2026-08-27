@@ -56,8 +56,8 @@ export function TaskBitacoraOrigin({ taskId }: { taskId: number }) {
             {sug?.reason && (
               <p style={{ margin: 0, fontSize: 11.5, color: "#6B7580", fontStyle: "italic", lineHeight: 1.45 }}>“{sug.reason}”</p>
             )}
-            {e.audio_path && (
-              <audio controls src={`${BACKEND_URL}${e.audio_path}`} style={{ width: "100%", height: 34 }} />
+            {(e.audio_url || e.audio_path) && (
+              <audio controls src={`${BACKEND_URL}${e.audio_url ?? e.audio_path}`} style={{ width: "100%", height: 34 }} />
             )}
           </div>
         );
