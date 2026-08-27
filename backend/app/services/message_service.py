@@ -10,6 +10,7 @@ from app.repositories.message import MessageRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.settings import SettingsRepository
 from app.schemas.message import MessageCreateInternal, TwilioInboundPayload
+from app.services.calendar_service import is_within_send_window
 from app.services.conversation_service import ConversationService
 
 logger = logging.getLogger(__name__)
@@ -52,24 +53,6 @@ def _sanitize_for_caption(text: str, max_len: int = 120) -> str:
     cleaned = "".join(ch for ch in text if ch.isprintable() and ch not in "\r\n")
     cleaned = " ".join(cleaned.split())
     return cleaned[:max_len].strip()
-
-# Argentina standard time (UTC-3). The send-hour window configured by the
-# user is interpreted in this offset so that "08:00–20:00" means local time.
-_AR_OFFSET = timedelta(hours=-3)
-
-
-def _current_ar_hour() -> int:
-    return (datetime.now(timezone.utc) + _AR_OFFSET).hour
-
-
-def _within_send_window(hour_from: int, hour_to: int) -> bool:
-    """Return True if the current Argentina local hour is inside [hour_from, hour_to)."""
-    h = _current_ar_hour()
-    if hour_from <= hour_to:
-        return hour_from <= h < hour_to
-    # Overnight window (e.g. 22–06)
-    return h >= hour_from or h < hour_to
-
 
 class MessageService:
     def __init__(self, session: AsyncSession) -> None:
@@ -827,14 +810,14 @@ class MessageService:
                 if sender is None:
                     continue
                 cfg = await self.settings_repo.get_for_responsible(sender.id)
-                if not (cfg.chatbot_enabled and _within_send_window(cfg.send_hour_from, cfg.send_hour_to)):
+                if not (cfg.chatbot_enabled and is_within_send_window(cfg.send_hour_from, cfg.send_hour_to)):
                     continue
             elif entry.created_by is not None:
                 sender = (await self.db.execute(
                     select(User).where(User.id == entry.created_by)
                 )).scalar_one_or_none()
                 is_staff = True
-                if sender is None or not _within_send_window(8, 20):  # franja por defecto del staff
+                if sender is None or not is_within_send_window(8, 20):  # franja por defecto del staff
                     continue
             else:
                 continue

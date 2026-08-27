@@ -648,16 +648,20 @@ class TaskService:
         self, task_id: int, changes: dict[str, object], obra_id: int
     ) -> None:
         resolved = False
+        tenant_id = await tenant_for_obra(self.repo.session, obra_id)
         if changes.get("responsible_id") is not None:
             await self.alert_repo.mark_read_by_task_and_fragment(
-                task_id, AlertType.DELAY_RISK, "responsable"
+                task_id, AlertType.DELAY_RISK, "responsable", tenant_id=tenant_id
             )
             resolved = True
         if "due_date" in changes:
             new_due = changes["due_date"]
             if new_due is None or new_due >= date.today():  # type: ignore[operator]
                 await self.alert_repo.mark_read_by_task_and_fragment(
-                    task_id, AlertType.DELAY_RISK, "vencida"
+                    task_id, AlertType.DELAY_RISK, "vencida", tenant_id=tenant_id
+                )
+                await self.alert_repo.mark_read_by_task_and_type(
+                    task_id, AlertType.TASK_OVERDUE, tenant_id=tenant_id
                 )
                 resolved = True
         if resolved:
@@ -823,7 +827,9 @@ class TaskService:
         # Resolve active alerts for this task before deletion so they no longer
         # appear as unread in the UI. Alerts are not hard-deleted — they remain
         # in the DB as is_read=True for audit traceability.
-        await self.alert_repo.mark_read_by_task(task_id)
+        await self.alert_repo.mark_read_by_task(
+            task_id, tenant_id=await tenant_for_obra(self.repo.session, obra_id)
+        )
 
         # Log the deletion event while the task_id FK is still valid.
         # After repo.delete() the DB ON DELETE SET NULL will null this FK on
@@ -886,6 +892,7 @@ class TaskService:
         )
 
         if update.status != old_status:
+            tenant_id = await tenant_for_obra(self.repo.session, task.obra_id)
             await self.historial.log(
                 obra_id=task.obra_id,
                 task_id=task_id,
@@ -928,8 +935,21 @@ class TaskService:
             # Auto-resolve: task unblocked → resolve all unread task_blocked alerts.
             if old_status == TaskStatus.BLOQUEADA and update.status != TaskStatus.BLOQUEADA:
                 await self.alert_repo.mark_read_by_task_and_type(
-                    task_id, AlertType.TASK_BLOCKED
+                    task_id, AlertType.TASK_BLOCKED, tenant_id=tenant_id
                 )
+
+            # Auto-resolve (docs/auditoria/06-alertas.md, hallazgo 8.1): al completar
+            # o cancelar una tarea, "vencida" deja de aplicar aunque la fecha ya haya
+            # pasado — sin esto TASK_OVERDUE/DELAY_RISK quedaban huérfanas si la tarea
+            # se cerraba vía el pipeline del chatbot (nunca pasa por update()).
+            if update.status in (TaskStatus.COMPLETADA, TaskStatus.CANCELADA):
+                await self.alert_repo.mark_read_by_task_and_type(
+                    task_id, AlertType.TASK_OVERDUE, tenant_id=tenant_id
+                )
+                await self.alert_repo.mark_read_by_task_and_fragment(
+                    task_id, AlertType.DELAY_RISK, "vencida", tenant_id=tenant_id
+                )
+                await emit_alerts_resolved(task_id, updated.obra_id)
 
         await self.recompute_obra_status(updated.obra_id)
         # Hallazgo 7.8: al cambiar estado (bloqueada / vencida / etc.) recalculamos

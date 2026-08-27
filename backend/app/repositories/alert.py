@@ -99,46 +99,50 @@ class AlertRepository(BaseRepository[Alert]):
         return result.scalar_one_or_none() is not None
 
     async def mark_read_by_task_and_type(
-        self, task_id: int, alert_type: AlertType
+        self, task_id: int, alert_type: AlertType, tenant_id: int | None = None
     ) -> None:
-        """Mark all unread alerts of a given type for a task as read (auto-resolve)."""
-        await self.session.execute(
-            update(Alert)
-            .where(
-                Alert.task_id == task_id,
-                Alert.type == alert_type,
-                Alert.is_read == False,  # noqa: E712
-            )
-            .values(is_read=True)
+        """Mark all unread alerts of a given type for a task as read (auto-resolve).
+
+        `tenant_id` es opcional pero se recomienda pasarlo siempre desde el caller:
+        acota el UPDATE al tenant dueño de la tarea (docs/auditoria/06-alertas.md,
+        hallazgo 7.5/8.7). Hoy todos los callers son internos y ya validaron acceso
+        a la obra antes de llegar acá, pero esto evita que un futuro endpoint que
+        reciba task_id directamente pueda tocar alertas de otro tenant.
+        """
+        stmt = update(Alert).where(
+            Alert.task_id == task_id,
+            Alert.type == alert_type,
+            Alert.is_read == False,  # noqa: E712
         )
+        if tenant_id is not None:
+            stmt = stmt.where(Alert.tenant_id == tenant_id)
+        await self.session.execute(stmt.values(is_read=True))
 
     async def mark_read_by_task_and_fragment(
-        self, task_id: int, alert_type: AlertType, fragment: str
+        self, task_id: int, alert_type: AlertType, fragment: str, tenant_id: int | None = None
     ) -> None:
         """Mark unread alerts as read for a task where message contains fragment.
 
         Used for targeted auto-resolve: resolves only the sub-condition that was fixed
         (e.g. 'responsable' for missing-responsible alerts) without touching unrelated
-        alerts for the same task.
+        alerts for the same task. See mark_read_by_task_and_type() for the tenant_id note.
         """
-        await self.session.execute(
-            update(Alert)
-            .where(
-                Alert.task_id == task_id,
-                Alert.type == alert_type,
-                Alert.message.ilike(f"%{fragment}%"),
-                Alert.is_read == False,  # noqa: E712
-            )
-            .values(is_read=True)
+        stmt = update(Alert).where(
+            Alert.task_id == task_id,
+            Alert.type == alert_type,
+            Alert.message.ilike(f"%{fragment}%"),
+            Alert.is_read == False,  # noqa: E712
         )
+        if tenant_id is not None:
+            stmt = stmt.where(Alert.tenant_id == tenant_id)
+        await self.session.execute(stmt.values(is_read=True))
 
-    async def mark_read_by_task(self, task_id: int) -> None:
+    async def mark_read_by_task(self, task_id: int, tenant_id: int | None = None) -> None:
         """Mark all unread alerts for a task as read. Called before task deletion."""
-        await self.session.execute(
-            update(Alert)
-            .where(Alert.task_id == task_id, Alert.is_read == False)  # noqa: E712
-            .values(is_read=True)
-        )
+        stmt = update(Alert).where(Alert.task_id == task_id, Alert.is_read == False)  # noqa: E712
+        if tenant_id is not None:
+            stmt = stmt.where(Alert.tenant_id == tenant_id)
+        await self.session.execute(stmt.values(is_read=True))
 
     async def mark_all_read(self, obra_id: int | None = None, tenant_id: int | None = None) -> list[Alert]:
         """Mark every unread alert as read (optionally scoped to an obra). Returns the updated rows."""

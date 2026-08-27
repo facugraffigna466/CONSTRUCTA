@@ -4,9 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
 from app.models.alert import Alert, AlertType
+from app.models.obra import ObraStatus
 from app.models.task import TaskStatus
 from app.repositories.alert import AlertRepository
 from app.repositories.historial import HistorialRepository
+from app.repositories.obra import ObraRepository
 from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
 
@@ -15,6 +17,7 @@ class AlertService:
     def __init__(self, session: AsyncSession) -> None:
         self.repo = AlertRepository(session)
         self.task_repo = TaskRepository(session)
+        self.obra_repo = ObraRepository(session)
         self.historial = HistorialRepository(session)
         self.settings_repo = SettingsRepository(session)
 
@@ -126,6 +129,31 @@ class AlertService:
                 },
             )
 
+        return created
+
+    async def evaluate_task_risks_for_all_obras(self) -> int:
+        """Corre evaluate_task_risks_for_obra() para todas las obras activas.
+
+        docs/auditoria/06-alertas.md, hallazgo 7.2/8.4: la evaluación de DELAY_RISK
+        era puramente reactiva (solo corría al abrir el tab Tareas/Gantt de una obra),
+        así que una obra sin visitas nunca generaba alertas aunque tuviera tareas
+        vencidas o bloqueadas. Pensado para correr desde un job periódico
+        (scheduler.py), NO desde un request — por eso itera todo el sistema.
+        Una obra que falla no debe frenar el resto.
+        """
+        _inactive_obras = {ObraStatus.COMPLETADA, ObraStatus.CANCELADA}
+        obras = await self.obra_repo.list_all()
+        created = 0
+        for obra in obras:
+            if obra.status in _inactive_obras:
+                continue
+            try:
+                created += await self.evaluate_task_risks_for_obra(obra.id)
+            except Exception:
+                import logging
+                logging.getLogger(__name__).exception(
+                    "evaluate_task_risks_for_obra failed for obra_id=%d", obra.id
+                )
         return created
 
     # ── Private helpers ───────────────────────────────────────────────────────

@@ -55,6 +55,17 @@ async def _job_check_no_response() -> None:
     logger.info("Scheduler: mark_no_response → %d alerts", count)
 
 
+async def _job_evaluate_delay_risk() -> None:
+    """docs/auditoria/06-alertas.md, hallazgo 7.2/8.4 — cobertura para obras
+    sin visitas: evaluate_task_risks_for_obra() antes solo corría al abrir el
+    tab Tareas/Gantt de esa obra puntual."""
+    logger.info("Scheduler: evaluate_delay_risk")
+    from app.services.alert_service import AlertService
+    async with _db() as db:
+        count = await AlertService(db).evaluate_task_risks_for_all_obras()
+    logger.info("Scheduler: evaluate_delay_risk → %d alerts", count)
+
+
 async def _job_remind_bitacora_obra() -> None:
     logger.info("Scheduler: remind_bitacora_obra")
     from app.services.message_service import MessageService
@@ -118,6 +129,16 @@ def start_scheduler() -> None:
         _job_check_no_response,
         CronTrigger(minute=0, hour="*/2"),
         id="check_no_response",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
+    # Evaluar DELAY_RISK para todas las obras activas cada 4 horas (cubre obras
+    # sin tráfico, que antes nunca disparaban el chequeo reactivo).
+    scheduler.add_job(
+        _job_evaluate_delay_risk,
+        CronTrigger(hour="*/4", minute=30),
+        id="evaluate_delay_risk",
         replace_existing=True,
         misfire_grace_time=600,
     )

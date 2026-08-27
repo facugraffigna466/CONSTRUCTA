@@ -31,13 +31,13 @@ BODY_FONT = "Calibri"
 
 # Figura -> (archivo PNG, ancho en pulgadas).
 FIG_IMG = {
-    1: ("casos-de-uso.png", 5.4),
+    1: ("casos_de_uso.png", 5.4),
     2: ("captura-portafolio.png", 6.3),
     3: ("captura-gantt.png", 6.3),
     4: ("captura-planilla.png", 6.3),
     5: ("captura-presupuestos.png", 6.3),
     6: ("arquitectura.png", 5.8),
-    7: ("der.png", 6.0),
+    7: ("DER_simplificado.png", 6.0),
 }
 
 

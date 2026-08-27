@@ -18,12 +18,15 @@ const CRITICAL_TYPES: Alert["type"][] = ["task_blocked", "task_overdue"];
 export function useGlobalAlerts(): GlobalAlertsState {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [obraNames, setObraNames] = useState<Map<number, string>>(new Map());
-  const [toastAlert, setToastAlert] = useState<Alert | null>(null);
+  const [toastQueue, setToastQueue] = useState<Alert[]>([]);
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchAlerts().then(data => {
+    // Hallazgo 8.6: la campana solo muestra no-leídas (AlertBell filtra
+    // `!a.is_read`), así que traer todo el histórico del tenant en cada carga
+    // de la app era trabajo desperdiciado que crecía sin límite con el tiempo.
+    fetchAlerts(true).then(data => {
       if (mountedRef.current) setAlerts(data);
     }).catch(() => {});
     fetchObras().then(obras => {
@@ -48,7 +51,9 @@ export function useGlobalAlerts(): GlobalAlertsState {
       };
       setAlerts(prev => [alert, ...prev]);
       if (CRITICAL_TYPES.includes(alert.type)) {
-        setToastAlert(alert);
+        // Hallazgo 8.5: cola en vez de un único slot — dos alertas críticas
+        // seguidas ya no se pisan, la segunda espera a que la primera se cierre.
+        setToastQueue(prev => [...prev, alert]);
       }
     }
 
@@ -71,9 +76,9 @@ export function useGlobalAlerts(): GlobalAlertsState {
     setAlerts(prev => prev.map(a => a.id === id ? { ...a, is_read: true } : a));
   }, []);
 
-  const clearToast = useCallback(() => setToastAlert(null), []);
+  const clearToast = useCallback(() => setToastQueue(prev => prev.slice(1)), []);
 
   const unreadCount = alerts.filter(a => !a.is_read).length;
 
-  return { alerts, unreadCount, obraNames, toastAlert, markRead, clearToast };
+  return { alerts, unreadCount, obraNames, toastAlert: toastQueue[0] ?? null, markRead, clearToast };
 }
