@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.core.deps import CurrentUser, DbSession
+from app.core.exceptions import UnprocessableError
 from app.core.obra_permissions import (
     assert_obra_access,
     require_bitacora_obra_role,
@@ -252,6 +253,18 @@ async def reprocess(
 ):
     service = BitacoraService(db)
     entry = await service.get_scoped(entry_id, current_user.tenant_id, current_user.id)
+
+    # docs/auditoria/08-bitacora.md, hallazgo N6: reanalizar una entrada ya
+    # procesada reemplaza `suggestions` entero con applied=False para todas —
+    # si alguna ya se había aplicado (creó/modificó una tarea real), se pierde
+    # el registro y un segundo "aplicar" duplicaría la acción.
+    if entry.status == "procesado" and any(s.get("applied") for s in (entry.suggestions or [])):
+        raise UnprocessableError(
+            "Esta nota ya tiene sugerencias aplicadas — reprocesarla las reemplazaría sin "
+            "dejar rastro de lo ya hecho. Descartá primero las que falten o pedile a un "
+            "administrador que revise el caso."
+        )
+
     audio_bytes = None
     filename = "audio.ogg"
     if entry.audio_path and not entry.transcript:
@@ -259,6 +272,15 @@ async def reprocess(
         if path.exists():
             audio_bytes = path.read_bytes()
             filename = path.name
+        else:
+            # docs/auditoria/08-bitacora.md, hallazgo N7: sin esto, "Reintentar"
+            # devolvía 200 sin cambiar nada (ni transcript ni audio_bytes hay
+            # nada que procesar) — el usuario apretaba el botón sin ninguna
+            # pista de que el archivo ya no está en disco.
+            raise UnprocessableError(
+                "El audio de esta nota ya no está disponible en el servidor. "
+                "Cargá el texto a mano con 'Cargar texto' para poder analizarla."
+            )
     entry = await service.process_entry(entry, audio_bytes=audio_bytes, filename=filename)
     return await _to_read(entry, db, current_user.tenant_id)
 

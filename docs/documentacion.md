@@ -2229,3 +2229,31 @@ Suite completa de backend: 307 passed (0 failed — la falla ambiental de Twilio
 
 ### Pending / next steps
 No quedó nada abierto de la auditoría 07. Verificación manual en navegador pendiente: crear una obra, generarle historial, borrarla y confirmar que aparece en Configuración → Actividad; disparar un import de MS Project XML con varias tareas y confirmar un solo evento agregado; tener el tab Historial abierto en dos pestañas y confirmar que una actualización de tarea aparece sin recargar.
+
+---
+
+## 2026-08-27 (cont.) — Cierre de la auditoría 08 (Bitácora), P1/P2 restantes
+
+### Objective
+Los 2 hallazgos P0 de `docs/auditoria/08-bitacora.md` ya se habían cerrado el 26/08 (`fix/bitacora-audit-p0`, junto con N2-N5). Quedaban el resto de P1 (§8.3, §8.5, §8.6) y los N6-N9 documentados en la adenda del propio archivo bajo "Pendiente para una próxima pasada". Se cerró todo ese resto en esta sesión.
+
+### Changes made
+- **§8.3 (P1) Sin rate limit por WhatsApp** — `_handle_bitacora_audio` ahora corta con un mensaje claro si el mismo `created_by` (solo staff puede mandar audio a bitácora desde la migración 0054) mandó ≥10 notas en la última hora, antes de gastar en Whisper/Claude.
+- **§8.5 (P1) `BitacoraPage` no actualiza en tiempo real** — el evento `bitacora_created` (ya emitido por el backend) ahora se escucha en la página; refetchea con el límite actual para no perder páginas ya cargadas con "Cargar más".
+- **§8.6 (P1) Excepción externa del background task no avisa** — el `except Exception` exterior de `_bg_process_entry` ahora manda un WhatsApp de error al emisor (antes el "te aviso enseguida" quedaba incumplido en silencio si fallaba algo como la DB).
+- **N6 Reprocesar pisa sugerencias ya aplicadas** — `reprocess()` rechaza con 422 si la entrada está `procesado` y tiene alguna sugerencia `applied=True` (nada que perder si no hay ninguna aplicada, eso sigue permitido).
+- **N7 Reprocesar es no-op silencioso sin audio en disco** — mismo endpoint, 422 explícito en vez de un 200 que no cambia nada.
+- **8.7 (P2) AMR sin mensaje específico** — `_transcribe` detecta la extensión `.amr` cuando Whisper rechaza el archivo y da un mensaje puntual en vez del genérico "Error en el procesamiento: ...".
+- **8.4 (P2) Sin paginación en el frontend** — `BitacoraPage` pasó de pedir 100 de una a páginas de 30 con botón "Cargar más" (`limit`/`offset`, que la API ya soportaba).
+- **N8 Filtro "Solo pendientes" más angosto que la tarjeta** — unificado en un solo helper `entryNeedsAttention()` que usan tanto el filtro como `EntryCard`; de paso se corrigió que el filtro "Tareas" del historial tampoco matcheaba correctamente (ver entrada de la auditoría 07 arriba, mismo prefijo `tasks_` vs `task_`).
+- **N9 Estado de edición no se resincroniza** — `SuggestionCard` refresca `edit` desde la sugerencia actual cada vez que se abre el editor, en vez de una sola vez al montar.
+- Confirmado sin acción: §8.9 (permisos de collaborator en `apply/dismiss`) — el sistema de roles por obra del 24/08 ya lo resolvió con una decisión de producto razonable (mínimo COLABORADOR, no AdminUser), documentado como tal en la adenda §12.1 del propio audit.
+
+### Files modified
+Backend: `services/message_service.py` (rate limit + notify-on-exception), `services/bitacora_service.py` (mensaje AMR), `api/routes/bitacora.py` (guards N6/N7). Frontend: `pages/BitacoraPage.tsx` (tiempo real, paginación, N8, N9), `api/bitacora.ts` (limit/offset). Test: 5 casos nuevos en `backend/tests/test_bitacora.py` (15 en total en el archivo).
+
+### Validation
+Suite completa de backend: 312 passed. `npx tsc --noEmit` en frontend sin errores. No se verificó en navegador (mismo motivo que la entrada anterior — puerto 8000 ocupado por otra instancia).
+
+### Pending / next steps
+Con esto se cierran las 11 auditorías de la ronda post-defensa (`docs/auditoria/01` a `11`) — no queda ningún hallazgo documentado sin resolver o sin decisión explícita de producto.
