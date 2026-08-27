@@ -36,3 +36,4 @@ class ImportPreview(BaseModel):
 class ImportConfirmPayload(BaseModel):
     obra_id: int
     rows: list[ImportPreviewRow]
+    source: str = "excel"               # "excel" | "csv" | "msproject" — para el evento de historial

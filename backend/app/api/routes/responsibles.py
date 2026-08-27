@@ -15,11 +15,22 @@ from app.services.responsible_service import ResponsibleService
 router = APIRouter(prefix="/responsibles", tags=["responsibles"])
 
 
+def _actor(current_user) -> dict:
+    return {
+        "id": current_user.id,
+        "name": current_user.full_name or current_user.email,
+        "role": current_user.role,
+        "channel": "web",
+    }
+
+
 @router.post("", response_model=ResponsibleRead, status_code=status.HTTP_201_CREATED)
 async def create_responsible(
     data: ResponsibleCreate, db: DbSession, current_user: AdminUser
 ):
-    resp = await ResponsibleService(db).create(data, tenant_id=current_user.tenant_id)
+    resp = await ResponsibleService(db).create(
+        data, tenant_id=current_user.tenant_id, actor=_actor(current_user)
+    )
     # Rediseño identidad WhatsApp — parte C: al crear un responsable nuevo
     # se dispara el WhatsApp de bienvenida. No lo hacemos dentro del service
     # para que los tests que crean responsables directo no toquen Twilio.
@@ -83,7 +94,7 @@ async def update_responsible(
     svc = ResponsibleService(db)
     before = await svc.get_or_raise(responsible_id, current_user.tenant_id)
     old_number = before.whatsapp_number
-    updated = await svc.update(responsible_id, data, current_user.tenant_id)
+    updated = await svc.update(responsible_id, data, current_user.tenant_id, actor=_actor(current_user))
     if updated.whatsapp_number != old_number:
         # Editar el whatsapp es "estrenar canal": el nuevo dueño no sabe que
         # fue agregado y confirmed_at ya está en None (reseteado por el service).
@@ -96,16 +107,14 @@ async def update_responsible(
 @router.patch("/{responsible_id}/reactivate", response_model=ResponsibleRead)
 async def reactivate_responsible(responsible_id: int, db: DbSession, current_user: AdminUser):
     """Re-activate an inactive responsible. No task reassignment is performed."""
-    return await ResponsibleService(db).reactivate(responsible_id, current_user.tenant_id)
+    return await ResponsibleService(db).reactivate(
+        responsible_id, current_user.tenant_id, actor=_actor(current_user)
+    )
 
 
 @router.delete("/{responsible_id}", response_model=ResponsibleRead)
 async def deactivate_responsible(responsible_id: int, db: DbSession, current_user: AdminUser):
     """Soft-delete: sets is_active=False. Does not remove from DB."""
-    actor = {
-        "id": current_user.id,
-        "name": current_user.full_name or current_user.email,
-        "role": current_user.role,
-        "channel": "web",
-    }
-    return await ResponsibleService(db).deactivate(responsible_id, actor=actor, tenant_id=current_user.tenant_id)
+    return await ResponsibleService(db).deactivate(
+        responsible_id, actor=_actor(current_user), tenant_id=current_user.tenant_id
+    )

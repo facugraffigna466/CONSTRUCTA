@@ -29,7 +29,9 @@ class ResponsibleService:
                 f"El número {whatsapp} ya está registrado como usuario en tu empresa."
             )
 
-    async def create(self, data: ResponsibleCreate, tenant_id: int | None = None) -> Responsible:
+    async def create(
+        self, data: ResponsibleCreate, tenant_id: int | None = None, actor: dict | None = None
+    ) -> Responsible:
         # Hallazgo 6.3 auditoría 04: unique(tenant_id, whatsapp_number) — el
         # chequeo se scopea al tenant del caller. Otro tenant puede tener el
         # mismo número (mismo contratista trabajando para varias empresas).
@@ -47,7 +49,23 @@ class ResponsibleService:
         # responsibles) — la creación acá es en la misma transacción y no
         # queremos side-effects HTTP en el service para tests que mockean.
         responsible = Responsible(**data.model_dump(), tenant_id=tenant_id)
-        return await self.repo.create(responsible)
+        responsible = await self.repo.create(responsible)
+        # docs/auditoria/07-historial.md, hallazgo 7.3/8.2: el directorio de
+        # responsables no dejaba ningún rastro de quién agregó a quién.
+        # obra_id=None porque es global de la empresa, no de una obra puntual
+        # — sin obra no hay forma de derivar tenant_id, así que se pasa explícito.
+        await self.historial.log(
+            obra_id=None,
+            event_type="responsible_created",
+            description=(
+                f"{actor.get('name') if actor else 'Alguien'} agregó a "
+                f"{responsible.full_name} al directorio de responsables."
+            ),
+            payload={"responsible_id": responsible.id, **({"actor": actor} if actor else {})},
+            triggered_by="user",
+            tenant_id=tenant_id,
+        )
+        return responsible
 
     async def get_or_raise(self, responsible_id: int, tenant_id: int | None = None) -> Responsible:
         responsible = await self.repo.get(responsible_id)
@@ -85,7 +103,10 @@ class ResponsibleService:
             return await self.repo.list_active(tenant_id=tenant_id)
         return await self.repo.list_all(tenant_id=tenant_id)
 
-    async def update(self, responsible_id: int, data: ResponsibleUpdate, tenant_id: int | None = None) -> Responsible:
+    async def update(
+        self, responsible_id: int, data: ResponsibleUpdate, tenant_id: int | None = None,
+        actor: dict | None = None,
+    ) -> Responsible:
         current = await self.get_or_raise(responsible_id, tenant_id)
         changes = data.model_dump(exclude_none=True)
         if not changes:
@@ -107,9 +128,25 @@ class ResponsibleService:
             if changes["whatsapp_number"] != current.whatsapp_number:
                 changes["confirmed_at"] = None
         updated = await self.repo.update_fields(responsible_id, **changes)
+        await self.historial.log(
+            obra_id=None,
+            event_type="responsible_updated",
+            description=(
+                f"{actor.get('name') if actor else 'Alguien'} editó a "
+                f"{updated.full_name if updated else current.full_name}."
+            ),
+            payload={
+                "responsible_id": responsible_id, "changes": list(changes.keys()),
+                **({"actor": actor} if actor else {}),
+            },
+            triggered_by="user",
+            tenant_id=tenant_id,
+        )
         return updated  # type: ignore[return-value]
 
-    async def reactivate(self, responsible_id: int, tenant_id: int | None = None) -> Responsible:
+    async def reactivate(
+        self, responsible_id: int, tenant_id: int | None = None, actor: dict | None = None
+    ) -> Responsible:
         """Re-activate an inactive responsible.
 
         No task reassignment is done — the responsible becomes available
@@ -119,6 +156,17 @@ class ResponsibleService:
         if responsible.is_active:
             return responsible
         updated = await self.repo.update_fields(responsible_id, is_active=True)
+        await self.historial.log(
+            obra_id=None,
+            event_type="responsible_reactivated",
+            description=(
+                f"{actor.get('name') if actor else 'Alguien'} reactivó a "
+                f"{responsible.full_name}."
+            ),
+            payload={"responsible_id": responsible_id, **({"actor": actor} if actor else {})},
+            triggered_by="user",
+            tenant_id=tenant_id,
+        )
         return updated  # type: ignore[return-value]
 
     async def deactivate(self, responsible_id: int, actor: dict | None = None, tenant_id: int | None = None) -> Responsible:

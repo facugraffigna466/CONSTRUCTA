@@ -116,7 +116,7 @@ export function ImportModal({ obraId, onClose, onImported }: Props) {
     setConfirming(true);
     setError(null);
     try {
-      const res = await confirmImport(obraId, importableRows);
+      const res = await confirmImport(obraId, importableRows, source);
       setResult({ created: res.created, skipped: res.skipped });
       setStep("done");
       onImported(res.created);

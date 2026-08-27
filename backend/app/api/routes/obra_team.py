@@ -96,6 +96,12 @@ async def add_team_member(
             resp = await ResponsibleService(db).create(
                 ResponsibleCreate(full_name=payload.full_name, whatsapp_number=payload.whatsapp_number, role=None),
                 tenant_id=current_user.tenant_id,
+                actor={
+                    "id": current_user.id,
+                    "name": current_user.full_name or current_user.email,
+                    "role": current_user.role,
+                    "channel": "web",
+                },
             )
     else:
         raise HTTPException(status_code=422, detail="Provide responsible_id or full_name + whatsapp_number")

@@ -2112,7 +2112,7 @@ Repetir el ejercicio de auditoría del 2026-07-17 sobre el sistema ya con la car
 Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/IPI-CONSTRUCTA.md`.
 
 ### Pending / next steps
-Reportes 07 (historial) y 08 (bitácora) no tienen remediación explícita registrada en el git log todavía — confirmar si siguen abiertos o se resolvieron como parte de otro cambio antes de darlos por cerrados. Reporte 06 (alertas) cerrado el 2026-08-26 (ver entrada más abajo).
+Reporte 08 (bitácora): P0 cerrado el 2026-08-26; P1/P2 siguen abiertos. Reporte 06 (alertas) cerrado el 2026-08-26. Reporte 07 (historial) cerrado el 2026-08-27 (ver entradas más abajo).
 
 ---
 
@@ -2201,3 +2201,31 @@ Suite completa de backend: 295 passed, 1 failed (falla pre-existente y ambiental
 
 ### Pending / next steps
 No quedó nada abierto de la auditoría 06. La cola de toasts (8.5) y la carga con `unread_only` (8.6) no tienen verificación en navegador registrada en esta sesión — no hay infraestructura de tests de frontend en el repo (no hay vitest/jest configurado) y simular dos alertas críticas casi simultáneas requiere emitir eventos de socket a mano; quedó cubierto por revisión de código + `tsc` limpio.
+
+---
+
+## 2026-08-27 — Cierre de la auditoría 07 (Historial)
+
+### Objective
+Cerrar `docs/auditoria/07-historial.md`, la última de las 11 auditorías de la ronda post-defensa sin remediación (ningún commit previo la tocaba). El hallazgo más grande, 7.1, tenía un trade-off de diseño explícito en el documento (preservar vs. borrar en cascada); se consultó al usuario antes de implementar y se optó por **preservar y exponer**.
+
+### Changes made
+- **7.1/8.1 (crítico) Historial de obra borrada, inaccesible para siempre** — `ObraService.delete()` ahora loguea un evento `obra_deleted` con snapshot (nombre, estado, manager) ANTES de borrar la obra (mismo patrón que `task_deleted`). Se mantiene `ondelete="SET NULL"` en `obra_id` (no se cambió a CASCADE — se pierde igual el resto de eventos previos de esa obra, pero eso es un trade-off aceptado, no algo que se pueda evitar sin CASCADE en todo el módulo). Nuevo endpoint `GET /obras/historial/global` (solo admin, scopeado a tenant) recupera estos eventos huérfanos usando la columna `tenant_id` denormalizada, que sobrevive al `SET NULL` de la FK porque es una columna propia, no derivada. Nueva sección "Actividad de la empresa" en `ConfiguracionPage` (solo admin) que la muestra.
+- **7.3/8.2 (alto) Responsables y baseline sin rastro** — `ResponsibleService.create/update/reactivate()` ahora loguean `responsible_created/updated/reactivated` (obra_id=None porque son del directorio global — `HistorialRepository.log()` ganó un parámetro `tenant_id` explícito para estos casos, ya que sin obra no hay forma de derivarlo). `POST /obras/{id}/baseline` loguea `baseline_saved`. Upload/delete de planos ya estaba cubierto desde la auditoría 05, no hizo falta tocarlo.
+- **7.2/8.3 (alto) Frontend trunca a 30 sin avisar** — límite default subido a 100 (el servidor soporta hasta 200) y el contador del tab cambia a "mostrando los últimos 100" en vez de "100 eventos" cuando toca el límite.
+- **7.4/8.4 (medio) Import MS Project XML — 50 eventos individuales** — `TaskService.create()` ganó `silent=True` para suprimir el evento individual (necesario para no reescribir el loop de `confirm_import`, que resuelve WBS/dependencias tipadas fila por fila y no encaja en `bulk_create`); after the loop se loguea un único evento agregado (`tasks_imported_from_msproject` o `tasks_bulk_imported` según `source`).
+- **7.6/8.5 (medio) Sin refresh en tiempo real** — `HistorialRepository.log()` emite `historial_created` por Socket.IO desde un único punto central, cubriendo todos los tipos de evento sin instrumentar cada call site. Nuevo hook `useHistorialSocket` + wiring en `ObraDetailPage`.
+- **7.7/8.6 (bajo) Descripciones en inglés** — `task_created`/`obra_created`/`obra_updated` pasaron a español (la última además dejó de mostrar el `repr()` de una lista Python).
+- **7.8/8.7 (bajo) `ORDER_RECEIVED` sin `alert_created`** — agregado en `purchase_orders.py: receive_order()`, consistente con los demás tipos de alerta.
+- **7.9/8.8 (bajo) Código muerto** — se borró el `case "task_rescheduled"` de `HistorialPanel.tsx` (ningún servicio genera ese `event_type`; el backend usa `task_updated`).
+- **7.10/8.9 (bajo) Índice compuesto** — migración 0061: `(obra_id, created_at DESC)` en `historial_eventos`.
+- De paso: el filtro "Tareas" del tab de historial no matcheaba `tasks_bulk_imported`/`tasks_imported_from_msproject` (el prefijo era `task_`, no `tasks_`) — se corrigió al agregar soporte visual para esos eventos.
+
+### Files modified
+Backend: `models/historial.py` (sin cambios de schema, solo el nuevo índice via migración), `repositories/historial.py`, `core/socket_manager.py`, `services/obra_service.py`, `services/responsible_service.py`, `services/task_service.py`, `api/routes/obras.py`, `api/routes/responsibles.py`, `api/routes/obra_team.py`, `api/routes/baseline.py`, `api/routes/purchase_orders.py`, `api/routes/imports.py`, `schemas/imports.py`, `alembic/versions/0061_historial_composite_index.py`. Frontend: `api/historial.ts`, `api/imports.ts`, `components/ImportModal.tsx`, `components/HistorialPanel.tsx`, `pages/ObraDetailPage.tsx`, `pages/ConfiguracionPage.tsx`, nuevo `hooks/useHistorialSocket.ts`. Test nuevo: `backend/tests/test_audit07_historial.py` (11 casos).
+
+### Validation
+Suite completa de backend: 307 passed (0 failed — la falla ambiental de Twilio de la sesión anterior no se reprodujo esta vez). `npx tsc --noEmit` en frontend sin errores. No se pudo verificar en navegador porque el puerto 8000 ya estaba ocupado por otra instancia del backend corriendo en la máquina — se evitó interferir con esa sesión.
+
+### Pending / next steps
+No quedó nada abierto de la auditoría 07. Verificación manual en navegador pendiente: crear una obra, generarle historial, borrarla y confirmar que aparece en Configuración → Actividad; disparar un import de MS Project XML con varias tareas y confirmar un solo evento agregado; tener el tab Historial abierto en dos pestañas y confirmar que una actualización de tarea aparece sin recargar.

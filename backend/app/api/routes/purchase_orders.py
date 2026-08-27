@@ -311,6 +311,17 @@ async def receive_order(
         obra_id=order.obra_id,
         task_id=None,
     )
+    # docs/auditoria/07-historial.md, hallazgo 7.8/8.7: todos los demás tipos
+    # de alerta (delay_risk, task_blocked, task_overdue, no_response) logueaban
+    # su propio "alert_created" — a ORDER_RECEIVED le faltaba, así que el
+    # filtro "Alertas" del historial no la mostraba.
+    await HistorialRepository(db).log(
+        event_type="alert_created",
+        description=msg,
+        obra_id=order.obra_id,
+        payload={"alert_type": "order_received"},
+        triggered_by="user",
+    )
     await HistorialRepository(db).log(
         event_type="purchase_order_received",
         description=msg,
