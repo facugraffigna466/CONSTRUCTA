@@ -578,7 +578,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
         return <ComprasTab obraId={obra.id} obraName={obra.name} tasks={tasks} />;
 
       case "planos":
-        return <PlanosTab obraId={obra.id} />;
+        return <PlanosTab obraId={obra.id} onChanged={() => loadData(true)} />;
 
       case "historial":
         return (

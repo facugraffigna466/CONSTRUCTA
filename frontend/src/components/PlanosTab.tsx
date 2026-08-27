@@ -439,7 +439,7 @@ function DocumentoRow({
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-export function PlanosTab({ obraId }: { obraId: number }) {
+export function PlanosTab({ obraId, onChanged }: { obraId: number; onChanged?: () => void }) {
   const { confirm } = useConfirm();
   // Fase 4: permisos ahora se resuelven por-obra. Un colaborador global puede
   // NO tener rol en esta obra puntual (404 del backend) o puede tener SL/COL/JO.
@@ -476,6 +476,7 @@ export function PlanosTab({ obraId }: { obraId: number }) {
     try {
       await uploadPlano(obraId, nuevoFile, { discipline: p.discipline, name: p.name });
       await load();
+      onChanged?.();
       setNuevoFile(null);
     } catch (err) {
       setError(errorMessage(err, "No se pudo subir el plano. Probá con un archivo de hasta 25 MB."));
@@ -493,6 +494,7 @@ export function PlanosTab({ obraId }: { obraId: number }) {
         replacesPlanoId: doc.vigente.id,
       });
       await load();
+      onChanged?.();
     } catch (err) {
       setError(errorMessage(err, "No se pudo subir la nueva versión."));
     } finally { setUploading(false); }
@@ -511,13 +513,13 @@ export function PlanosTab({ obraId }: { obraId: number }) {
       message: `¿Eliminar "${etiqueta}" v${p.version}?`,
       confirmLabel: "Eliminar", danger: true,
     }))) return;
-    try { await deletePlano(p.id); await load(); }
+    try { await deletePlano(p.id); await load(); onChanged?.(); }
     catch (err) { setError(errorMessage(err, "No se pudo eliminar el plano.")); }
   }
 
   async function markVigente(p: Plano) {
     setError(null);
-    try { await setPlanoVigente(p.id); await load(); }
+    try { await setPlanoVigente(p.id); await load(); onChanged?.(); }
     catch (err) { setError(errorMessage(err, "No se pudo cambiar a esa versión.")); }
   }
 
