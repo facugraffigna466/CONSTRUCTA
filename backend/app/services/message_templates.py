@@ -72,7 +72,11 @@ def fmt_date_full(d: "date | str | None") -> str:
 # ── Message builders ───────────────────────────────────────────────────────────
 
 def build_no_tasks_message(name: str) -> str:
-    return f"Hola {name}. No tenés tareas activas asignadas en este momento."
+    return (
+        f"Hola {name}. No tenés tareas activas asignadas en este momento.\n\n"
+        "📐 Si necesitás un plano, escribime por ejemplo \"plano de electricidad\" "
+        "o \"gas\" y te mando la última versión."
+    )
 
 
 def build_obra_list_message(name: str, obras: list[dict]) -> str:

@@ -114,7 +114,10 @@ async def add_team_member(
         tenant_id=current_user.tenant_id,
         responsible_id=resp.id,
         role=payload.role,
-        plan_disciplines=payload.plan_disciplines or None,
+        # `or None` acá rompía el caso "sin acceso": [] es falsy, así que un alta
+        # con plan_disciplines=[] terminaba guardando None — o sea, acceso total,
+        # exactamente lo contrario de lo pedido. El default del schema ya es None.
+        plan_disciplines=payload.plan_disciplines,
     )
     db.add(member)
     await db.commit()
@@ -150,7 +153,7 @@ async def update_team_member(
         raise HTTPException(status_code=404, detail="Not in this obra's team")
     member.role = payload.role
     # lista vacía [] = sin acceso; None = acceso total
-    member.plan_disciplines = payload.plan_disciplines if payload.plan_disciplines != [] else []
+    member.plan_disciplines = payload.plan_disciplines
     await db.commit()
     return _to_read(member, member.responsible)
 

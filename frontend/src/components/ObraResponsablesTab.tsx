@@ -254,11 +254,75 @@ function RemoveConfirm({ member, onConfirm, onClose }: {
   );
 }
 
-// ── MemberCard ────────────────────────────────────────────────────────────────
+// ── Badge de acceso a planos (interruptor rápido) ─────────────────────────────
 
-function MemberCard({ m, isAdmin, onEdit, onRemove }: {
+/** Estados de `plan_disciplines`:
+ *    null  → puede pedir cualquier plano de la obra (default al sumar a alguien)
+ *    []    → no puede pedir ninguno
+ *    [..]  → solo esas disciplinas
+ *
+ * Los dos primeros alternan con un click desde la fila — es el caso común
+ * ("este contratista externo no debería ver los planos"). El tercero abre el
+ * modal en vez de alternar, para no borrar una selección fina sin querer.
+ */
+function PlanosBadge({ m, isAdmin, saving, onToggle, onEdit }: {
   m: ObraTeamMember;
   isAdmin: boolean;
+  saving: boolean;
+  onToggle: (m: ObraTeamMember) => void;
+  onEdit: (m: ObraTeamMember) => void;
+}) {
+  const disc = m.plan_disciplines;
+  const partial = disc !== null && disc.length > 0;
+
+  const tone = partial
+    ? { color: "#2A6FDB", background: "#EBF3FE", borderColor: "#BDD6F7" }
+    : disc === null
+      ? { color: "#1F8A5B", background: "#E8F7EF", borderColor: "#B3E0CA" }
+      : { color: "#9B4D00", background: "#FFF0E5", borderColor: "#FFD0A8" };
+
+  const label = partial
+    ? `${disc.length} disciplina${disc.length !== 1 ? "s" : ""}`
+    : disc === null ? "Todos los planos" : "Sin acceso a planos";
+
+  const title = !isAdmin
+    ? (partial ? disc.join(", ") : undefined)
+    : partial
+      ? `Solo puede pedir: ${disc.join(", ")}. Click para ajustar.`
+      : disc === null
+        ? "Puede pedir cualquier plano por WhatsApp. Click para quitarle el acceso."
+        : "No puede pedir planos por WhatsApp. Click para darle acceso a todos.";
+
+  const base: React.CSSProperties = {
+    ...tone, borderWidth: 1, borderStyle: "solid",
+    fontSize: 10.5, borderRadius: 99, padding: "1px 7px",
+    fontFamily: "'Plus Jakarta Sans', sans-serif",
+  };
+
+  if (!isAdmin) return <span title={title} style={base}>{label}</span>;
+
+  return (
+    <button
+      onClick={() => (partial ? onEdit(m) : onToggle(m))}
+      disabled={saving}
+      title={title}
+      style={{
+        ...base, lineHeight: 1.45, cursor: saving ? "progress" : "pointer",
+        opacity: saving ? 0.55 : 1, transition: "opacity 0.12s",
+      }}
+    >
+      {saving ? "Guardando…" : label}
+    </button>
+  );
+}
+
+// ── MemberCard ────────────────────────────────────────────────────────────────
+
+function MemberCard({ m, isAdmin, savingPlanos, onTogglePlanos, onEdit, onRemove }: {
+  m: ObraTeamMember;
+  isAdmin: boolean;
+  savingPlanos: boolean;
+  onTogglePlanos: (m: ObraTeamMember) => void;
   onEdit: (m: ObraTeamMember) => void;
   onRemove: (m: ObraTeamMember) => void;
 }) {
@@ -272,12 +336,10 @@ function MemberCard({ m, isAdmin, onEdit, onRemove }: {
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 2 }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "#1A2329", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.full_name}</span>
           {m.role && <span style={{ fontSize: 10.5, color: "#5B6770", background: "#F0F1EF", border: "1px solid #E6E7E5", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.role}</span>}
-          {m.plan_disciplines === null
-            ? <span style={{ fontSize: 10.5, color: "#1F8A5B", background: "#E8F7EF", border: "1px solid #B3E0CA", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Todos los planos</span>
-            : m.plan_disciplines.length === 0
-              ? <span style={{ fontSize: 10.5, color: "#9B4D00", background: "#FFF0E5", border: "1px solid #FFD0A8", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sin acceso a planos</span>
-              : <span title={m.plan_disciplines.join(", ")} style={{ fontSize: 10.5, color: "#2A6FDB", background: "#EBF3FE", border: "1px solid #BDD6F7", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{m.plan_disciplines.length} disciplina{m.plan_disciplines.length !== 1 ? "s" : ""}</span>
-          }
+          <PlanosBadge
+            m={m} isAdmin={isAdmin} saving={savingPlanos}
+            onToggle={onTogglePlanos} onEdit={onEdit}
+          />
           {!m.is_active && <span style={{ fontSize: 10.5, color: "#D03A3A", background: "#FCE5E5", border: "1px solid #F0B0B0", borderRadius: 99, padding: "1px 7px", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Inactivo</span>}
         </div>
         <span style={{ fontSize: 11, color: "#8E97A0", fontFamily: "'JetBrains Mono', monospace" }}>{m.whatsapp_number}</span>
@@ -319,6 +381,11 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
   const [phoneInput, setPhoneInput] = useState("");
   const [roleInput, setRoleInput] = useState("");
   const [selectedExisting, setSelectedExisting] = useState<Responsible | null>(null);
+  // Al sumar a alguien el default es acceso total a los planos de la obra; el
+  // checkbox solo permite arrancar sin acceso. Para dar disciplinas puntuales
+  // está el modal de edición — mantenerlo fuera del alta evita un formulario
+  // de 10 checkboxes para el caso raro.
+  const [newPlanosAll, setNewPlanosAll] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -326,6 +393,8 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
 
   const [editingMember, setEditingMember] = useState<ObraTeamMember | null>(null);
   const [removingMember, setRemovingMember] = useState<ObraTeamMember | null>(null);
+  const [savingPlanosFor, setSavingPlanosFor] = useState<number | null>(null);
+  const [planosError, setPlanosError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([fetchObraTeam(obraId), fetchResponsibles()]).then(([t, all]) => {
@@ -336,7 +405,7 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
   const available = allResponsibles.filter(r => r.is_active && !team.some(m => m.responsible_id === r.id));
 
   function openForm() {
-    setAdding(true); setNameInput(""); setPhoneInput(""); setRoleInput(""); setSelectedExisting(null); setFormError(null);
+    setAdding(true); setNameInput(""); setPhoneInput(""); setRoleInput(""); setSelectedExisting(null); setFormError(null); setNewPlanosAll(true);
   }
   function closeForm() { setAdding(false); setFormError(null); }
 
@@ -351,9 +420,10 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
     if (!selectedExisting && !E164.test(phone)) return setFormError(PHONE_ERROR_HINT);
     setSaving(true); setFormError(null);
     try {
+      const planDisc = newPlanosAll ? null : [];
       const payload = selectedExisting
-        ? { responsible_id: selectedExisting.id, role: roleInput.trim() || null }
-        : { full_name: nameInput.trim(), whatsapp_number: phone, role: roleInput.trim() || null };
+        ? { responsible_id: selectedExisting.id, role: roleInput.trim() || null, plan_disciplines: planDisc }
+        : { full_name: nameInput.trim(), whatsapp_number: phone, role: roleInput.trim() || null, plan_disciplines: planDisc };
       const added = await addObraTeamMember(obraId, payload);
       setTeam(prev => [...prev, added]);
       closeForm();
@@ -362,6 +432,23 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
       const status = (e as { response?: { status?: number } })?.response?.status;
       setFormError(status === 409 ? "Esta persona ya está en el equipo de la obra." : "Error al agregar. Intentá de nuevo.");
     } finally { setSaving(false); }
+  }
+
+  /** Alterna entre "todos los planos" (null) y "ninguno" ([]). Solo se llama
+   *  desde esos dos estados — el caso de disciplinas puntuales abre el modal. */
+  async function handleTogglePlanos(m: ObraTeamMember) {
+    const next = m.plan_disciplines === null ? [] : null;
+    setSavingPlanosFor(m.responsible_id);
+    setPlanosError(null);
+    try {
+      const updated = await updateObraTeamMember(obraId, m.responsible_id, { plan_disciplines: next });
+      setTeam(prev => prev.map(x => x.responsible_id === updated.responsible_id ? updated : x));
+      onTeamChanged?.();
+    } catch {
+      setPlanosError(`No se pudo cambiar el acceso a planos de ${m.full_name}.`);
+    } finally {
+      setSavingPlanosFor(null);
+    }
   }
 
   async function handleRemove(m: ObraTeamMember) {
@@ -429,7 +516,18 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
                   <AlertTriangle style={{ width: 11, height: 11 }} />{formError}
                 </div>
               )}
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", minWidth: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={newPlanosAll}
+                    onChange={e => setNewPlanosAll(e.target.checked)}
+                    style={{ accentColor: "#FF6B35", width: 13, height: 13, flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 11.5, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Puede pedir todos los planos por WhatsApp
+                  </span>
+                </label>
                 <button onClick={handleAdd} disabled={saving}
                   style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {saving ? "Agregando..." : "Agregar al equipo"}
@@ -460,6 +558,14 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
           </div>
         </div>
 
+        {planosError && (
+          <div style={{ padding: "8px 14px", background: "#FCE5E5", borderBottom: "1px solid #F0B0B0" }}>
+            <p style={{ margin: 0, fontSize: 12, color: "#A82B2B", fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              {planosError}
+            </p>
+          </div>
+        )}
+
         {/* List */}
         <div style={{ padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6, minHeight: 80 }}>
           {filteredTeam.length === 0 ? (
@@ -469,7 +575,14 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
               </p>
             </div>
           ) : (
-            filteredTeam.map(m => <MemberCard key={m.responsible_id} m={m} isAdmin={isAdmin} onEdit={setEditingMember} onRemove={setRemovingMember} />)
+            filteredTeam.map(m => (
+              <MemberCard
+                key={m.responsible_id} m={m} isAdmin={isAdmin}
+                savingPlanos={savingPlanosFor === m.responsible_id}
+                onTogglePlanos={handleTogglePlanos}
+                onEdit={setEditingMember} onRemove={setRemovingMember}
+              />
+            ))
           )}
         </div>
       </div>
