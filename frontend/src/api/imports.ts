@@ -46,10 +46,13 @@ export async function previewImport(file: File, columnMap?: Record<string, strin
   return data;
 }
 
-export async function confirmImport(obraId: number, rows: ImportPreviewRow[]): Promise<ImportConfirmResult> {
+export async function confirmImport(
+  obraId: number, rows: ImportPreviewRow[], source: string = "excel"
+): Promise<ImportConfirmResult> {
   const { data } = await apiClient.post<ImportConfirmResult>("/imports/project-excel/confirm", {
     obra_id: obraId,
     rows,
+    source,
   });
   return data;
 }

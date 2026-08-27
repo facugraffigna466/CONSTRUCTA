@@ -11,6 +11,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from app.core.deps import CurrentUser, CurrentUserId, DbSession
 from app.core.obra_permissions import assert_obra_access
 from app.models.obra_user_role import ObraUserRoleType
+from app.repositories.historial import HistorialRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.task import TaskRepository
 from app.schemas.imports import ImportConfirmPayload, ImportPreview
@@ -146,13 +147,32 @@ async def confirm_import(
                 is_milestone=row.is_milestone,
                 dependency_links=dep_links or None,
             )
-            task = await service.create(task_create, manager_id)
+            task = await service.create(task_create, manager_id, silent=True)
             created_ids[row.row_index] = task.id
             created += 1
 
         except Exception as exc:
             errors.append(f"Fila {row.row_index + 1} ({row.title}): {exc}")
             skipped += 1
+
+    # docs/auditoria/07-historial.md, hallazgo 7.4/8.4: antes cada fila logueaba
+    # su propio task_created (50 tareas → 50 eventos, tapando el historial
+    # previo de la obra). Un solo evento agregado, igual que el bulk paste de
+    # Excel (TaskService.bulk_create → tasks_bulk_imported).
+    if created:
+        source_label = {"msproject": "MS Project", "csv": "CSV", "excel": "Excel"}.get(
+            payload.source, payload.source
+        )
+        await HistorialRepository(db).log(
+            obra_id=payload.obra_id,
+            event_type=(
+                "tasks_imported_from_msproject" if payload.source == "msproject"
+                else "tasks_bulk_imported"
+            ),
+            description=f"Se importaron {created} tarea{'s' if created != 1 else ''} desde {source_label}",
+            payload={"count": created, "skipped": skipped, "source": payload.source},
+            triggered_by="user",
+        )
 
     return {"created": created, "skipped": skipped, "errors": errors}
 

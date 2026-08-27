@@ -11,6 +11,7 @@ from app.core.tenant_denorm import tenant_for_obra
 from app.models.baseline import TaskBaseline
 from app.models.obra_user_role import ObraUserRoleType
 from app.models.user import User
+from app.repositories.historial import HistorialRepository
 from app.services.task_service import TaskService
 
 router = APIRouter(prefix="/obras", tags=["baseline"])
@@ -61,6 +62,27 @@ async def save_baseline(
     )
     row = result.first()
     now = row[0] if row else None
+
+    # docs/auditoria/07-historial.md, hallazgo 7.3/8.2: guardar una línea base
+    # es una decisión de gestión y no dejaba ningún rastro.
+    await HistorialRepository(db).log(
+        obra_id=obra_id,
+        event_type="baseline_saved",
+        description=(
+            f"{current_user.full_name or current_user.email} guardó la línea base "
+            f"({len(entries)} tarea{'s' if len(entries) != 1 else ''})."
+        ),
+        payload={
+            "task_count": len(entries),
+            "actor": {
+                "id": current_user.id,
+                "name": current_user.full_name or current_user.email,
+                "role": current_user.role,
+                "channel": "web",
+            },
+        },
+        triggered_by="user",
+    )
 
     return BaselineResponse(obra_id=obra_id, saved_at=now, entries=entries)
 

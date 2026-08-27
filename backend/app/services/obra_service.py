@@ -23,7 +23,7 @@ class ObraService:
         await self.historial.log(
             obra_id=obra.id,
             event_type="obra_created",
-            description=f"Obra '{obra.name}' created",
+            description=f"Obra '{obra.name}' creada",
             payload={"actor": actor} if actor else None,
             triggered_by="user",
         )
@@ -111,7 +111,7 @@ class ObraService:
         await self.historial.log(
             obra_id=obra_id,
             event_type="obra_updated",
-            description=f"Fields updated: {list(changes.keys())}",
+            description=f"Actualización de obra: {', '.join(changes.keys())}",
             payload=changes_json,
             triggered_by="user",
         )
@@ -128,9 +128,29 @@ class ObraService:
         await emit_obra_updated(updated, actor=actor)
         return updated  # type: ignore[return-value]
 
-    async def delete(self, obra_id: int, manager_id: int) -> None:
+    async def delete(self, obra_id: int, manager_id: int, actor: dict | None = None) -> None:
         obra = await self.get_for_manager(obra_id, manager_id)
         tenant_id = obra.tenant_id
+        # docs/auditoria/07-historial.md, hallazgo 7.1/8.1: antes no quedaba
+        # ningún registro de que la obra existió. El evento se loguea ANTES del
+        # borrado (mismo patrón que task_deleted) para que la FK sea válida al
+        # insertar; después del delete, obra_id queda en NULL como el resto de
+        # los eventos de esta obra (ondelete=SET NULL), pero tenant_id
+        # sobrevive — list_global_by_tenant() los recupera igual.
+        await self.historial.log(
+            obra_id=obra_id,
+            event_type="obra_deleted",
+            description=(
+                f"{actor.get('name') if actor else 'Alguien'} eliminó la obra '{obra.name}'."
+            ),
+            payload={
+                "name": obra.name, "status": obra.status.value,
+                "manager_id": obra.manager_id,
+                **({"actor": actor} if actor else {}),
+            },
+            triggered_by="user",
+            tenant_id=tenant_id,
+        )
         await self._cleanup_plano_files(obra_id)
         await self._cleanup_bitacora_files(obra_id)
         await self.repo.delete(obra_id)

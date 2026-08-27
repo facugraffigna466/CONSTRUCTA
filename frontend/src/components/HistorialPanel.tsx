@@ -78,7 +78,7 @@ function getTaskTitle(ev: HistorialEvento, tasks?: Task[]): string {
 
 function matchesFilter(ev: HistorialEvento, filter: HistorialFilter): boolean {
   switch (filter) {
-    case "tareas":  return ev.event_type.startsWith("task_");
+    case "tareas":  return ev.event_type.startsWith("task_") || ev.event_type.startsWith("tasks_");
     case "alertas": return ev.event_type === "alert_created";
     case "obra":    return ev.event_type.startsWith("obra_");
     case "sistema": return ev.triggered_by === "chatbot" || ev.triggered_by === "system";
@@ -201,19 +201,6 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
       break;
     }
 
-    case "task_rescheduled": {
-      const from = fmtDate(ev.payload?.from);
-      const to   = fmtDate(ev.payload?.to);
-      sentence = (
-        <>{name} reprogramó la <strong>fecha de fin</strong> de <strong>{taskTitle}</strong>{" · "}
-          <span style={{ color: "#6B7580", textDecoration: "line-through" }}>{from}</span>
-          {" → "}<strong>{to}</strong>
-        </>
-      );
-      badge = "reschedule";
-      break;
-    }
-
     case "task_cascade_rescheduled": {
       const list  = (ev.payload?.affected as { title?: string }[] | undefined) ?? [];
       const count = list.length;
@@ -234,6 +221,7 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
         task_overdue:          "Tarea vencida",
         no_response:           "Sin respuesta",
         reschedule_requested:  "Demora informada",
+        order_received:        "Pedido recibido",
       };
       const alertType  = String(ev.payload?.alert_type ?? "");
       const alertLabel = ALERT_LABELS[alertType] ?? "alerta";
@@ -265,6 +253,41 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
       sentence = <>{name} actualizó la obra</>;
       badge = "updated";
       break;
+
+    case "obra_deleted":
+      sentence = <>{name} eliminó la obra</>;
+      badge = "cancelled";
+      break;
+
+    case "baseline_saved":
+      sentence = <>{name} guardó la línea base</>;
+      badge = "new";
+      break;
+
+    case "responsible_created":
+      sentence = <>{name} agregó un responsable al directorio</>;
+      badge = "new";
+      break;
+
+    case "responsible_updated":
+      sentence = <>{name} editó un responsable</>;
+      badge = "updated";
+      break;
+
+    case "responsible_reactivated":
+      sentence = <>{name} reactivó un responsable</>;
+      badge = "new";
+      break;
+
+    case "tasks_bulk_imported":
+    case "tasks_imported_from_msproject": {
+      const count = Number(ev.payload?.count ?? 0);
+      const src   = String(ev.payload?.source ?? "excel");
+      const label = src === "msproject" ? "MS Project" : src === "csv" ? "CSV" : "Excel";
+      sentence = <>{name} importó <strong>{count} tarea{count !== 1 ? "s" : ""}</strong> desde {label}</>;
+      badge = "new";
+      break;
+    }
   }
 
   return { actorName: name, avatarBg, sentence, badge, time: relativeTime(ev.created_at) };

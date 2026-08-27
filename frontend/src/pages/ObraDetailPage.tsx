@@ -15,6 +15,7 @@ import { TaskTable } from "../components/TaskTable";
 import { TaskSheetView, type SheetViewHandle } from "../components/TaskSheetView";
 import { ImportModal } from "../components/ImportModal";
 import { useAlertSocket } from "../hooks/useAlertSocket";
+import { useHistorialSocket } from "../hooks/useHistorialSocket";
 import { useTaskSocket } from "../hooks/useTaskSocket";
 import { useCan } from "../hooks/usePermission";
 import { useEditingSimulation } from "../hooks/useEditingSimulation";
@@ -24,6 +25,8 @@ import { ObraCompletenessChecklist } from "../components/ObraCompletenessCheckli
 import { ComprasTab } from "../components/ComprasTab";
 import { PlanosTab } from "../components/PlanosTab";
 import type { Alert, HistorialEvento, Obra, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
+
+const HISTORIAL_FETCH_LIMIT = 100;
 
 // ── Visual helpers ─────────────────────────────────────────────────────────────
 
@@ -110,7 +113,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
       const tasksData = await fetchTasksByObra(obra.id);
       const [obraAlerts, historialData, obraTeam] = await Promise.all([
         fetchAlerts(false, obra.id),   // filtrado por obra en el servidor (no traer todo el tenant)
-        fetchHistorial(obra.id),
+        fetchHistorial(obra.id, HISTORIAL_FETCH_LIMIT),
         fetchObraTeam(obra.id),
       ]);
       setTasks(tasksData);
@@ -200,6 +203,13 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     obra.id,
     useCallback((alert) => {
       setAlerts((prev) => prev.some((a) => a.id === alert.id) ? prev : [alert, ...prev]);
+    }, []),
+  );
+
+  useHistorialSocket(
+    obra.id,
+    useCallback((event) => {
+      setHistorial((prev) => prev.some((e) => e.id === event.id) ? prev : [event, ...prev]);
     }, []),
   );
 
@@ -595,7 +605,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
                 fontSize: 11.5, fontWeight: 600, color: "#5B6770",
                 background: "#F0F1EF", border: "1px solid #E6E7E5",
               }}>
-                {historial.length} eventos
+                {historial.length >= HISTORIAL_FETCH_LIMIT
+                  ? `mostrando los últimos ${historial.length}`
+                  : `${historial.length} evento${historial.length === 1 ? "" : "s"}`}
               </span>
             </div>
             {/* Panel */}

@@ -6,6 +6,7 @@ import {
   Building2,
   Calendar,
   Crown,
+  History,
   MessageCircle,
   Pencil,
   Plus,
@@ -40,13 +41,15 @@ import {
   type CalendarException,
 } from "../api/calendar";
 import { fetchPlanUsage } from "../api/admin";
+import { fetchGlobalHistorial } from "../api/historial";
+import { HistorialPanel } from "../components/HistorialPanel";
 import {
   fetchSuppliers,
   createSupplier,
   updateSupplier,
   deleteSupplier,
 } from "../api/suppliers";
-import type { Obra, PlanUsage, Supplier } from "../types";
+import type { HistorialEvento, Obra, PlanUsage, Supplier } from "../types";
 import { Button } from "../components/ui/Button";
 
 // ─── Shared style tokens ──────────────────────────────────────────────────────
@@ -230,6 +233,47 @@ const STATUS_COLORS: Record<StatusLevel, { border: string; iconBg: string; iconC
   error:   { border: C.danger, iconBg: C.danger50, iconColor: C.danger, checkBg: C.danger, checkGlow: C.danger50 },
 };
 
+
+// ─── Actividad de la empresa (eventos sin obra) ────────────────────────────────
+// docs/auditoria/07-historial.md, hallazgos 7.1/8.1 y 7.3/8.2: obras eliminadas
+// y gestión del directorio de responsables no dejaban ningún rastro consultable.
+// Ambos casos comparten obra_id=NULL (una obra borrada pierde la FK, un
+// responsable es del directorio global) — un único endpoint por tenant_id
+// (columna que sobrevive al borrado, a diferencia de la FK) los recupera.
+
+function EmpresaActividadSection() {
+  const [events, setEvents] = useState<HistorialEvento[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchGlobalHistorial()
+      .then(setEvents)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <Card id="cfg-actividad" style={{ marginTop: 8, scrollMarginTop: 112 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: C.secondary50, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <History size={16} style={{ color: C.secondary }} />
+        </div>
+        <div>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: C.text }}>Actividad de la empresa</h3>
+          <p style={{ margin: 0, fontSize: 12, color: C.text2 }}>
+            Obras eliminadas y gestión del directorio de responsables — no aparecen en el historial de ninguna obra puntual.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "20px 0", color: C.text3 }}>Cargando...</div>
+      ) : (
+        <HistorialPanel events={events} />
+      )}
+    </Card>
+  );
+}
 
 // ─── Calendar Section ─────────────────────────────────────────────────────────
 
@@ -821,6 +865,7 @@ export function ConfiguracionPage() {
           ...(canEdit && planUsage ? [{ id: "cfg-plan", label: "Tu plan" }] : []),
           ...(canEdit ? [{ id: "cfg-proveedores", label: "Proveedores" }] : []),
           { id: "cfg-calendario", label: "Calendario" },
+          ...(canEdit ? [{ id: "cfg-actividad", label: "Actividad" }] : []),
         ]).map(s => (
           <button
             key={s.id}
@@ -1454,6 +1499,9 @@ export function ConfiguracionPage() {
           <Card id="cfg-calendario" style={{ marginTop: 8, scrollMarginTop: 112 }}>
             <CalendarSection canEdit={canEdit} />
           </Card>
+
+          {/* ═══ ACTIVIDAD DE LA EMPRESA ═══ */}
+          {canEdit && <EmpresaActividadSection />}
 
           {/* ═══ UPGRADE MODAL ═══ */}
           {showUpgradeModal && (

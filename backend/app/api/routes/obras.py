@@ -68,7 +68,13 @@ async def update_obra(
 
 @router.delete("/{obra_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_obra(obra_id: int, db: DbSession, current_user: AdminUser):
-    await ObraService(db).delete(obra_id, current_user.id)
+    actor = {
+        "id": current_user.id,
+        "name": current_user.full_name or current_user.email,
+        "role": current_user.role,
+        "channel": "web",
+    }
+    await ObraService(db).delete(obra_id, current_user.id, actor=actor)
 
 
 @router.get("/{obra_id}/historial", response_model=list[HistorialEventoRead])
@@ -81,3 +87,15 @@ async def get_obra_historial(
     """Return the latest historial events for an obra, ordered by created_at DESC."""
     await ObraService(db).get_or_raise(obra_id, tenant_id=current_user.tenant_id)
     return await HistorialRepository(db).list_by_obra_limited(obra_id, limit)
+
+
+@router.get("/historial/global", response_model=list[HistorialEventoRead])
+async def get_global_historial(
+    db: DbSession,
+    current_user: AdminUser,
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+):
+    """Eventos de la empresa sin una obra puntual: obras eliminadas (snapshot
+    previo al borrado) y gestión del directorio de responsables. docs/
+    auditoria/07-historial.md, hallazgos 7.1/8.1 y 7.3/8.2."""
+    return await HistorialRepository(db).list_global_by_tenant(current_user.tenant_id, limit)

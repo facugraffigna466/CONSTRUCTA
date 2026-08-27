@@ -535,7 +535,12 @@ class TaskService:
 
     # ── public methods ────────────────────────────────────────────────────────
 
-    async def create(self, data: TaskCreate, manager_id: int, actor: dict | None = None) -> Task:
+    async def create(
+        self, data: TaskCreate, manager_id: int, actor: dict | None = None, silent: bool = False
+    ) -> Task:
+        """`silent=True` suprime el evento individual de historial (usado por
+        imports masivos que loguean un único evento agregado después del loop
+        — docs/auditoria/07-historial.md, hallazgo 7.4/8.4)."""
         await self._get_obra_and_assert_access(data.obra_id, manager_id)
         obra_tenant = await tenant_for_obra(self.repo.session, data.obra_id)
 
@@ -566,14 +571,15 @@ class TaskService:
 
         task._dep_links = await self.repo.get_dependency_links(task.id)
 
-        await self.historial.log(
-            obra_id=task.obra_id,
-            task_id=task.id,
-            event_type="task_created",
-            description=f"Task '{task.title}' created",
-            payload={"actor": actor} if actor else None,
-            triggered_by="user",
-        )
+        if not silent:
+            await self.historial.log(
+                obra_id=task.obra_id,
+                task_id=task.id,
+                event_type="task_created",
+                description=f"Tarea '{task.title}' creada",
+                payload={"actor": actor} if actor else None,
+                triggered_by="user",
+            )
         task._date_adjustment = "; ".join(date_notes) if date_notes else None
         await emit_task_created(task, actor)
         await self.recompute_obra_status(task.obra_id)

@@ -262,6 +262,27 @@ async def emit_alert_created(alert) -> None:
     logger.debug("alert_created alertId=%d obraId=%s", alert.id, alert.obra_id)
 
 
+async def emit_historial_created(event) -> None:
+    """docs/auditoria/07-historial.md, hallazgo 7.6/8.5: el tab Historial se
+    cargaba una sola vez al montar la obra y no se refrescaba en tiempo real.
+    Centralizado acá (llamado desde HistorialRepository.log()) para cubrir
+    TODOS los tipos de evento sin tener que instrumentar cada call site."""
+    if not event.obra_id:
+        return
+    payload = {
+        "id":           event.id,
+        "obra_id":      event.obra_id,
+        "task_id":      event.task_id,
+        "event_type":   event.event_type,
+        "description":  event.description,
+        "payload":      event.payload,
+        "triggered_by": event.triggered_by,
+        "created_at":   event.created_at.isoformat(),
+    }
+    await sio.emit("historial_created", payload, room=f"obra_{event.obra_id}")
+    logger.debug("historial_created eventId=%d obraId=%d", event.id, event.obra_id)
+
+
 async def emit_alerts_resolved(task_id: int, obra_id: int) -> None:
     payload = {"taskId": task_id, "obraId": obra_id}
     if obra_id:
