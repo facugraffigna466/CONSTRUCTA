@@ -1,6 +1,9 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from app.models.calendar import CalendarException, WorkingCalendar
+
+# Argentina no observa horario de verano desde 2009 — el offset es fijo.
+_AR_OFFSET = timedelta(hours=-3)
 
 
 def _day_bit(d: date) -> int:
@@ -91,3 +94,27 @@ def get_ar_holidays(year: int) -> list[dict]:
         {"date": date(y, m, d), "is_working": False, "label": label}
         for y, m, d, label in rows
     ]
+
+
+def is_within_send_window(hour_from: int, hour_to: int, now: datetime | None = None) -> bool:
+    """Ventana de envío genérica en horario argentino, para casos sin una obra
+    puntual de la que tomar el WorkingCalendar (ej. recordatorios de bitácora
+    todavía sin asignar a obra). A diferencia de is_within_working_hours()
+    (calendario laboral configurable por obra), acá el "día laboral" es un
+    default fijo: lunes a viernes, sin feriados nacionales.
+
+    Reemplaza la implementación que vivía duplicada en message_service.py —
+    esa versión solo miraba la hora y nunca el día, así que un recordatorio
+    podía salir un domingo si la hora caía dentro de la franja configurada
+    (docs/auditoria/06-alertas.md, hallazgo 7.3/8.3).
+    """
+    dt = (now or datetime.now(timezone.utc)) + _AR_OFFSET
+    if dt.weekday() >= 5:  # Sat=5, Sun=6
+        return False
+    if any(y == dt.year and m == dt.month and d == dt.day
+           for y, m, d, _ in _HOLIDAYS_BY_YEAR.get(dt.year, [])):
+        return False
+    h = dt.hour
+    if hour_from <= hour_to:
+        return hour_from <= h < hour_to
+    return h >= hour_from or h < hour_to  # overnight window (e.g. 22–06)

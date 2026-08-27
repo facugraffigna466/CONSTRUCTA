@@ -225,12 +225,13 @@ async def test_send_window_not_used_in_inbound_path():
     import re
     import app.services.message_service as message_service_module
     src = open(message_service_module.__file__).read()
-    # Contamos ocurrencias de _within_send_window en el archivo. Antes del fix
-    # había 4 (definición + 1 en inbound + 2 en outbound). Ahora deben ser 3
-    # (definición + 2 en outbound).
-    matches = re.findall(r"_within_send_window\(", src)
-    assert len(matches) == 3, (
-        f"esperaba 3 apariciones de _within_send_window (def + 2 outbound), encontré {len(matches)}"
+    # is_within_send_window() vive ahora en calendar_service.py (docs/auditoria/
+    # 06-alertas.md, hallazgo 7.3/8.3 — se unificó con is_within_working_hours()
+    # en un solo módulo). En message_service.py debe seguir apareciendo solo
+    # como llamada en el bloque outbound (2 veces), nunca en inbound.
+    matches = re.findall(r"is_within_send_window\(", src)
+    assert len(matches) == 2, (
+        f"esperaba 2 llamadas a is_within_send_window en outbound, encontré {len(matches)}"
     )
     # Además, verificamos que no aparezca 'outside send window' en el path
     # de inbound (el log era la firma del bug).

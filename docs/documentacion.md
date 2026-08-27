@@ -2112,7 +2112,7 @@ Repetir el ejercicio de auditoría del 2026-07-17 sobre el sistema ya con la car
 Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/IPI-CONSTRUCTA.md`.
 
 ### Pending / next steps
-Reportes 06 (alertas), 07 (historial), 08 (bitácora) no tienen remediación explícita registrada en el git log todavía — confirmar si siguen abiertos o se resolvieron como parte de otro cambio antes de darlos por cerrados.
+Reportes 07 (historial) y 08 (bitácora) no tienen remediación explícita registrada en el git log todavía — confirmar si siguen abiertos o se resolvieron como parte de otro cambio antes de darlos por cerrados. Reporte 06 (alertas) cerrado el 2026-08-26 (ver entrada más abajo).
 
 ---
 
@@ -2176,3 +2176,28 @@ Tests de aislamiento de tenant y de límites de plan actualizados con fixtures d
 
 ### Pending / next steps
 Fase 5 (drop de columnas vestigiales en `users`) queda deliberadamente pendiente — ver memoria `project_multitenant_email` para el criterio de cuándo retomarla.
+
+---
+
+## 2026-08-26 — Cierre de la auditoría 06 (Alertas)
+
+### Objective
+Cerrar `docs/auditoria/06-alertas.md`, la única de las 11 auditorías de la ronda post-defensa que quedaba sin remediación explícita. Antes de tocar nada se comparó cada hallazgo contra el código actual, porque commits posteriores a la auditoría (`#89`/`#90`, cierre de la auditoría 11) ya habían resuelto parcialmente el hallazgo 8.1 (notify_task_overdue) y 8.2/8.8 sin mencionar la 06 explícitamente.
+
+### Changes made
+- **8.1 (P0) Auto-resolve TASK_OVERDUE incompleto** — ya se resolvía DELAY_RISK al cambiar responsable/fecha vía `update()` HTTP, pero TASK_OVERDUE nunca se auto-resolvía y el path del chatbot (`apply_status_update()`) no disparaba ninguna resolución. Ahora: `update()` también resuelve TASK_OVERDUE al empujar `due_date` a futuro, y `apply_status_update()` resuelve TASK_OVERDUE + DELAY_RISK "vencida" al completar o cancelar la tarea (el caso que importaba: cerrar una tarea vencida por WhatsApp dejaba el badge del header elevado para siempre).
+- **8.4 (P1) DELAY_RISK puramente reactivo** — nuevo método `AlertService.evaluate_task_risks_for_all_obras()` + job en `scheduler.py` cada 4 horas. Antes, una obra sin tráfico (nadie abría el tab Tareas/Gantt) nunca generaba alertas aunque tuviera tareas vencidas o bloqueadas.
+- **8.3 (P1) Dos implementaciones de ventana de envío** — `_within_send_window()` de `message_service.py` (offset AR fijo, sin mirar el día) se unificó con `calendar_service.py` como `is_within_send_window()`: ahora también rechaza fines de semana y feriados nacionales antes de mandar un recordatorio de bitácora.
+- **8.5 (P1) Toast único pierde alertas** — `useGlobalAlerts` pasó de un `toastAlert` de slot único a una cola (`toastQueue`); dos alertas críticas seguidas ya no se pisan.
+- **8.7 (P2) Sin tenant check en el auto-resolve** — `mark_read_by_task_and_fragment/_and_type/_by_task` en `alert_repository.py` ganaron un `tenant_id` opcional, y todos los callers internos de `task_service.py` ahora lo pasan.
+- **8.6 (P2) Sin paginación en la carga inicial** — `useGlobalAlerts` pasó a pedir `unread_only=true` al montar (la campana solo muestra no leídas de todos modos).
+- Confirmado sin cambios: 8.2 (`notify_*`) y 8.8 (columna `tenant_id` denormalizada) ya estaban resueltos por `#89`/`#90`; 7.7 (rol mínimo para marcar alertas leídas) ya estaba resuelto por el sistema de roles por obra del 2026-08-24.
+
+### Files modified
+`backend/app/services/task_service.py`, `backend/app/services/alert_service.py`, `backend/app/repositories/alert.py`, `backend/app/core/scheduler.py`, `backend/app/services/calendar_service.py`, `backend/app/services/message_service.py`, `frontend/src/hooks/useGlobalAlerts.ts`. Test nuevo: `backend/tests/test_audit06_alertas.py` (9 casos). Un test de regresión estructural (`test_responsibles_audit_04.py::test_send_window_not_used_in_inbound_path`) se actualizó para reflejar el nuevo nombre/ubicación de la función.
+
+### Validation
+Suite completa de backend: 295 passed, 1 failed (falla pre-existente y ambiental — `test_webhook_missing_account_sid_returns_200_with_twiml`, reproducida también en `main` antes de este cambio, no relacionada). `npx tsc --noEmit` en frontend sin errores.
+
+### Pending / next steps
+No quedó nada abierto de la auditoría 06. La cola de toasts (8.5) y la carga con `unread_only` (8.6) no tienen verificación en navegador registrada en esta sesión — no hay infraestructura de tests de frontend en el repo (no hay vitest/jest configurado) y simular dos alertas críticas casi simultáneas requiere emitir eventos de socket a mano; quedó cubierto por revisión de código + `tsc` limpio.
