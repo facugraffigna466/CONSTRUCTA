@@ -63,7 +63,7 @@ async def _last_outbound(db) -> Message:
 
 async def test_primer_mensaje_ambiguo_manda_menu_y_no_procesa(db, ctx):
     svc = MessageService(db)
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(_payload("hola", "SM1"), raw_params={})
     out = await _last_outbound(db)
     assert out is not None
@@ -78,7 +78,8 @@ async def test_primer_mensaje_ambiguo_manda_menu_y_no_procesa(db, ctx):
 
 async def test_responder_con_numero_valido_fija_el_tenant(db, ctx):
     svc = MessageService(db)
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    sids = iter(["SM_out_1", "SM_out_2"])
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(side_effect=lambda *a, **k: next(sids))):
         await svc.process_inbound(_payload("hola", "SM1"), raw_params={})
         await svc.process_inbound(_payload("1", "SM2"), raw_params={})
 
@@ -93,7 +94,8 @@ async def test_responder_con_numero_valido_fija_el_tenant(db, ctx):
 
 async def test_respuesta_invalida_al_menu_lo_repite(db, ctx):
     svc = MessageService(db)
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    sids = iter(["SM_out_1", "SM_out_2"])
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(side_effect=lambda *a, **k: next(sids))):
         await svc.process_inbound(_payload("hola", "SM1"), raw_params={})
         await svc.process_inbound(_payload("no entiendo", "SM2"), raw_params={})
     out = await _last_outbound(db)
@@ -106,7 +108,8 @@ async def test_respuesta_invalida_al_menu_lo_repite(db, ctx):
 
 async def test_tenant_elegido_se_recuerda_sin_volver_a_preguntar(db, ctx):
     svc = MessageService(db)
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    sids = iter(["SM_out_1", "SM_out_2", "SM_out_3"])
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(side_effect=lambda *a, **k: next(sids))):
         await svc.process_inbound(_payload("hola", "SM1"), raw_params={})
         await svc.process_inbound(_payload("2", "SM2"), raw_params={})
         # Tercer mensaje: ya no debería repreguntar — pasa a procesarse normal

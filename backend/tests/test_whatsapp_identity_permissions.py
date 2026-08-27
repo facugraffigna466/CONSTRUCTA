@@ -343,7 +343,7 @@ async def test_responsible_bloqueado_en_bitacora_audio_no_es_staff(db, ctx):
         MediaUrl0="https://api.twilio.com/fake-audio.ogg",
         MediaContentType0="audio/ogg",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         inbound = await svc.process_inbound(payload, raw_params={})
     # El mensaje inbound quedó marcado como procesado, pero el reply enviado
     # es el de bloqueo. Lo consultamos por el mensaje outbound guardado.
@@ -373,7 +373,7 @@ async def test_responsible_equipo_tambien_bloqueado_en_bitacora_audio(db, ctx):
         MediaUrl0="https://api.twilio.com/fake-audio.ogg",
         MediaContentType0="audio/ogg",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -402,7 +402,7 @@ async def test_staff_no_bloqueado_en_bitacora_audio(db, ctx):
         MediaUrl0="https://api.twilio.com/fake-audio.ogg",
         MediaContentType0="audio/ogg",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -430,7 +430,7 @@ async def test_webhook_numero_desactivado_recibe_mensaje_especifico(db, ctx):
         MessageSid="SM_test_baja", AccountSid="AC_test",
         Body="hola",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -454,7 +454,7 @@ async def test_webhook_numero_desconocido_sigue_mensaje_generico(db, ctx):
         MessageSid="SM_test_desconocido", AccountSid="AC_test",
         Body="hola",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -483,7 +483,7 @@ async def test_pendiente_confirmacion_bloquea_todo_menos_SI(db, ctx):
         MessageSid="SM_test_lucia_hola", AccountSid="AC_test",
         Body="hola, qué tal",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -510,7 +510,7 @@ async def test_pendiente_confirmacion_con_SI_confirma(db, ctx):
         MessageSid="SM_test_lucia_SI", AccountSid="AC_test",
         Body="SI",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     from sqlalchemy import select
     from app.models.message import Message, MessageDirection
@@ -536,7 +536,7 @@ async def test_pendiente_confirmacion_acepta_variantes(db, ctx):
         MessageSid="SM_test_lucia_ok", AccountSid="AC_test",
         Body="ok.",
     )
-    with patch("app.integrations.twilio.client.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
+    with patch("app.services.message_service.send_whatsapp_message", new=AsyncMock(return_value="SM_out")):
         await svc.process_inbound(payload, raw_params={})
     lucia = await db.get(Responsible, ctx["lucia_id"])
     await db.refresh(lucia)
