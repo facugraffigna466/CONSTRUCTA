@@ -10,6 +10,16 @@ import os
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-para-tests")
 
+# Sin esto, Settings cae al .env real (env_file=".env" en app/core/config.py)
+# y los tests corren con credenciales de Twilio reales. Si algún test se
+# olvida de mockear send_whatsapp_message (o mockea el módulo equivocado, como
+# pasó — ver commit de fix del mock target), este guard evita que la llamada
+# llegue a la API real: send_whatsapp_message corta temprano si no hay
+# ACCOUNT_SID/AUTH_TOKEN y devuelve None en vez de mandar el mensaje.
+os.environ.setdefault("TWILIO_ACCOUNT_SID", "")
+os.environ.setdefault("TWILIO_AUTH_TOKEN", "")
+os.environ.setdefault("TWILIO_WHATSAPP_NUMBER", "")
+
 import tempfile
 
 import pytest
