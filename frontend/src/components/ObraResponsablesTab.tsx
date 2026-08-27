@@ -381,6 +381,11 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
   const [phoneInput, setPhoneInput] = useState("");
   const [roleInput, setRoleInput] = useState("");
   const [selectedExisting, setSelectedExisting] = useState<Responsible | null>(null);
+  // Al sumar a alguien el default es acceso total a los planos de la obra; el
+  // checkbox solo permite arrancar sin acceso. Para dar disciplinas puntuales
+  // está el modal de edición — mantenerlo fuera del alta evita un formulario
+  // de 10 checkboxes para el caso raro.
+  const [newPlanosAll, setNewPlanosAll] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -400,7 +405,7 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
   const available = allResponsibles.filter(r => r.is_active && !team.some(m => m.responsible_id === r.id));
 
   function openForm() {
-    setAdding(true); setNameInput(""); setPhoneInput(""); setRoleInput(""); setSelectedExisting(null); setFormError(null);
+    setAdding(true); setNameInput(""); setPhoneInput(""); setRoleInput(""); setSelectedExisting(null); setFormError(null); setNewPlanosAll(true);
   }
   function closeForm() { setAdding(false); setFormError(null); }
 
@@ -415,9 +420,10 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
     if (!selectedExisting && !E164.test(phone)) return setFormError(PHONE_ERROR_HINT);
     setSaving(true); setFormError(null);
     try {
+      const planDisc = newPlanosAll ? null : [];
       const payload = selectedExisting
-        ? { responsible_id: selectedExisting.id, role: roleInput.trim() || null }
-        : { full_name: nameInput.trim(), whatsapp_number: phone, role: roleInput.trim() || null };
+        ? { responsible_id: selectedExisting.id, role: roleInput.trim() || null, plan_disciplines: planDisc }
+        : { full_name: nameInput.trim(), whatsapp_number: phone, role: roleInput.trim() || null, plan_disciplines: planDisc };
       const added = await addObraTeamMember(obraId, payload);
       setTeam(prev => [...prev, added]);
       closeForm();
@@ -510,7 +516,18 @@ export function ObraResponsablesTab({ obraId, onTeamChanged }: Props) {
                   <AlertTriangle style={{ width: 11, height: 11 }} />{formError}
                 </div>
               )}
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", minWidth: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={newPlanosAll}
+                    onChange={e => setNewPlanosAll(e.target.checked)}
+                    style={{ accentColor: "#FF6B35", width: 13, height: 13, flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: 11.5, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Puede pedir todos los planos por WhatsApp
+                  </span>
+                </label>
                 <button onClick={handleAdd} disabled={saving}
                   style={{ padding: "7px 16px", fontSize: 12.5, fontWeight: 600, borderRadius: 9, background: "#FF6B35", border: "none", color: "#fff", cursor: "pointer", opacity: saving ? 0.7 : 1, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   {saving ? "Agregando..." : "Agregar al equipo"}
