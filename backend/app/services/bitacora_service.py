@@ -342,6 +342,16 @@ class BitacoraService:
             data={"model": settings.WHISPER_MODEL, "language": "es"},
             timeout=120,
         )
+        if not resp.ok and filename.lower().endswith(".amr"):
+            # docs/auditoria/08-bitacora.md, hallazgo 8.7: WhatsApp en Android
+            # viejos manda audio en AMR, que Whisper rechaza. Sin esto el error
+            # quedaba genérico ("Error en el procesamiento: ...") sin ninguna
+            # pista de qué hacer.
+            raise UnprocessableError(
+                "Este audio llegó en formato AMR (típico de WhatsApp en celulares Android viejos), "
+                "que la transcripción automática no soporta. Pedile al emisor que lo vuelva a mandar, "
+                "o cargá el texto a mano con 'Cargar texto'."
+            )
         resp.raise_for_status()
         return resp.json().get("text", "").strip() or None
 

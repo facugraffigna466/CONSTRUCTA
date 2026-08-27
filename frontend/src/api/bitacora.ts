@@ -37,10 +37,14 @@ export interface BitacoraEntry {
   processed_at: string | null;
 }
 
-export async function fetchBitacora(obraId?: number): Promise<BitacoraEntry[]> {
-  const { data } = await apiClient.get<BitacoraEntry[]>("/bitacora", {
-    params: obraId ? { obra_id: obraId } : undefined,
-  });
+export async function fetchBitacora(
+  obraId?: number, limit?: number, offset?: number
+): Promise<BitacoraEntry[]> {
+  const params: Record<string, number> = {};
+  if (obraId) params.obra_id = obraId;
+  if (limit != null) params.limit = limit;
+  if (offset != null) params.offset = offset;
+  const { data } = await apiClient.get<BitacoraEntry[]>("/bitacora", { params });
   return data;
 }
 

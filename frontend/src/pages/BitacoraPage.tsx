@@ -12,6 +12,7 @@ import {
 import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
 import { useConfirm } from "../components/ConfirmProvider";
+import socket from "../lib/socket";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
 const BACKEND_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -39,6 +40,19 @@ function fmtDate(d: string | null): string {
   if (!d) return "—";
   const [y, m, day] = d.split("-");
   return `${day}/${m}/${y}`;
+}
+
+// docs/auditoria/08-bitacora.md, hallazgo N8: el filtro "Solo pendientes" usaba
+// una definición de "necesita atención" más angosta que la de EntryCard (solo
+// miraba sugerencias sin resolver) — una entrada en error o sin obra, sin
+// ninguna sugerencia, desaparecía del filtro aunque sí necesitara acción.
+// Una sola definición, compartida por el filtro y la tarjeta.
+function entryNeedsAttention(e: BitacoraEntry): boolean {
+  const hasPendingSuggestion = (e.suggestions ?? []).some(s => !s.applied && !s.dismissed);
+  return (
+    hasPendingSuggestion || !e.obra_id ||
+    e.status === "pendiente_transcripcion" || e.status === "pendiente_analisis" || e.status === "error"
+  );
 }
 
 // ─── Tarjeta de sugerencia ────────────────────────────────────────────────────
@@ -195,7 +209,24 @@ function SuggestionCard({ s, index, entryId, onUpdated }: {
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
             {editable && (
               <button
-                onClick={() => setEditing(v => !v)}
+                onClick={() => {
+                  // docs/auditoria/08-bitacora.md, hallazgo N9: `edit` se
+                  // inicializaba una sola vez desde `s` y nunca se
+                  // resincronizaba — cancelar y volver a abrir (o que la
+                  // entrada se reprocese mientras tanto) podía dejar
+                  // aplicar valores viejos sobre la sugerencia actual.
+                  // Refrescar siempre al abrir el editor.
+                  if (!editing) {
+                    setEdit({
+                      new_start_date: s.new_start_date,
+                      new_due_date: s.new_due_date,
+                      new_status: s.new_status,
+                      title: s.title,
+                      responsible_name: s.responsible_name,
+                    });
+                  }
+                  setEditing(v => !v);
+                }}
                 disabled={busy}
                 title="Ajustar antes de aplicar"
                 style={{ padding: "5px 9px", borderRadius: 8, fontSize: 11, fontWeight: 600, color: editing ? "#E85A26" : "#6B7580", background: "#fff", border: `1px solid ${editing ? "#FDDFC8" : "#E6E7E5"}`, cursor: "pointer", fontFamily: FONT }}
@@ -244,9 +275,7 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
   const st = STATUS_META[entry.status] ?? STATUS_META.error;
   const pendingSuggestions = (entry.suggestions ?? []).filter(s => !s.applied && !s.dismissed).length;
   // Colapsada por defecto si ya está resuelta; abierta si necesita acción del jefe.
-  const needsAttention =
-    pendingSuggestions > 0 || !entry.obra_id ||
-    entry.status === "pendiente_transcripcion" || entry.status === "pendiente_analisis" || entry.status === "error";
+  const needsAttention = entryNeedsAttention(entry);
   const [expanded, setExpanded] = useState(needsAttention);
 
   async function run(fn: () => Promise<BitacoraEntry>) {
@@ -436,6 +465,11 @@ function EntryCard({ entry, obras, onUpdated, onDeleted }: {
 
 // ─── Página ───────────────────────────────────────────────────────────────────
 
+// docs/auditoria/08-bitacora.md, hallazgo 8.4: la página pedía el default del
+// servidor (limit=100) sin exponer paginación — en una obra con >100 notas,
+// las más viejas quedaban inaccesibles desde la UI aunque existieran en la BD.
+const BITACORA_PAGE_SIZE = 30;
+
 export function BitacoraPage({ obra }: { obra: Obra | null }) {
   // La bitácora es por obra: la página queda fija a la obra desde la que se entró.
   const obraId = obra?.id ?? null;
@@ -443,6 +477,9 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   const [unassigned, setUnassigned] = useState<BitacoraEntry[]>([]);
   const [obras, setObras] = useState<Obra[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const entriesCountRef = useRef(0);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -463,11 +500,12 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
     if (obraId == null) { setLoading(false); return; }
     try {
       const [entriesData, unassignedData, obrasData] = await Promise.all([
-        fetchBitacora(obraId),
+        fetchBitacora(obraId, BITACORA_PAGE_SIZE, 0),
         fetchBitacoraUnassigned(),
         fetchObras(),
       ]);
       setEntries(entriesData);
+      setHasMore(entriesData.length === BITACORA_PAGE_SIZE);
       setUnassigned(unassignedData);
       setObras(obrasData);
     } catch { /* backend caído */ } finally {
@@ -476,6 +514,38 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   }, [obraId]);
 
   useEffect(() => { setLoading(true); load(); }, [load]);
+  useEffect(() => { entriesCountRef.current = entries.length; }, [entries]);
+
+  async function loadMore() {
+    if (obraId == null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const more = await fetchBitacora(obraId, BITACORA_PAGE_SIZE, entries.length);
+      setEntries(prev => [...prev, ...more]);
+      setHasMore(more.length === BITACORA_PAGE_SIZE);
+    } catch { /* silent — el botón sigue disponible para reintentar */ } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  // docs/auditoria/08-bitacora.md, hallazgo 8.5: bitacora_created ya se emitía
+  // por Socket.IO pero solo lo escuchaba useActivityFeed (toast de actividad),
+  // nunca esta página — una nota de WhatsApp no aparecía sin recargar. Se
+  // refetchea con el límite actual (no BITACORA_PAGE_SIZE fijo) para no perder
+  // páginas ya cargadas con "Cargar más".
+  useEffect(() => {
+    if (obraId == null) return;
+    function handleBitacoraCreated(p: { obraId: number }) {
+      if (p.obraId !== obraId) return;
+      const limit = Math.max(entriesCountRef.current, BITACORA_PAGE_SIZE) + 1;
+      fetchBitacora(obraId, limit, 0).then(data => {
+        setEntries(data);
+        setHasMore(data.length === limit);
+      }).catch(() => {});
+    }
+    socket.on("bitacora_created", handleBitacoraCreated);
+    return () => { socket.off("bitacora_created", handleBitacoraCreated); };
+  }, [obraId]);
 
   const targetObraId = obraId;
 
@@ -552,7 +622,6 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   // Sugerencias sin revisar: total para el encabezado, y orden "pendientes primero".
-  const hasPending = (e: BitacoraEntry) => (e.suggestions ?? []).some(s => !s.applied && !s.dismissed);
   const pendingTotal = entries.reduce(
     (n, e) => n + (e.suggestions ?? []).filter(s => !s.applied && !s.dismissed).length, 0,
   );
@@ -561,8 +630,8 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
     !q || [e.summary, e.transcript, e.responsible_name, ...(e.key_points ?? [])]
       .some(t => (t ?? "").toLowerCase().includes(q));
   const displayEntries = [...entries]
-    .sort((a, b) => Number(hasPending(b)) - Number(hasPending(a)))
-    .filter(e => (!onlyPending || hasPending(e)) && matchesSearch(e));
+    .sort((a, b) => Number(entryNeedsAttention(b)) - Number(entryNeedsAttention(a)))
+    .filter(e => (!onlyPending || entryNeedsAttention(e)) && matchesSearch(e));
 
   return (
     <div style={{ fontFamily: FONT, maxWidth: 860, margin: "0 auto", display: "flex", flexDirection: "column", gap: 18 }}>
@@ -784,6 +853,24 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
               onDeleted={id => setEntries(prev => prev.filter(x => x.id !== id))}
             />
           ))}
+          {hasMore && (
+            <button
+              onClick={loadMore}
+              disabled={loadingMore}
+              style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+                padding: "9px 16px", borderRadius: 10, fontSize: 12.5, fontWeight: 600,
+                color: "#5B6770", background: "#fff", border: "1px solid #E6E7E5",
+                cursor: loadingMore ? "not-allowed" : "pointer", fontFamily: FONT,
+                alignSelf: "center", opacity: loadingMore ? 0.7 : 1,
+              }}
+            >
+              {loadingMore
+                ? <Loader2 style={{ width: 13, height: 13, animation: "spin 1s linear infinite" }} />
+                : null}
+              {loadingMore ? "Cargando…" : "Cargar más"}
+            </button>
+          )}
         </div>
       )}
 

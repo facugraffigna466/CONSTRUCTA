@@ -655,6 +655,23 @@ class MessageService:
             return ("Recibí tu nota de voz, pero no tengo obras asociadas a tu número todavía. "
                     "Avisale al jefe de obra para que te vincule.")
 
+        # docs/auditoria/08-bitacora.md, hallazgo 8.3: sin esto, un número podía
+        # mandar notas de voz sin límite — cada una dispara descarga de Twilio +
+        # Whisper + Claude, y el costo escala linealmente con el abuso (a
+        # diferencia de la cuota mensual, que solo frena una vez alcanzado el
+        # tope del plan, no un pico puntual).
+        from sqlalchemy import func as _func, select as _select_rl
+        from app.models.bitacora import BitacoraEntry as _BE
+        _MAX_BITACORA_PER_HOUR = 10
+        _recent = (await self.db.execute(
+            _select_rl(_func.count()).select_from(_BE).where(
+                _BE.created_by == created_by,
+                _BE.created_at >= datetime.now(timezone.utc) - timedelta(hours=1),
+            )
+        )).scalar_one()
+        if _recent >= _MAX_BITACORA_PER_HOUR:
+            return "Recibiste muchas notas de voz en poco tiempo. Esperá un momento antes de mandar otra."
+
         # Control de costo de IA: cota mensual por tenant, antes de gastar en
         # Whisper/Claude. El chatbot no tenía este chequeo — era el canal que
         # más quedaba afuera del control de costo (audit 08-bitácora §8.1).
@@ -724,7 +741,20 @@ class MessageService:
                             )
                         await send_whatsapp_message(sender_phone, msg[:1500])
                 except Exception:
+                    # docs/auditoria/08-bitacora.md, hallazgo 8.6: el mensaje
+                    # "te aviso enseguida" quedaba sin cumplir si esta excepción
+                    # exterior saltaba (DB caída, timeout de red) — el emisor
+                    # nunca se enteraba de que algo salió mal.
                     _log.exception("Error en bg processing de BitacoraEntry %s", entry_id)
+                    try:
+                        from app.integrations.twilio.client import send_whatsapp_message
+                        await send_whatsapp_message(
+                            sender_phone,
+                            "⚠️ No pudimos procesar tu nota de voz. El audio quedó guardado — "
+                            "podés ver el estado en la app.",
+                        )
+                    except Exception:
+                        pass
 
             _asyncio.create_task(_bg_process_entry())
             return "🎙️ Nota de voz recibida. La estoy procesando con IA — te aviso enseguida."
