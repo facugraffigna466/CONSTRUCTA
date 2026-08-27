@@ -436,3 +436,82 @@ except Exception:
 | `frontend/src/api/bitacora.ts` | Todas las llamadas a la API |
 | `frontend/src/components/TaskBitacoraOrigin.tsx` | Trazabilidad tarea → audio (bug de URL) |
 | `frontend/src/hooks/useActivityFeed.ts:79-83` | Listener de `bitacora_created` (solo para feed de actividad) |
+
+---
+
+## 11. Adenda 2026-08-26 — verificación con tests reales + búsqueda de bugs nuevos
+
+Auditoría original re-verificada con un workflow multi-agente (no solo lectura de código): reproducción con `pytest` real de los dos hallazgos P0, y 5 lentes de búsqueda de bugs nuevos con verificación adversarial (mínimo 2 de 3 votos independientes a favor) antes de admitir cada uno. Todo corrido contra el código actual del repo (rama `fix/whatsapp-planos-desambiguacion`, sin cambios propios en bitácora desde la fecha del audit original salvo el hardening de firmas de `signing.py` del 2026-08-21, que no toca estos bugs).
+
+### 11.1 — Los dos P0 originales: confirmados con test real, no solo con lectura
+
+- **§8.1 (cuota de IA ignora WhatsApp):** CONFIRMADO. Test que inserta 20 `BitacoraEntry` con `created_by=None` (el patrón exacto que deja `_handle_bitacora_audio`) prueba que `assert_within_ai_quota` no lanza aunque se alcance el límite; el mismo test, con las mismas 20 filas pero `created_by=<User>`, sí lanza 429. `grep` confirma que `_handle_bitacora_audio` nunca llama a `assert_within_ai_quota`.
+- **§8.2 (audio sin firma en `TaskBitacoraOrigin`):** CONFIRMADO. `GET /uploads/{file}` sin query params → 403 real; la misma URL pero con la firma que la propia API ya devuelve en `audio_url` → 200 con el contenido correcto. El bug es puramente que el componente usa `audio_path` en vez de `audio_url`, dato que el backend ya expone bien.
+
+### 11.2 — Hallazgos nuevos (no estaban en las secciones 8.1-8.9)
+
+| # | Severidad | Hallazgo | Archivo |
+|---|-----------|----------|---------|
+| N1 | 🔴 Crítico | Un admin con `tenant_id=NULL` (estado que deja `create_admin.py`, script real y sin deprecar) ve y lista la bitácora de **todos los tenants** en `GET /bitacora` — `list_entries`/`get_scoped`/`list_unassigned` solo filtran `if tenant_id is not None` | `bitacora_service.py:176` |
+| N2 | 🔴 Crítico | Una sugerencia "stale" (p. ej. tras reasignar la obra de una entrada con `assign_obra` y que el re-análisis falle) permite aplicar `reschedule_task`/`update_status` sobre una tarea de **otra obra**, sin que el usuario tenga ningún `ObraUserRole` ahí — el guard de ruta valida contra `entry.obra_id`, pero `TaskService` solo valida `tenant_id`, nunca el rol por-obra de la tarea real | `bitacora_service.py:524-532` |
+| N3 | 🟠 Alto | `apply_suggestion`/`dismiss_suggestion` usan `get_or_raise` en vez de `get_scoped` — para entradas con `obra_id=NULL` (WhatsApp/web sin asignar todavía), el único guard es "sea admin", sin comparar tenant. Un admin de otra empresa puede descartar sugerencias ajenas (200 OK) y de paso la respuesta le filtra el transcript/resumen completo de la nota ajena | `bitacora_service.py:501,601` |
+| N4 | 🟠 Alto | `ObraService.delete()` limpia archivos de planos pero no los audios de bitácora — mismo bug que se cerró para planos en `d081ae7`, sin replicar acá. Borrar una obra dejá los `.ogg`/`.mp3` huérfanos en `backend/uploads/` para siempre (grabaciones de voz, dato sensible) | `obra_service.py:104-136` |
+| N5 | 🟡 Medio | Editar una sugerencia con fecha o `new_status` inválidos antes de aplicar (`date.fromisoformat`/`TaskStatus(...)` sin `try/except`) → `500` genérico en vez de `400`/`422` claro | `bitacora_service.py:528,576` |
+| N6 | 🟡 Medio | `reprocess()` no chequea el `status` actual: reanalizar una entrada ya `procesado` reemplaza `suggestions` entero con `applied=False` para todas, perdiendo el registro de qué ya se aplicó — riesgo de tarea duplicada o de reprogramar dos veces si el usuario vuelve a aplicar "la misma" sugerencia | `bitacora.py:247` |
+| N7 | 🟡 Medio | `reprocess()` es un no-op silencioso (`200 OK`, sin cambios ni error) cuando el archivo de audio ya no está en disco — el usuario aprieta "Reintentar" y no pasa nada, sin ninguna pista de por qué | `bitacora.py:257` |
+| N8 | 🟡 Medio | Frontend: el filtro "Solo pendientes" (`hasPending`, línea 555) usa una definición de "necesita atención" más angosta que `needsAttention` de `EntryCard` (línea 247) — una entrada en `error`/`pendiente_transcripcion` sin sugerencias desaparece de la lista filtrada aunque sí necesite acción | `BitacoraPage.tsx:555,563` |
+| N9 | 🟡 Medio | Frontend: el estado local `edit`/`editing` de una sugerencia se inicializa una sola vez desde el prop y nunca se resincroniza — cancelar sin resetear, o reprocesar la entrada mientras el editor está abierto, puede dejar aplicar valores obsoletos sobre la sugerencia equivocada | `BitacoraPage.tsx:55-69,198` |
+
+Cada uno de N1-N9 tiene un test de reproducción real (`pytest`, corrido y borrado) documentado en el journal del workflow, salvo N8/N9 que son de solo lectura de frontend (no hay suite de tests en `frontend/`).
+
+### 11.3 — Qué hacer, en orden
+
+**Ya en el plan original (sigue vigente, ver §9):** 9.1 (cuota WhatsApp) y 9.2 (URL firmada en `TaskBitacoraOrigin`) siguen siendo P0 — ahora con test de reproducción, no solo análisis.
+
+**Nuevo, a sumar al P0/P1:**
+1. N2 y N3 (bypass de autorización por-obra y por-tenant en `apply_suggestion`/`dismiss_suggestion`) — mismo nivel que 9.1/9.2: son escritura no autorizada sobre datos de otro tenant/obra, confirmado con test. Arreglo: `get_scoped` en vez de `get_or_raise` en ambos métodos, y en `apply_suggestion` validar que `task.obra_id == entry.obra_id` antes de delegar a `TaskService`.
+2. N1 (admin sin tenant ve todo) — acotado en probabilidad (requiere el estado legacy de `create_admin.py`) pero el impacto es máximo (fuga total entre tenants); arreglo barato: tratar `tenant_id is None` como "sin obras visibles" en vez de "sin filtro", o eliminar la posibilidad de crear un admin sin tenant.
+3. N4 (audios huérfanos al borrar obra) — mismo patrón que el fix ya aplicado a planos; extender `ObraService.delete()`/`_cleanup_plano_files` para cubrir también `BitacoraEntry.audio_path`.
+4. N5, N6, N7 — robustez de `apply_suggestion`/`reprocess`; bajo esfuerzo, sin romper nada existente (try/except + guard de status + mensaje de error explícito).
+5. N8, N9 — frontend, cosmético/UX pero con un camino real a "el usuario ve datos viejos y confía en ellos"; bajo esfuerzo.
+
+Todo lo demás de las secciones 8.3-8.9 del audit original (rate limit, paginación, tiempo real, permisos de collaborator, AMR, procesamiento síncrono web) sigue siendo válido y sin cambios de prioridad.
+
+---
+
+## 12. Re-verificación — tras el rediseño de roles y multi-tenant
+
+Entre la adenda de la sección 11 y esta revisión aterrizó `b4933a4` ("sistema de roles por obra y permisos granulares", 2026-08-24, ~80 archivos) más la migración multi-tenant a `TenantMembership` (Fases 1-4) y ~40 commits más. Se re-chequeó cada hallazgo de roles/tenant contra el código de HOY, línea por línea, no contra lo escrito en las secciones anteriores.
+
+### 12.1 — Ya resuelto
+
+- **§8.9** (cualquier autenticado del tenant podía aplicar sugerencias de alto impacto): **RESUELTO**. Todos los endpoints de bitácora que mutan algo (`apply`, `dismiss`, `reprocess`, `transcript`, `assign_obra`, `delete`) ahora exigen `require_bitacora_obra_role(ObraUserRoleType.COLABORADOR|JEFE_OBRA)` — un usuario sin fila en `ObraUserRole` para esa obra ya no pasa. Matiz que sigue abierto: `apply`/`dismiss` piden solo `COLABORADOR`, no `JEFE_OBRA` — un colaborador con acceso legítimo a la obra puede seguir creando tareas o cerrando otras vía sugerencia; es una decisión de producto razonable con el modelo de roles nuevo, no el mismo bug de antes.
+- **N1** (admin con `tenant_id=NULL` ve todos los tenants): **YA NO ES EXPLOTABLE**. `AuthService._finish_login` (línea 96-107) exige al menos una `TenantMembership` activa o corta con 403 "Account is inactive" — ni `register()` ni `login()` pueden dejar a alguien logueado sin membership. `create_admin.py` es el único camino que deja `tenant_id=NULL` (inserta directo en `users` sin tocar `tenant_memberships`), pero ese usuario **ya no puede loguearse en absoluto** con el flujo actual — el 403 corta antes de emitir ningún token. Housekeeping, no seguridad: `create_admin.py` quedó como script muerto (crea una cuenta con la que nadie puede entrar); conviene borrarlo o actualizarlo para que también cree la membership.
+
+### 12.2 — Siguen exactamente igual (re-verificado hoy)
+
+- **§8.1** (cuota de IA ignora WhatsApp) — el JOIN se movió de `User` a `TenantMembership` (`bitacora_service.py:127`, cambio de la migración multi-tenant, no un intento de arreglo), pero sigue siendo `INNER JOIN` sobre `BitacoraEntry.created_by`, y `_handle_bitacora_audio` (`message_service.py:667`) sigue dejando `created_by=None` para notas de un `Responsible`. Mismo bypass, mismo mecanismo.
+- **§8.2** (`TaskBitacoraOrigin` usa `audio_path` sin firma) — línea 60, sin tocar.
+- **N2** (sugerencia stale muta tareas de otra obra) — causa raíz ahora precisa: `PATCH /tasks/{id}` sí exige `require_task_obra_role` (rol correcto sobre la obra real de la tarea), pero `apply_suggestion` llama a `TaskService.update()`/`apply_status_update_checked()` **directo**, sin pasar por esa ruta — y `TaskService._get_obra_and_assert_access` (`task_service.py:90-99`) solo compara `tenant_id`, nunca `ObraUserRole`. El guard nuevo se sumó en la ruta de tareas pero no en el puente bitácora → tareas.
+- **N3** (dismiss cruza tenant en notas sin obra) — con el guard nuevo puesto (`require_bitacora_obra_role`, `allow_null_obra=True`), `_resolve_and_assert` (`obra_permissions.py:142-158`) solo exige `_is_admin(user)` cuando el modelo no tiene `tenant_id` propio — y `BitacoraEntry` no lo tiene. Es un hueco genérico del módulo nuevo de permisos (afecta a cualquier modelo `allow_null_obra` sin `tenant_id` denormalizado), no algo que haya quedado sin portar — nunca se cubrió.
+- **N4-N9** y **§8.3-8.8** — verificados contra el archivo de hoy uno por uno (huérfanos de audio al borrar obra, sin rate limit en WhatsApp, sin paginación ni tiempo real en `BitacoraPage`, `reprocess` sin guard de estado y no-op silencioso si falta el audio, `edits` sin validar, AMR, procesamiento síncrono web, los dos bugs de estado del frontend en `SuggestionCard`): todos presentes, sin cambios, mismas líneas que en 11.2.
+
+### 12.3 — Prioridad actualizada
+
+1. **P0 sin cambios:** 9.1 (cuota WhatsApp) y 9.2 (URL firmada `TaskBitacoraOrigin`).
+2. **Sumar a ese nivel:** N2 y N3 — son el mismo tipo de problema (mutación/lectura no autorizada entre obras/tenants), y a diferencia de N1 siguen 100% vigentes con el código de hoy. Arreglo de N2: que `apply_suggestion` valide `task.obra_id == entry.obra_id` antes de delegar a `TaskService`, o que pase por `require_task_obra_role` en vez de por el service crudo. Arreglo de N3: `get_scoped` en vez de `get_or_raise` en `apply_suggestion`/`dismiss_suggestion` como defensa adicional, y decidir a nivel de `obra_permissions.py` qué hacer con modelos `allow_null_obra` sin `tenant_id` (agregarle la columna a `BitacoraEntry`, o resolver el tenant vía `responsible_id`/`created_by` antes de comparar).
+3. **Baja de prioridad:** N1 pasa de "crítico a arreglar" a "housekeeping" — no hay código a tocar en el módulo de permisos, solo decidir qué hacer con `create_admin.py` (borrar o arreglar).
+4. Resto sin cambios: N4 (huérfanos de audio) → mismo nivel que el fix ya hecho para planos; N5-N9 → bajo esfuerzo, sin romper nada existente; §8.3-8.8 → sin cambios de prioridad.
+
+### 12.4 — Arreglado (rama `fix/bitacora-audit-p0`)
+
+- **9.1 (cuota de IA ignora WhatsApp) — RESUELTO.** `assert_within_ai_quota` ahora cuenta por `Obra.tenant_id` en vez de por `created_by`/`TenantMembership` (no depende de quién figura como autor). Se agregó el chequeo, que antes no existía en ningún punto del flujo de WhatsApp: en `_handle_bitacora_audio` (antes de crear la entrada, para el caso de una sola obra) y en `_handle_obra_selection` (antes de disparar el análisis, para el caso de varias obras — es ahí donde recién se sabe el tenant). Ambos responden con un mensaje claro por WhatsApp si se alcanzó el límite, sin crear/analizar la entrada.
+- **9.2 (audio sin firma en `TaskBitacoraOrigin`) — RESUELTO.** Usa `e.audio_url ?? e.audio_path`, igual que `BitacoraPage.tsx`. Verificado en vivo contra el server corriendo: la tarea "Pilotes visibles" (origen bitácora #8) ahora pide `/uploads/...?exp=..&tid=..&sig=..` y responde `200`; antes pedía la ruta cruda y daba `403`.
+- **N2 (sugerencia stale muta otra obra) — RESUELTO.** `apply_suggestion` valida `task.obra_id == entry.obra_id` antes de delegar a `TaskService` en las ramas `reschedule_task`/`update_status`; si no coincide, `422` con mensaje de que la sugerencia quedó desactualizada.
+- **N3 (dismiss cruza tenant en notas sin obra) — RESUELTO.** `BitacoraEntry` ahora tiene `tenant_id` propio (migración `0060`, backfill desde `Obra`/`User`/`Responsible` según corresponda; se setea en `create_entry` y se refresca en `assign_obra`/`_handle_obra_selection`). Con la columna presente, el chequeo de tenant que ya existía en `obra_permissions.py::_resolve_and_assert` deja de saltearse — no hizo falta tocar ese módulo.
+- **N5 (edits inválidos → 500) — RESUELTO.** `date.fromisoformat`/`TaskStatus(...)` ahora van envueltos (`_parse_edit_date`/`_parse_edit_status`) y devuelven `422` con el mensaje de qué campo está mal.
+- **N4 (huérfanos de audio al borrar obra) — RESUELTO.** `ObraService.delete()` ahora también corre `_cleanup_bitacora_files` (mismo patrón que `_cleanup_plano_files`).
+
+Suite completa: 286 passed (incluye 6 tests nuevos para estos 6 fixes en `test_bitacora.py`), 1 failed preexistente y no relacionado (`test_webhook_missing_account_sid_returns_200_with_twiml`, depende de firma de Twilio contra una URL de ngrok vieja en el entorno local — falla igual en `main` sin estos cambios).
+
+**Pendiente para una próxima pasada:** N6, N7, N8, N9 y §8.3-8.8 (rate limit WhatsApp, paginación, tiempo real, AMR, procesamiento síncrono web, los dos bugs de frontend en `SuggestionCard`).

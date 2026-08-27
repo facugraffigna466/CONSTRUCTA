@@ -106,7 +106,6 @@ class BitacoraService:
 
         from app.models.plan import Plan
         from app.models.tenant import Tenant
-        from app.models.tenant_membership import TenantMembership
 
         limit: int | None = _BITACORA_DEFAULT_LIMIT
         tenant = await self.session.get(Tenant, tenant_id)
@@ -118,14 +117,18 @@ class BitacoraService:
             return  # plan ilimitado
 
         month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        # Join por TenantMembership, no por User.tenant_id (Fase 3: una
-        # identidad puede tener membership en más de un tenant, el puntero
-        # "última empresa activa" en User ya no alcanza para scopear esto).
+        # Join por Obra.tenant_id, no por created_by: las entradas de WhatsApp
+        # (creadas por staff, pero también en teoría por un Responsible) no
+        # deberían depender de quién figura como autor para contar — cuentan
+        # todas las entradas de una obra de este tenant, sea cual sea el canal
+        # o si created_by quedó NULL. Entradas sin obra_id (WhatsApp con
+        # múltiples obras, todavía sin resolver) no cuentan acá; se controlan
+        # aparte antes de disparar el análisis, cuando se les asigna la obra.
         used = (await self.session.execute(
             select(func.count())
             .select_from(BitacoraEntry)
-            .join(TenantMembership, BitacoraEntry.created_by == TenantMembership.user_id)
-            .where(TenantMembership.tenant_id == tenant_id, BitacoraEntry.created_at >= month_start)
+            .join(Obra, BitacoraEntry.obra_id == Obra.id)
+            .where(Obra.tenant_id == tenant_id, BitacoraEntry.created_at >= month_start)
         )).scalar_one()
 
         if used >= limit:
@@ -282,7 +285,9 @@ class BitacoraService:
         responsible_id: int | None = None,
         created_by: int | None = None,
     ) -> BitacoraEntry:
+        tenant_id = await self._resolve_tenant_id(obra_id, created_by, responsible_id)
         entry = BitacoraEntry(
+            tenant_id=tenant_id,
             obra_id=obra_id,
             source=source,
             audio_path=audio_path,
@@ -295,6 +300,27 @@ class BitacoraService:
         await self.session.flush()
         await self.session.refresh(entry)
         return entry
+
+    async def _resolve_tenant_id(
+        self, obra_id: int | None, created_by: int | None, responsible_id: int | None
+    ) -> int | None:
+        """tenant_id para denormalizar en una entrada nueva: de la obra si ya
+        tiene una, si no del creador o del responsable (notas de WhatsApp
+        todavía sin obra asignada)."""
+        from app.core.tenant_denorm import tenant_for_obra
+
+        if obra_id is not None:
+            return await tenant_for_obra(self.session, obra_id)
+        if created_by is not None:
+            from app.models.user import User
+            return (await self.session.execute(
+                select(User.tenant_id).where(User.id == created_by)
+            )).scalar_one_or_none()
+        if responsible_id is not None:
+            return (await self.session.execute(
+                select(Responsible.tenant_id).where(Responsible.id == responsible_id)
+            )).scalar_one_or_none()
+        return None
 
     async def transcribe_audio(self, audio_bytes: bytes, filename: str) -> str | None:
         """Wrapper público: transcribe sin analizar (para el flujo de WhatsApp con
@@ -501,6 +527,41 @@ class BitacoraService:
 
     # ── Aplicar sugerencias ───────────────────────────────────────────────────
 
+    async def _assert_task_in_entry_obra(self, task_id: int, entry_obra_id: int | None) -> None:
+        """`apply_suggestion` delega en TaskService, que solo valida tenant —
+        nunca el rol por-obra del usuario. Si la sugerencia quedó apuntando a
+        una tarea de OTRA obra (p. ej. la entrada se reasignó con assign_obra
+        y las sugerencias no se limpiaron), alguien con acceso solo a la obra
+        de la entrada podría mutar una tarea de una obra en la que no tiene
+        ningún rol. Ver audit 08-bitácora, hallazgo N2."""
+        task_obra_id = (await self.session.execute(
+            select(Task.obra_id).where(Task.id == task_id)
+        )).scalar_one_or_none()
+        if task_obra_id is not None and task_obra_id != entry_obra_id:
+            raise UnprocessableError(
+                "Esta sugerencia quedó desactualizada — la tarea que referencia ya no "
+                "pertenece a la obra de esta nota. Reprocesá la entrada para generar "
+                "sugerencias al día."
+            )
+
+    def _parse_edit_date(self, value: str | None, label: str) -> date | None:
+        """`date.fromisoformat` sin capturar dejaba un `ValueError` sin manejar
+        —500 opaco— cuando el jefe editaba la sugerencia con una fecha mal
+        escrita antes de aplicarla. Ver audit 08-bitácora, hallazgo N5."""
+        if not value:
+            return None
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            raise UnprocessableError(f"'{value}' no es una fecha válida para {label} (formato AAAA-MM-DD).")
+
+    def _parse_edit_status(self, value: str) -> TaskStatus:
+        try:
+            return TaskStatus(value)
+        except ValueError:
+            valid = ", ".join(t.value for t in TaskStatus)
+            raise UnprocessableError(f"'{value}' no es un estado válido de tarea (opciones: {valid}).")
+
     async def apply_suggestion(
         self, entry_id: int, index: int, manager_id: int, actor: dict | None = None,
         edits: dict | None = None,
@@ -527,9 +588,10 @@ class BitacoraService:
         if stype == "reschedule_task":
             if not s.get("task_id"):
                 raise UnprocessableError("La sugerencia no referencia una tarea válida.")
+            await self._assert_task_in_entry_obra(s["task_id"], entry.obra_id)
             update = TaskUpdate(
-                start_date=date.fromisoformat(s["new_start_date"]) if s.get("new_start_date") else None,
-                due_date=date.fromisoformat(s["new_due_date"]) if s.get("new_due_date") else None,
+                start_date=self._parse_edit_date(s.get("new_start_date"), "la fecha de inicio"),
+                due_date=self._parse_edit_date(s.get("new_due_date"), "la fecha de fin"),
             )
             # cascade_dates=True: si la tarea tiene dependientes, se corren en cadena
             updated = await task_service.update(s["task_id"], update, manager_id, actor=actor, cascade_dates=True)
@@ -559,8 +621,8 @@ class BitacoraService:
                     obra_id=entry.obra_id,
                     title=s.get("title") or "Tarea desde bitácora",
                     description=(s.get("description") or "") + f"\n\n[Origen: bitácora #{entry.id}]",
-                    start_date=date.fromisoformat(s["new_start_date"]) if s.get("new_start_date") else None,
-                    due_date=date.fromisoformat(s["new_due_date"]) if s.get("new_due_date") else None,
+                    start_date=self._parse_edit_date(s.get("new_start_date"), "la fecha de inicio"),
+                    due_date=self._parse_edit_date(s.get("new_due_date"), "la fecha de fin"),
                     responsible_id=responsible_id,
                 ),
                 manager_id,
@@ -573,10 +635,11 @@ class BitacoraService:
         elif stype == "update_status":
             if not s.get("task_id") or not s.get("new_status"):
                 raise UnprocessableError("La sugerencia no tiene tarea o estado válido.")
+            await self._assert_task_in_entry_obra(s["task_id"], entry.obra_id)
             await task_service.apply_status_update_checked(
                 s["task_id"],
                 TaskStatusUpdate(
-                    status=TaskStatus(s["new_status"]),
+                    status=self._parse_edit_status(s["new_status"]),
                     triggered_by="user",
                     reason=f"Bitácora #{entry.id}: {s.get('reason', '')[:200]}",
                 ),

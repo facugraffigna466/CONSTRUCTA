@@ -610,15 +610,20 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
 
       {/* Creador de entradas */}
       <div style={{ background: "#fff", border: "1px solid #ECE7DD", borderRadius: 14, padding: 16 }}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <div style={{
+          display: "inline-flex", padding: 3, borderRadius: 99, background: "#F4F2EE", marginBottom: 16,
+        }}>
           {(["audio", "texto"] as const).map(m => (
             <button
               key={m}
               onClick={() => setMode(m)}
               style={{
-                padding: "6px 14px", borderRadius: 99, fontSize: 12, fontWeight: 700,
-                background: mode === m ? "#1A2329" : "#F4F2EE", color: mode === m ? "#fff" : "#5B6770",
+                padding: "8px 20px", borderRadius: 99, fontSize: 12.5, fontWeight: 700,
+                letterSpacing: "0.01em", minWidth: 96,
+                background: mode === m ? "#1A2329" : "transparent",
+                color: mode === m ? "#fff" : "#8A8478",
                 border: "none", cursor: "pointer", fontFamily: FONT,
+                transition: "background .15s ease, color .15s ease",
               }}
             >
               {m === "audio" ? "🎙️ Audio" : "✍️ Texto"}
@@ -627,27 +632,27 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
         </div>
 
         {mode === "audio" ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "8px 0 4px" }}>
             {!recording ? (
               <button
                 onClick={startRecording}
                 disabled={creating}
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 18px",
-                  borderRadius: 11, fontSize: 13, fontWeight: 700, color: "#fff",
+                  display: "inline-flex", alignItems: "center", gap: 9, padding: "13px 28px",
+                  borderRadius: 99, fontSize: 14, fontWeight: 700, color: "#fff",
                   background: creating ? "#F0A882" : "#FF6B35", border: "none", cursor: "pointer", fontFamily: FONT,
-                  boxShadow: "0 6px 14px -6px rgba(255,107,53,0.5)",
+                  boxShadow: "0 8px 18px -8px rgba(255,107,53,0.55)",
                 }}
               >
-                <Mic style={{ width: 15, height: 15 }} />
+                <Mic style={{ width: 16, height: 16 }} />
                 Grabar audio
               </button>
             ) : (
               <button
                 onClick={stopRecording}
                 style={{
-                  display: "inline-flex", alignItems: "center", gap: 8, padding: "10px 18px",
-                  borderRadius: 11, fontSize: 13, fontWeight: 700, color: "#fff",
+                  display: "inline-flex", alignItems: "center", gap: 9, padding: "13px 28px",
+                  borderRadius: 99, fontSize: 14, fontWeight: 700, color: "#fff",
                   background: "#D03A3A", border: "none", cursor: "pointer", fontFamily: FONT,
                   animation: "bitacora-pulse 1.5s ease-in-out infinite",
                 }}
@@ -656,17 +661,19 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
                 Detener ({Math.floor(recSeconds / 60)}:{String(recSeconds % 60).padStart(2, "0")})
               </button>
             )}
+
             <button
               onClick={() => fileRef.current?.click()}
               disabled={creating || recording}
               style={{
-                display: "inline-flex", alignItems: "center", gap: 7, padding: "10px 16px",
-                borderRadius: 11, fontSize: 12.5, fontWeight: 600, color: "#5B6770",
-                background: "#fff", border: "1px solid #E6E7E5", cursor: "pointer", fontFamily: FONT,
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 6px",
+                fontSize: 12.5, fontWeight: 600, color: "#8A8478",
+                background: "transparent", border: "none", cursor: "pointer", fontFamily: FONT,
+                textDecoration: "underline", textDecorationColor: "#DDD7C8", textUnderlineOffset: 3,
               }}
             >
-              <Upload style={{ width: 13, height: 13 }} />
-              Subir archivo
+              <Upload style={{ width: 12, height: 12 }} />
+              o subir audio
             </button>
             <input
               ref={fileRef} type="file" accept="audio/*" style={{ display: "none" }}

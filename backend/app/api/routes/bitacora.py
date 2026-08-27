@@ -277,6 +277,7 @@ async def assign_obra(
     # La obra destino requiere jefe_obra también (asignar = decisión de gestión).
     await assert_obra_access(db, current_user, data.obra_id, ObraUserRoleType.JEFE_OBRA)
     entry.obra_id = data.obra_id
+    entry.tenant_id = current_user.tenant_id
     # Re-analizar con el contexto de la obra correcta
     if entry.transcript:
         entry.status = "pendiente_analisis"

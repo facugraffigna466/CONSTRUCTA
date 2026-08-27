@@ -132,6 +132,7 @@ class ObraService:
         obra = await self.get_for_manager(obra_id, manager_id)
         tenant_id = obra.tenant_id
         await self._cleanup_plano_files(obra_id)
+        await self._cleanup_bitacora_files(obra_id)
         await self.repo.delete(obra_id)
         from app.core.socket_manager import emit_obra_deleted
         await emit_obra_deleted(obra_id, tenant_id)
@@ -147,3 +148,19 @@ class ObraService:
         )).scalars().all()
         for path in paths:
             (UPLOADS_DIR / path).unlink(missing_ok=True)
+
+    async def _cleanup_bitacora_files(self, obra_id: int) -> None:
+        """Mismo problema que _cleanup_plano_files, para los audios de bitácora:
+        BitacoraEntry.obra_id también es ON DELETE CASCADE (audit 08-bitácora,
+        hallazgo N4)."""
+        from pathlib import Path
+        from sqlalchemy import select
+        from app.models.bitacora import BitacoraEntry
+        from app.services.plano_service import UPLOADS_DIR
+        paths = (await self.repo.session.execute(
+            select(BitacoraEntry.audio_path).where(
+                BitacoraEntry.obra_id == obra_id, BitacoraEntry.audio_path.is_not(None)
+            )
+        )).scalars().all()
+        for path in paths:
+            (UPLOADS_DIR / Path(path).name).unlink(missing_ok=True)

@@ -13,6 +13,12 @@ class BitacoraEntry(Base):
     __tablename__ = "bitacora_entries"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Denormalizado desde la obra (o, si todavía no tiene obra, desde el
+    # creador/responsable) para que el aislamiento multi-tenant no dependa de
+    # tener obra_id — ver obra_permissions.py::_resolve_and_assert.
+    tenant_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tenants.id"), nullable=True, index=True
+    )
     obra_id: Mapped[int | None] = mapped_column(
         ForeignKey("obras.id", ondelete="CASCADE"), nullable=True, index=True
     )
