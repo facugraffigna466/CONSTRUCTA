@@ -620,3 +620,43 @@ ls uploads/3bd0f9d011d9483ebae330358f643f16.pdf   → sigue existiendo, huérfan
 **Tests existentes:**
 - `backend/tests/test_upload_signing.py:1-79` — 8 tests de signing (tampering, expiración, imágenes vs sensibles, roundtrip)
 - **Faltan** tests de endpoints de planos, versionado, MIME, guards, bot URL — ver §6.11.
+
+---
+
+## Anexo D — Segunda ronda: hallazgos de la prueba en producción (2026-08-28)
+
+Los 15 riesgos de la tabla §7 quedaron cerrados el 21/08 (`#78`) y el 24/08 (`#80`, el botón "Nueva versión" que no respetaba el permiso de subida). Este anexo registra lo que apareció **después**, al ejercitar el flujo contra Twilio real con datos de producción — ninguno de estos tres defectos era detectable leyendo el código ni con la suite automatizada.
+
+### D.1 — El menú de desambiguación no aceptaba el nombre de la obra `#91`
+
+**Síntoma reportado:** pedir un plano de una disciplina presente en dos obras del responsable no entregaba nada; la misma disciplina en una sola obra funcionaba bien.
+
+**Causa:** `_handle_plano_obra_selection` parseaba la respuesta con `re.search(r"\d+", body)`. El bot lista las opciones por nombre ("1) Edificio Norte"), así que responder con el nombre —lo natural— no matcheaba y se repetía la pregunta indefinidamente. El mismo patrón estaba en el flujo de selección de obra para bitácora.
+
+**Corrección:** `_match_numbered_option()` acepta número o nombre (insensible a mayúsculas/acentos, exacto o parcial si es inequívoco), con prioridad al match exacto. Esa prioridad no es cosmética: "Edificio Norte" es substring literal de "Edificio Norte — Demo", y sin ella el nombre exacto quedaba ambiguo. El caso borde apareció al verificar contra los datos reales del tenant, no en el diseño.
+
+**Cobertura:** `test_whatsapp_planos_desambiguacion.py`, 11 casos, incluida la regresión del prefijo compartido.
+
+### D.2 — Alta de responsable sin acceso a planos guardaba acceso total `#91`
+
+**Causa:** el POST de `obra_team` hacía `plan_disciplines=payload.plan_disciplines or None`. Como `[]` es *falsy* en Python, pedir explícitamente "sin acceso" (`[]`) se guardaba como `None`, que es acceso total — **el resultado opuesto al solicitado**. El PATCH ya lo manejaba correctamente.
+
+**Por qué no se detectó antes:** ninguna interfaz mandaba `[]` en el alta. El defecto estaba latente desde que existe el campo y solo se manifestó al agregar el checkbox de acceso en el formulario de alta.
+
+**Cobertura:** `test_obra_team_plan_disciplines.py`, 5 casos sobre la semántica del campo (`None` = todas, `[]` = ninguna, `[..]` = solo esas) en alta y edición. Se verificó que el caso `[]` falla si se reintroduce el `or None`.
+
+### D.3 — Planos de más de 16 MB: silencio total en el campo `#99`
+
+**Síntoma:** un plano se entregaba y otro no, sin diferencia de permisos ni de configuración.
+
+**Causa:** WhatsApp/Twilio no admite adjuntos de más de 16 MB. El plano que fallaba pesaba 19,5 MB. Twilio **acepta** el mensaje (devuelve SID) y falla después, al descargar el media, con `error_code=63019` — por eso `send_whatsapp_message` tampoco registraba nada: su `except` nunca se dispara. Confirmado consultando el estado del mensaje en la API de Twilio.
+
+**Corrección:** el tope de carga sigue en 25 MB (el plano se descarga bien desde la web), pero el sistema ahora lo advierte al elegir el archivo, al subir una versión nueva y con un badge permanente en la fila. El umbral vive en el backend (`WHATSAPP_MAX_BYTES`) y se expone como campo calculado `too_big_for_whatsapp`.
+
+**Brecha conocida, aceptada:** quien pide por WhatsApp un plano que excede el límite sigue sin recibir respuesta. Se evaluó responderle con una explicación, pero los responsables que usan el bot no tienen acceso a la aplicación web, de modo que derivarlos ahí no resuelve su necesidad. La alternativa de fondo —comprimir automáticamente— quedó fuera de alcance: es viable para imágenes (Pillow) pero riesgosa para PDF vectorial, donde una compresión agresiva compromete la legibilidad de las cotas.
+
+### D.4 — Nota metodológica
+
+Los tres defectos comparten un rasgo: **son invisibles para la lectura de código y para la suite de tests**, porque dependen del comportamiento de una integración externa o de un camino que ninguna interfaz ejercitaba. La conclusión operativa es que, para un módulo cuya interfaz principal es un canal de terceros, la prueba de integración real no es un complemento opcional de la auditoría estática sino una técnica de verificación distinta y no sustituible.
+
+De paso se detectó una brecha de tooling que afecta a todo el repositorio: `npx tsc --noEmit` no verifica nada, porque el `tsconfig.json` raíz declara `"files": []` y las referencias no se siguen sin `--build`. El comando correcto es `npx tsc -b`.
