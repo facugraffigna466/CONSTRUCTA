@@ -10,7 +10,7 @@ from app.models.obra_user_role import ObraUserRoleType
 from app.models.plano import Plano
 from app.models.user import User
 from app.schemas.plano import PlanoRead
-from app.services.plano_service import MAX_BYTES, PlanoService
+from app.services.plano_service import MAX_BYTES, WHATSAPP_MAX_BYTES, PlanoService
 from app.services.obra_service import ObraService
 
 router = APIRouter(tags=["planos"])
@@ -22,6 +22,7 @@ def _to_read(plano: Plano, author: str | None = None) -> PlanoRead:
     return out.model_copy(update={
         "file_url": signed_upload_url(plano.file_path, plano.tenant_id, ttl=WEB_TTL),
         "uploaded_by_name": author,
+        "too_big_for_whatsapp": (plano.file_size or 0) > WHATSAPP_MAX_BYTES,
     })
 
 

@@ -201,6 +201,39 @@ async def test_new_version_does_not_need_a_name(client, ctx):
     assert nueva.json()["name"] == "Tablero"
 
 
+# ── Aviso de tamaño para WhatsApp ────────────────────────────────────────────────
+# WhatsApp/Twilio rechaza adjuntos de más de 16 MB (error 63019) y el responsable
+# en obra no recibe nada. Subir el plano igual está permitido (el tope de carga es
+# 25 MB y desde la web se descarga bien), así que el backend marca el caso para
+# que la UI pueda avisarlo.
+
+async def test_small_plano_is_not_flagged(client, ctx):
+    r = await _upload(client, ctx["obra_id"], ctx["admin_token"], content=b"%PDF-1.4 chico")
+    assert r.status_code == 201, r.text
+    assert r.json()["too_big_for_whatsapp"] is False
+
+
+async def test_plano_over_whatsapp_limit_is_flagged(client, ctx):
+    """Entre 16 y 25 MB: se sube bien, pero queda marcado como no-enviable."""
+    from app.services.plano_service import WHATSAPP_MAX_BYTES
+    big = b"%PDF-1.4 " + b"x" * (WHATSAPP_MAX_BYTES + 1024)
+    r = await _upload(client, ctx["obra_id"], ctx["admin_token"], content=big)
+    assert r.status_code == 201, "no debe bloquear la carga, solo marcarla"
+    assert r.json()["too_big_for_whatsapp"] is True
+
+
+async def test_flag_survives_in_listing(client, ctx):
+    from app.services.plano_service import WHATSAPP_MAX_BYTES
+    big = b"%PDF-1.4 " + b"x" * (WHATSAPP_MAX_BYTES + 1024)
+    await _upload(client, ctx["obra_id"], ctx["admin_token"], name="Pesado", content=big)
+    await _upload(client, ctx["obra_id"], ctx["admin_token"], name="Liviano", content=b"%PDF chico")
+
+    listed = await client.get(f"{API}/obras/{ctx['obra_id']}/planos", headers=_auth(ctx["admin_token"]))
+    por_nombre = {p["name"]: p["too_big_for_whatsapp"] for p in listed.json()}
+    assert por_nombre["Pesado"] is True
+    assert por_nombre["Liviano"] is False
+
+
 # ── Whitelist de disciplina ──────────────────────────────────────────────────────
 
 async def test_unknown_discipline_is_rejected(client, ctx):

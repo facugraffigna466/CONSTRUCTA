@@ -3,7 +3,7 @@ import {
   FileText, UploadCloud, Loader2, Trash2, Download,
   MessageCircle, ChevronDown, ChevronRight, X, Plus, CheckCircle2,
   Building2, Layers, Zap, Droplets, Flame,
-  ShieldAlert, Thermometer, CloudRain, Wrench, Crosshair,
+  ShieldAlert, Thermometer, CloudRain, Wrench, Crosshair, AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 import { fetchPlanos, uploadPlano, deletePlano, setPlanoVigente } from "../api/planos";
@@ -35,6 +35,11 @@ const labelOf = (key: string) =>
 const iconOf = (key: string) => DISCIPLINES.find(d => d.key === key)?.Icon ?? FileText;
 
 const ACCEPT = ".pdf,.png,.jpg,.jpeg,.webp,.gif,.dwg,.dxf";
+
+/** Espejo de WHATSAPP_MAX_BYTES del backend. Se duplica solo para poder avisar
+ *  ANTES de subir — una vez subido, el flag `too_big_for_whatsapp` lo calcula
+ *  el backend, que es la fuente de verdad. */
+const WHATSAPP_MAX_BYTES = 16 * 1024 * 1024;
 
 function fmtSize(n: number | null): string {
   if (!n) return "";
@@ -200,6 +205,27 @@ function ArchivoPreview({ file }: { file: File }) {
   );
 }
 
+/** Aviso cuando el archivo elegido no va a poder mandarse por WhatsApp. No
+ *  bloquea la carga: el plano igual sirve para descargar desde la web, pero el
+ *  jefe de obra tiene que saberlo antes de que un responsable lo necesite. */
+function AvisoTamanoWhatsapp({ size }: { size: number }) {
+  if (size <= WHATSAPP_MAX_BYTES) return null;
+  return (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 8,
+      background: "#FFF0E5", border: "1px solid #FFD0A8",
+      borderRadius: 10, padding: "10px 13px", marginBottom: 18,
+    }}>
+      <AlertTriangle size={14} color="#9B4D00" style={{ flexShrink: 0, marginTop: 1 }} />
+      <span style={{ fontSize: 12, color: "#7A3D00", lineHeight: 1.5 }}>
+        Pesa <b>{fmtSize(size)}</b> y WhatsApp no permite adjuntos de más de 16 MB.
+        Se va a subir igual y se puede descargar desde acá, pero el bot no se lo va
+        a poder mandar a quien lo pida desde la obra.
+      </span>
+    </div>
+  );
+}
+
 function SubmitButtons({
   uploading, disabled, label, loadingLabel, onCancel, onConfirm,
 }: {
@@ -258,6 +284,7 @@ function NuevoPlanoModal({
   return (
     <ModalShell title="Plano nuevo" subtitle="¿A qué disciplina pertenece?" uploading={uploading} onCancel={onCancel}>
       <ArchivoPreview file={file} />
+      <AvisoTamanoWhatsapp size={file.size} />
 
       <p style={{ ...labelStyle, margin: "0 0 10px" }}>Tipo de plano</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 18 }}>
@@ -351,6 +378,19 @@ function DocumentoRow({
               fontSize: 10.5, fontWeight: 700, flexShrink: 0, color: C.good,
               background: "rgba(31,138,91,0.12)", padding: "2px 7px", borderRadius: 99,
             }}>vigente</span>
+            {v.too_big_for_whatsapp && (
+              <span
+                title="Pesa más de 16 MB, el tope de WhatsApp. Si un responsable lo pide por el bot, no lo va a poder recibir — sí se puede descargar desde acá."
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0,
+                  fontSize: 10.5, fontWeight: 700, color: "#9B4D00",
+                  background: "#FFF0E5", border: "1px solid #FFD0A8",
+                  padding: "1px 7px", borderRadius: 99,
+                }}
+              >
+                <AlertTriangle size={10} /> No se envía por WhatsApp
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>
             {doc.historial.length === 0 ? "Única versión" : `v${v.version}`}
@@ -451,6 +491,9 @@ export function PlanosTab({ obraId, onChanged }: { obraId: number; onChanged?: (
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Aviso no-bloqueante: la subida salió bien, pero hay algo que el jefe de obra
+  // debería saber (ej. que el archivo es muy pesado para mandarlo por WhatsApp).
+  const [aviso, setAviso] = useState<string | null>(null);
 
   const [nuevoFile, setNuevoFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -495,13 +538,20 @@ export function PlanosTab({ obraId, onChanged }: { obraId: number; onChanged?: (
       });
       await load();
       onChanged?.();
+      if (file.size > WHATSAPP_MAX_BYTES) {
+        setAviso(
+          `Subida la nueva versión, pero pesa ${fmtSize(file.size)} y WhatsApp no ` +
+          "permite adjuntos de más de 16 MB: el bot no se la va a poder mandar a " +
+          "quien la pida desde la obra."
+        );
+      }
     } catch (err) {
       setError(errorMessage(err, "No se pudo subir la nueva versión."));
     } finally { setUploading(false); }
   }
 
   function pedirVersion(doc: Documento) {
-    setError(null);
+    setError(null); setAviso(null);
     versionTarget.current = doc;
     versionRef.current?.click();
   }
@@ -580,6 +630,23 @@ export function PlanosTab({ obraId, onChanged }: { obraId: number; onChanged?: (
 
       {error && (
         <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#A82B2B", fontWeight: 600 }}>{error}</p>
+      )}
+
+      {aviso && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12,
+          background: "#FFF0E5", border: "1px solid #FFD0A8", borderRadius: 10,
+          padding: "10px 13px",
+        }}>
+          <AlertTriangle size={14} color="#9B4D00" style={{ flexShrink: 0, marginTop: 1 }} />
+          <span style={{ flex: 1, fontSize: 12, color: "#7A3D00", lineHeight: 1.5 }}>{aviso}</span>
+          <button
+            onClick={() => setAviso(null)} aria-label="Cerrar aviso"
+            style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "#9B4D00", flexShrink: 0 }}
+          >
+            <X size={13} />
+          </button>
+        </div>
       )}
 
       {/* ── Chatbot hint ── */}

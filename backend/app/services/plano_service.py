@@ -19,6 +19,13 @@ UPLOADS_DIR.mkdir(exist_ok=True)
 
 MAX_BYTES = 25 * 1024 * 1024  # 25 MB — los planos pueden pesar
 
+# Tope de WhatsApp/Twilio para adjuntos. Un plano más pesado que esto se sube y
+# se descarga bien desde la web, pero Twilio lo rechaza al intentar entregarlo
+# (error 63019) y el responsable en obra no recibe nada. Es menor que MAX_BYTES
+# a propósito: no queremos bloquear la carga de un plano pesado, solo avisar que
+# no se va a poder mandar por WhatsApp.
+WHATSAPP_MAX_BYTES = 16 * 1024 * 1024  # 16 MB
+
 # Extensiones permitidas al subir un plano. Se valida contra esto — nunca contra el
 # content_type que manda el cliente (falsificable) — y determina tanto el nombre en
 # disco como el Content-Type real que se sirve después (ver app/main.py). Cerrar esta

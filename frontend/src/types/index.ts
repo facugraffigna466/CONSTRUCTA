@@ -271,6 +271,9 @@ export interface Plano {
   /** Nombre de quien subió esta versión, para el historial. */
   uploaded_by_name: string | null;
   created_at: string;
+  /** El archivo excede el tope de adjuntos de WhatsApp: se descarga bien desde
+   *  la web, pero el bot no lo va a poder entregar si alguien lo pide. */
+  too_big_for_whatsapp: boolean;
 }
 
 export type MaterialStatus = "pendiente" | "pedido" | "recibido";
