@@ -2257,3 +2257,38 @@ Suite completa de backend: 312 passed. `npx tsc --noEmit` en frontend sin errore
 
 ### Pending / next steps
 Con esto se cierran las 11 auditorías de la ronda post-defensa (`docs/auditoria/01` a `11`) — no queda ningún hallazgo documentado sin resolver o sin decisión explícita de producto.
+
+---
+
+## 2026-08-26 a 2026-08-28 — Planos por WhatsApp: bugs de producción y control de acceso
+
+### Objective
+La auditoría 05 (planos) se había cerrado el 21/08 con los 15 riesgos de su tabla resueltos, pero al probar el flujo real con Twilio aparecieron tres problemas que ninguna lectura de código había detectado: dos eran bugs de verdad y el tercero un límite de la plataforma que el sistema no comunicaba. En paralelo se cerró un pedido de producto: poder decidir rápido si un responsable puede pedir planos por WhatsApp.
+
+### Changes made
+
+**Desambiguación de obra rota (`#91`)** — Cuando un responsable trabaja en varias obras que tienen la misma disciplina cargada, el bot pregunta "¿de cuál obra?" y lista las opciones, pero el parser de la respuesta solo aceptaba un número (`re.search(r"\d+", body)`). Contestar con el **nombre** de la obra —lo más natural, dado que el propio mensaje lo ofrece como opción— no matcheaba nunca y repetía la pregunta en loop, sin entregar el plano jamás. Se reprodujo con datos reales del tenant 1 (obras "Edificio Norte" / "Edificio Norte — Demo", ambas con plano de arquitectura).
+`_match_numbered_option()` ahora acepta número o nombre (insensible a mayúsculas y acentos, exacto o parcial si es inequívoco). **Un match exacto siempre gana sobre uno parcial**: sin esa prioridad "Edificio Norte" se volvía ambiguo por ser substring literal de "Edificio Norte — Demo" — caso borde encontrado al verificar contra los datos reales, no en la teoría. El mismo fix se aplicó al flujo análogo de selección de obra para bitácora, que tenía el mismo patrón.
+
+**Descubribilidad del pedido de planos (`#91`)** — Un responsable podía no enterarse nunca de que podía pedir planos: el staff sí tenía un menú explicativo (`_staff_menu`), pero los responsables no. Se agregó la mención con ejemplo de frase a `build_no_tasks_message` — el único punto del flujo de responsables con margen para mencionarlo sin cortar un reporte en curso (el resto es una máquina de estados rígida, sin un "no entendí" genérico donde insertarlo). Se descartó explícitamente un menú numerado nuevo: obligaría a navegarlo a quien ya sabe escribir "plano de gas".
+
+**Control de acceso a planos, decisión de producto (`#91`)** — Hasta acá, cualquiera del equipo de una obra podía pedir cualquier plano salvo que se le restringieran disciplinas una por una desde el modal de edición. Se agregó un interruptor de un click en la fila del responsable que alterna entre "Todos los planos" y "Sin acceso a planos", y un checkbox en el alta (tildado por default, en la misma fila del botón para no sumar altura al formulario). El default no cambió: quien se suma al equipo sigue teniendo acceso total salvo que se lo restrinja a mano.
+Decisión de diseño: cuando el responsable tiene disciplinas puntuales asignadas, el click **no alterna — abre el modal**. Alternar ahí borraría esa selección fina de un click y sin deshacer.
+
+**Bug destapado por lo anterior (`#91`)** — El POST de `obra_team` hacía `plan_disciplines=payload.plan_disciplines or None`. Como `[]` es *falsy* en Python, dar de alta a alguien **sin** acceso a planos guardaba `None` — es decir, acceso total, exactamente lo contrario de lo pedido. Llevaba tiempo latente porque ninguna UI mandaba `[]` al crear; recién apareció al existir el checkbox. El PATCH ya lo manejaba bien (de paso se simplificó ahí una condición redundante `x if x != [] else []`).
+
+**Planos demasiado pesados para WhatsApp (`#99`)** — Un plano de más de 16 MB se sube y se descarga bien desde la web, pero Twilio lo rechaza al entregarlo (error `63019`) y el responsable en obra no recibe **nada**: ni el archivo ni un aviso. Twilio acepta el mensaje y falla *después*, al bajar el media, así que tampoco quedaba registro en el envío. Se diagnosticó consultando el estado real de los mensajes en la API de Twilio: el plano que fallaba pesaba 19,5 MB (un PNG) y el que funcionaba 169 KB.
+No se bloquea la carga (el tope sigue en 25 MB y el plano sirve igual para descargar). Se avisa en los tres momentos en que uno pesado puede entrar: al elegir el archivo en el modal, después de subir una nueva versión (ese flujo no tiene modal, es click y sube), y con un badge permanente en la fila. El umbral vive en el backend (`WHATSAPP_MAX_BYTES`) y se expone como el campo calculado `too_big_for_whatsapp` para no duplicar la regla.
+Se **descartó** avisarle al usuario por WhatsApp cuando pide un plano muy pesado: los responsables que usan el bot no tienen acceso a la aplicación, así que un mensaje del tipo "descargalo desde el sistema" no les sirve. Queda como brecha conocida: quien pide un plano de más de 16 MB sigue recibiendo silencio.
+
+### Files modified
+Backend: `services/message_service.py` (`_match_numbered_option`, ambos flujos de selección de obra), `services/message_templates.py`, `services/plano_service.py` (`WHATSAPP_MAX_BYTES`), `schemas/plano.py`, `api/routes/planos.py`, `api/routes/obra_team.py`. Frontend: `components/ObraResponsablesTab.tsx` (interruptor + checkbox de alta), `components/PlanosTab.tsx` (avisos de tamaño), `types/index.ts`. Tests nuevos: `test_whatsapp_planos_desambiguacion.py` (11 casos), `test_obra_team_plan_disciplines.py` (5 casos), + 3 casos de tamaño en `test_planos.py`.
+
+### Validation
+Suite completa de backend: 315 passed. `npx tsc -b` sin errores. Verificado en navegador: los tres estados del badge de acceso, el interruptor persistiendo en la base, el modal abriéndose en el caso de disciplinas puntuales, un usuario `solo_lectura` viendo los badges sin poder tocarlos, y los avisos de tamaño con un archivo de 18 MB. El flujo del bot se verificó de punta a punta contra Twilio real una vez que se renovó el sandbox.
+
+Se verificó además que el test del `[]` **falla** si se reintroduce el `or None`, para confirmar que la protección es real y no decorativa.
+
+### Pending / next steps
+- **Compresión automática de planos pesados** — evaluada y postergada por decisión de alcance. Para imágenes (PNG/JPG) es sencilla con Pillow y cubriría el caso real observado; para PDFs requiere Ghostscript o `pikepdf` y tiene un riesgo concreto: comprimir mal un plano vectorial arruina la legibilidad de las cotas, que es justamente lo que se necesita leer en obra. Quedaría además por decidir si el archivo comprimido reemplaza al original o convive como copia liviana solo para WhatsApp.
+- **Nota de infraestructura detectada en el camino:** `npx tsc --noEmit` **no chequea nada** en este repositorio — el `tsconfig.json` raíz tiene `"files": []` y solo referencias, que no se siguen sin `--build`. El comando correcto es `npx tsc -b`. Varias entradas previas de esta bitácora reportan "tsc sin errores" usando el comando que no verifica; si hay verificación de tipos en integración continua, conviene revisar que use `-b`.
