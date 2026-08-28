@@ -7,6 +7,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Permite lanzarlo a mano desde Actions → CI → "Run workflow", sin depender de
+  # tener un PR abierto ni de pushear a main. Útil para comprobar que el CI
+  # quedó operativo después de un cambio de configuración: el workflow estuvo
+  # apagado entre el 2026-08-18 y el 2026-08-28, y no había forma de verificar
+  # la reactivación salvo esperar al próximo PR real.
+  workflow_dispatch:
 
 # Cancela corridas viejas de la misma rama/PR cuando llega un push nuevo.
 concurrency:
