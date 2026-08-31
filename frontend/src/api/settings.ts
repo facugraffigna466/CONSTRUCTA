@@ -44,17 +44,3 @@ export async function fetchSystemHealth(): Promise<SystemHealth> {
   const { data } = await apiClient.get<SystemHealth>("/settings/system-health");
   return data;
 }
-
-export async function testWhatsApp(phoneNumber: string): Promise<{ success: boolean; detail?: string }> {
-  const { data } = await apiClient.post("/settings/test-whatsapp", {
-    phone_number: phoneNumber,
-  });
-  return data;
-}
-
-export async function simulateOverdue(): Promise<{ alerts_created: number }> {
-  const { data } = await apiClient.post<{ alerts_created: number }>(
-    "/settings/simulate-overdue"
-  );
-  return data;
-}

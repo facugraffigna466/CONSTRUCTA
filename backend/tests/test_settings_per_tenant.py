@@ -11,6 +11,7 @@ from app.models.obra import Obra
 from app.models.task import Task, TaskStatus
 from app.models.tenant import Tenant
 from app.models.user import User
+from app.services.notification_service import NotificationService
 from sqlalchemy import select
 
 API = "/api/v1"
@@ -99,10 +100,11 @@ async def obra_con_tarea_vencida(db):
     return tenant, admin, obra, task
 
 
-async def test_simulate_overdue_no_toca_otros_tenants(db, client, obra_con_tarea_vencida):
-    """El endpoint de testing /settings/simulate-overdue solo debe generar
-    alertas para el tenant del admin que lo dispara — antes procesaba TODAS
-    las tareas vencidas del sistema."""
+async def test_mark_overdue_tasks_no_toca_otros_tenants(db, obra_con_tarea_vencida):
+    """mark_overdue_tasks(tenant_id=...) solo debe generar alertas para el
+    tenant indicado — antes (vía el endpoint de testing ya removido,
+    /settings/simulate-overdue) procesaba TODAS las tareas vencidas del
+    sistema."""
     _tenant, admin, _obra, task = obra_con_tarea_vencida
 
     otro_tenant = Tenant(name="Otra Empresa")
@@ -120,11 +122,8 @@ async def test_simulate_overdue_no_toca_otros_tenants(db, client, obra_con_tarea
     await db.flush()
     await db.commit()
 
-    r = await client.post(
-        f"{API}/settings/simulate-overdue", headers=_auth(create_access_token(admin.id))
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["alerts_created"] == 1
+    count = await NotificationService(db).mark_overdue_tasks(tenant_id=admin.tenant_id)
+    assert count == 1
 
     alerts = (await db.execute(select(Alert))).scalars().all()
     assert len(alerts) == 1
@@ -137,11 +136,8 @@ async def test_notify_task_overdue_false_no_crea_alerta(db, client, obra_con_tar
         f"{API}/settings", json={"notify_task_overdue": False},
         headers=_auth(create_access_token(admin.id)),
     )
-    r = await client.post(
-        f"{API}/settings/simulate-overdue", headers=_auth(create_access_token(admin.id))
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["alerts_created"] == 0
+    count = await NotificationService(db).mark_overdue_tasks(tenant_id=admin.tenant_id)
+    assert count == 0
 
 
 async def test_notify_task_overdue_false_bloquea_delay_risk_automatico(db, client, obra_con_tarea_vencida):
