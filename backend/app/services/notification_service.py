@@ -134,9 +134,8 @@ class NotificationService:
 
         Skips tasks whose tenant has disabled alert_overdue o notify_task_overdue.
         `tenant_id=None` (uso normal del scheduler) procesa TODO el sistema, una
-        corrida por cron para todas las empresas; pasar un tenant_id puntual es
-        para el endpoint de testing (/settings/simulate-overdue), que no debe
-        tocar otras empresas.
+        corrida por cron para todas las empresas; pasar un tenant_id puntual
+        scopea la corrida a una sola empresa (ver test_settings_per_tenant.py).
         """
         today = date.today()
         tasks = await self.task_repo.list_overdue(today, tenant_id=tenant_id)

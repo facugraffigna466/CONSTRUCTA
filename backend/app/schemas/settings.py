@@ -50,7 +50,3 @@ class SystemHealth(BaseModel):
     database: bool
     whatsapp_configured: bool
     whatsapp_number: str | None
-
-
-class TestWhatsAppRequest(BaseModel):
-    phone_number: str
