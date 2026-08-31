@@ -36,7 +36,6 @@ import {
   deleteSupplier,
 } from "../api/suppliers";
 import type { HistorialEvento, PlanUsage, Supplier } from "../types";
-import { Button } from "../components/ui/Button";
 
 // ─── Shared style tokens ──────────────────────────────────────────────────────
 
