@@ -2292,3 +2292,32 @@ Se verificó además que el test del `[]` **falla** si se reintroduce el `or Non
 ### Pending / next steps
 - **Compresión automática de planos pesados** — evaluada y postergada por decisión de alcance. Para imágenes (PNG/JPG) es sencilla con Pillow y cubriría el caso real observado; para PDFs requiere Ghostscript o `pikepdf` y tiene un riesgo concreto: comprimir mal un plano vectorial arruina la legibilidad de las cotas, que es justamente lo que se necesita leer en obra. Quedaría además por decidir si el archivo comprimido reemplaza al original o convive como copia liviana solo para WhatsApp.
 - **Nota de infraestructura detectada en el camino:** `npx tsc --noEmit` **no chequea nada** en este repositorio — el `tsconfig.json` raíz tiene `"files": []` y solo referencias, que no se siguen sin `--build`. El comando correcto es `npx tsc -b`. Varias entradas previas de esta bitácora reportan "tsc sin errores" usando el comando que no verifica; si hay verificación de tipos en integración continua, conviene revisar que use `-b`.
+
+---
+
+## 2026-08-28 (cont.) — Cierre de la brecha de tamaño: el bot ahora explica
+
+### Objective
+La entrada anterior dejó declarada una brecha: se avisaba a quien **carga** un plano de más de 16 MB, pero el responsable que lo **pedía** desde la obra seguía recibiendo silencio absoluto. Al revisarla se concluyó que estaba a medio resolver — el aviso de la interfaz protege a quien tiene acceso a la aplicación, que es justamente quien menos lo necesita.
+
+### Changes made
+`_format_plano_reply` verifica el tamaño **antes** de construir la URL firmada. Si el plano excede el límite, devuelve el mismo encabezado de siempre (disciplina, sector, versión y fecha) más la explicación, y **sin `media_url`** — así no se le pide a Twilio un envío que va a rechazar. Antes se le pasaba la URL igual: Twilio aceptaba el mensaje, fallaba después al bajar el media (error 63019) y el usuario no recibía nada, ni siquiera el texto.
+
+El mensaje resultante:
+
+> 📐 Plano de electricidad — Tablero principal (v3, 27/08/2026).
+>
+> ⚠️ No te lo puedo mandar por acá: pesa 19.5 MB y WhatsApp no permite archivos de más de 16 MB. Pedíselo al jefe de obra.
+
+Decisión de redacción: **no deriva a la aplicación web**. Quien pide un plano por WhatsApp es, por definición, alguien que no tiene acceso a ella —fue el motivo por el que se descartó la primera versión de este aviso—, así que la única salida accionable desde la obra es pedírselo a quien sí lo tiene. Hay un test que verifica esa restricción explícitamente, buscando las formas en que el mensaje podría nombrar la aplicación.
+
+Se verificó que este es el **único** punto del sistema que envía media por WhatsApp, de modo que no quedan otros flujos con el mismo problema latente.
+
+### Files modified
+Backend: `services/message_service.py`. Tests: 2 casos nuevos en `test_whatsapp_planos_desambiguacion.py` (13 en total). Documentación: `IPI-CONSTRUCTA.md` (fila 10 de trazabilidad, que declaraba la brecha abierta) y `auditoria/05-planos.md` (§D.3, que la declaraba aceptada).
+
+### Validation
+Suite completa: 317 passed. `npx tsc -b` sin errores. Se comprobó que el test **falla** si se neutraliza la condición de tamaño, para confirmar que la protección es efectiva y no decorativa. El mensaje final se verificó ejecutando la función con los datos del plano real que originó el hallazgo (19,5 MB).
+
+### Pending / next steps
+Queda fuera de alcance **entregar** el plano igualmente, es decir la compresión automática: viable para imágenes con Pillow, riesgosa para PDF vectorial porque comprimir de más arruina la legibilidad de las cotas. Con este cambio el usuario al menos entiende qué pasó y sabe a quién recurrir, que era el vacío real.
