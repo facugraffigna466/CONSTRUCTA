@@ -151,6 +151,64 @@ async def test_reply_with_unrelated_text_still_asks_again(ctx):
     assert "No entendí" in r2
 
 
+# ── Plano demasiado pesado para WhatsApp ────────────────────────────────────
+# Twilio rechaza los adjuntos de más de 16 MB DESPUÉS de aceptar el mensaje
+# (error 63019, al bajar el media), así que el envío no falla de forma visible
+# y el responsable se queda esperando sin recibir nada. El bot corta antes.
+
+async def _pedir_y_elegir_obra(db, phone: str, sufijo: str):
+    """Pide el plano y responde la desambiguación (el fixture tiene dos obras con
+    electricidad). Devuelve el mock del segundo envío, que es el que lleva —o no—
+    el adjunto."""
+    import uuid
+    from unittest.mock import AsyncMock, patch
+    async def fake(*a, **kw):
+        return f"SM_out_{uuid.uuid4().hex}"
+    with patch("app.services.message_service.send_whatsapp_message",
+               new=AsyncMock(side_effect=fake)):
+        await MessageService(db).process_inbound(
+            _payload("mandame el plano de electricidad", phone, f"SM_a_{sufijo}"), raw_params={},
+        )
+    with patch("app.services.message_service.send_whatsapp_message",
+               new=AsyncMock(side_effect=fake)) as mock_send:
+        await MessageService(db).process_inbound(
+            _payload("1", phone, f"SM_b_{sufijo}"), raw_params={},
+        )
+    return mock_send
+
+
+async def test_plano_too_big_is_explained_not_silent(ctx, db):
+    """Se responde con una explicación en vez de intentar (y fallar) el envío."""
+    from app.services.plano_service import WHATSAPP_MAX_BYTES
+    from app.models.plano import Plano
+    from sqlalchemy import select
+
+    for plano in (await db.execute(select(Plano))).scalars().all():
+        plano.file_size = WHATSAPP_MAX_BYTES + 1
+    await db.commit()
+
+    mock_send = await _pedir_y_elegir_obra(db, ctx["resp_phone"], "big")
+    texto = mock_send.call_args[0][1]
+    media = mock_send.call_args.kwargs.get("media_url")
+
+    assert media is None, "no debe intentar adjuntar un archivo que Twilio va a rechazar"
+    assert "16 MB" in texto
+    assert "jefe de obra" in texto, "el mensaje tiene que ser accionable desde la obra"
+    # Quien pide por WhatsApp no tiene acceso a la web: el mensaje no debe
+    # derivarlo ahí. (Ojo: "whatsapp" contiene "app" — hay que buscar las
+    # formas en que realmente se nombraría la aplicación.)
+    bajo = texto.lower()
+    for termino in ("la app", "aplicación", "aplicacion", "el sistema", "descargá", "descarga"):
+        assert termino not in bajo, f"el mensaje deriva a la web con «{termino}»"
+
+
+async def test_plano_under_limit_still_attaches(ctx, db):
+    """El caso normal no cambia: el plano se sigue adjuntando."""
+    mock_send = await _pedir_y_elegir_obra(db, ctx["resp_phone"], "small")
+    assert mock_send.call_args.kwargs.get("media_url") is not None
+    assert "16 MB" not in mock_send.call_args[0][1]
+
+
 # ── Mensaje de "sin tareas" menciona planos ─────────────────────────────────
 
 def test_no_tasks_message_mentions_planos():

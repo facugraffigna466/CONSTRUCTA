@@ -583,16 +583,36 @@ class MessageService:
 
     def _format_plano_reply(self, plano, settings) -> tuple[str, str | None]:
         from app.core.signing import BOT_TTL, signed_upload_url
+        from app.services.plano_service import WHATSAPP_MAX_BYTES
+
+        fecha = plano.created_at.strftime("%d/%m/%Y")
+        nombre = _sanitize_for_caption(plano.name) if plano.name else ""
+        detalle = f" — {nombre}" if nombre else ""
+        caption = f"📐 Plano de {plano.discipline}{detalle} (v{plano.version}, {fecha})."
+
+        # Twilio rechaza los adjuntos que superan el tope de WhatsApp (error
+        # 63019) DESPUÉS de aceptar el mensaje, al intentar bajar el media: el
+        # envío no falla de forma visible y el responsable se queda esperando
+        # sin recibir nada. Cortamos antes y explicamos.
+        #
+        # El mensaje no deriva a la aplicación web a propósito: quien pide un
+        # plano por WhatsApp es, por definición, alguien que no tiene acceso a
+        # ella. La única salida accionable desde la obra es pedírselo a quien sí
+        # lo tiene.
+        if (plano.file_size or 0) > WHATSAPP_MAX_BYTES:
+            mb = plano.file_size / (1024 * 1024)
+            return (
+                f"{caption}\n\n"
+                f"⚠️ No te lo puedo mandar por acá: pesa {mb:.1f} MB y WhatsApp "
+                "no permite archivos de más de 16 MB. Pedíselo al jefe de obra.",
+                None,
+            )
 
         base_url = (settings.PUBLIC_BASE_URL or "").rstrip("/")
         # Firmada (antes: URL cruda sin exp/sig → /uploads la rechazaba con 403 y
         # Twilio nunca podía bajar el archivo). TTL largo porque Twilio archiva el
         # media unos días y puede reintentar la descarga más tarde.
         url = signed_upload_url(plano.file_path, plano.tenant_id, ttl=BOT_TTL) if base_url else None
-        fecha = plano.created_at.strftime("%d/%m/%Y")
-        nombre = _sanitize_for_caption(plano.name) if plano.name else ""
-        detalle = f" — {nombre}" if nombre else ""
-        caption = f"📐 Plano de {plano.discipline}{detalle} (v{plano.version}, {fecha})."
         if not url:
             caption += "\nNo puedo adjuntar el archivo todavía (falta configurar la URL pública)."
         return (caption, url)
