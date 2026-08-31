@@ -202,8 +202,17 @@ async def test_plano_too_big_is_explained_not_silent(ctx, db):
         assert termino not in bajo, f"el mensaje deriva a la web con «{termino}»"
 
 
-async def test_plano_under_limit_still_attaches(ctx, db):
-    """El caso normal no cambia: el plano se sigue adjuntando."""
+async def test_plano_under_limit_still_attaches(ctx, db, monkeypatch):
+    """El caso normal no cambia: el plano se sigue adjuntando.
+
+    `PUBLIC_BASE_URL` se fija acá a propósito: sin él, `_format_plano_reply`
+    devuelve `media_url=None` por otra razón (no hay dominio público con el que
+    construir el link firmado) y el test pasaría o fallaría según el `.env` de
+    cada máquina. Lo detectó el CI, donde no hay `.env`.
+    """
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://ejemplo.test", raising=False)
+
     mock_send = await _pedir_y_elegir_obra(db, ctx["resp_phone"], "small")
     assert mock_send.call_args.kwargs.get("media_url") is not None
     assert "16 MB" not in mock_send.call_args[0][1]
