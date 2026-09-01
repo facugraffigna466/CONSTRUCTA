@@ -2321,3 +2321,32 @@ Suite completa: 317 passed. `npx tsc -b` sin errores. Se comprobó que el test *
 
 ### Pending / next steps
 Queda fuera de alcance **entregar** el plano igualmente, es decir la compresión automática: viable para imágenes con Pillow, riesgosa para PDF vectorial porque comprimir de más arruina la legibilidad de las cotas. Con este cambio el usuario al menos entiende qué pasó y sabe a quién recurrir, que era el vacío real.
+
+---
+
+## 2026-08-31 — Limpieza del panel de Configuración: duplicados, herramientas de dev y badges falsos
+
+### Objective
+El usuario reportó que la sección "Calendario laboral" de Configuración se ve rota (un `<select>` desplegado con overlay oscuro tapando toda la tarjeta) y desconfió de que estuviera en ese lugar, notando además que Configuración es accesible sin ninguna obra seleccionada (desde el panel principal), lo cual no encaja con una feature que es *por obra*. La revisión se extendió a discutir qué debería ser configuración global vs. por obra, y de ahí a la sección "Testing" (Probar WhatsApp / Simular tarea vencida) y al módulo de Automatizaciones y Alertas.
+
+### Changes made
+
+**Calendario laboral — duplicado eliminado (no relocalizado).** El componente `CalendarSection` en `ConfiguracionPage.tsx` llamaba a `fetchCalendar(selectedObraId)` con un selector de obra propio, redundante y confuso al no haber obra en contexto. Se encontró que `GanttSettingsDrawer.tsx` ya implementa exactamente la misma funcionalidad (días laborables, horario, excepciones, feriados) recibiendo `obraId` como prop, sin selector, correctamente scoped desde el Gantt de cada obra. No hizo falta construir nada nuevo: se eliminó la versión global completa (función, card, entrada del índice, imports que quedaban sin uso).
+
+**Sección "Testing" eliminada de raíz.** Se determinó que "Probar mensaje WhatsApp" y "Simular tarea vencida" no le sirven a un usuario final — son herramientas de QA que en el mejor caso confunden y en el peor generan alertas falsas o mandan un WhatsApp real a un número al azar. Estaban ocultas en el frontend por `import.meta.env.DEV`, pero el backend nunca validaba ese modo: cualquier admin podía pegarle directo a `POST /settings/test-whatsapp` o `/settings/simulate-overdue` en producción (brecha ya señalada en `docs/auditoria/11-panel-configuracion.md` y no resuelta hasta ahora). Se eliminaron ambos endpoints por completo — no se los gateó, se los sacó —, confirmado con `curl` (404 tras el cambio). La lógica real que usaban (`NotificationService.mark_overdue_tasks`, `send_whatsapp_message`) sigue viva vía el cron del scheduler, que es su único consumidor legítimo. Dos tests (`test_settings_per_tenant.py`) dependían del endpoint HTTP para ejercitar esa lógica; se migraron a invocar el servicio directamente, lo cual de paso deja el test menos acoplado a una ruta que ya no existe.
+
+**Dos badges de Automatizaciones no reflejaban el comportamiento real del backend** (encontrado auditando el módulo a pedido del usuario, con alcance acotado a "mantenerlo global, revisar lo que hay" tras descartar overrides por obra por falta de un caso de uso concreto):
+- "Alertar sin respuesta" mostraba `24h` fijo en el badge, sin importar el valor real de `max_response_hours` (configurable en 6/12/24/48/72h). Pasa a ser dinámico.
+- "Reintentar envío fallido" decía `×3`; el backend (`notification_service.py:mark_no_response`) reintenta **una sola vez** por recordatorio sin respuesta (un chequeo booleano, no un contador). Corregido a `×1`.
+- Ese mismo toggle no se deshabilitaba cuando "Recordatorios automáticos" está apagado, pese a que el backend ya lo bloquea en ese caso (`if cfg.retry_failed and cfg.auto_reminders`). Se le agregó el mismo `disabled={!form.auto_reminders}` que ya tenían los otros dos recordatorios.
+
+Se revisaron también los 4 toggles de "Configuración de alertas" (`notify_task_overdue/blocked/no_response/rescheduled`): los cuatro están correctamente conectados a sus servicios (confirmado por comentarios en el código citando la Auditoría 11 y por los tests existentes), así que no hicieron falta cambios ahí — el hallazgo de "campos decorativos" de esa auditoría ya estaba resuelto de antes.
+
+### Files modified
+Backend: `api/routes/settings.py` (elimina `test_whatsapp`/`simulate_overdue`), `schemas/settings.py` (elimina `TestWhatsAppRequest`), `services/notification_service.py` (docstring). Tests: `tests/test_settings_per_tenant.py` (2 tests migrados a llamar al servicio directo). Frontend: `api/settings.ts` (elimina `testWhatsApp`/`simulateOverdue`), `pages/ConfiguracionPage.tsx` (elimina `CalendarSection` completa y la sección Testing; corrige los dos badges de Automatizaciones).
+
+### Validation
+Suite completa de backend: 317 passed. `npx tsc --noEmit` sin errores (nota: para chequeo real de tipos en este repo hay que usar `tsc -b`, ver entrada del 2026-08-28 — se corrió también `-b` sin errores). Verificado en navegador con un usuario de prueba creado vía API: Configuración sin obra seleccionada ya no muestra "Calendario" ni "Testing" en el índice de secciones ni en el contenido; los endpoints eliminados devuelven 404; el badge de "Alertar sin respuesta" se actualiza en vivo al cambiar el select de horas; "Reintentar envío fallido" se deshabilita junto con "Recordatorio 1 día antes" al apagar "Recordatorios automáticos" (confirmado inspeccionando el DOM). Mergeado a `main` vía PR #103.
+
+### Pending / next steps
+Quedó sin resolver, por falta de un caso de uso concreto: si Automatizaciones/Alertas debería admitir *overrides* por obra (ej. pausar recordatorios en una obra específica) en vez de ser una única config por tenant. La arquitectura actual es así a propósito (Auditoría 11 corrigió el bug de que fuera por-manager), así que un cambio a overrides por obra requeriría una tabla de overrides + UI que distinga "usa el default de la empresa" vs. "personalizado en esta obra" — no se justifica sin un caso real. También quedó sin resolver la utilidad original de `main_responsible`/`company_phone` en Datos generales: no lo usa ningún servicio del backend hoy, el usuario recordaba que el teléfono tenía algún propósito pero no cuál, y no se encontró rastro en git history ni en comentarios — se dejó como está a pedido del usuario.
