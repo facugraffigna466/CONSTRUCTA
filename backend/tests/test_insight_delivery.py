@@ -375,3 +375,52 @@ async def test_el_pipeline_saltea_obras_completadas(ctx, db, monkeypatch):
 
     results = await run_pipeline_for_all_active(db, PERIOD)
     assert cerrada.id not in {r["obra_id"] for r in results}
+
+
+# ── Interruptor del job programado ────────────────────────────────────────────
+
+def _registered_job_ids(monkeypatch, enabled: bool) -> set[str]:
+    """Arranca el scheduler con el flag dado y devuelve los jobs registrados."""
+    from app.core import scheduler as sched
+
+    added: list[str] = []
+    monkeypatch.setattr(sched.settings, "INSIGHTS_ENABLED", enabled)
+    monkeypatch.setattr(sched.scheduler, "add_job",
+                        lambda *a, **kw: added.append(kw.get("id", "")))
+    monkeypatch.setattr(sched.scheduler, "start", lambda: None)
+    sched.start_scheduler()
+    return set(added)
+
+
+def test_job_mensual_apagado_por_defecto(monkeypatch):
+    """En local el cron no se registra: manda emails reales y gasta IA."""
+    assert "monthly_insights" not in _registered_job_ids(monkeypatch, enabled=False)
+
+
+def test_job_mensual_se_registra_si_esta_encendido(monkeypatch):
+    assert "monthly_insights" in _registered_job_ids(monkeypatch, enabled=True)
+
+
+def test_el_flag_no_toca_los_demas_jobs(monkeypatch):
+    """Apagar insights no puede desactivar recordatorios ni alertas."""
+    apagado = _registered_job_ids(monkeypatch, enabled=False)
+    encendido = _registered_job_ids(monkeypatch, enabled=True)
+
+    assert encendido - apagado == {"monthly_insights"}
+    for job in ("mark_overdue", "check_no_response", "evaluate_delay_risk",
+                "remind_bitacora_obra", "cleanup_expired_sessions"):
+        assert job in apagado
+
+
+async def test_el_disparo_manual_no_depende_del_flag(ctx, db, monkeypatch):
+    """El flag apaga el cron, no la funcionalidad: probar a mano sigue andando."""
+    from app.core import scheduler as sched
+
+    monkeypatch.setattr(sched.settings, "INSIGHTS_ENABLED", False)
+    spy = _Spy()
+    _patch_email(monkeypatch, spy)
+
+    result = await InsightDeliveryService(db).deliver_for_obra(ctx["obra"].id, PERIOD)
+
+    assert result["status"] == "sent"
+    assert len(spy.calls) == 1

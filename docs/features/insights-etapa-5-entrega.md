@@ -193,6 +193,28 @@ obra_id | period  | email_status | email_recipient               | whatsapp_stat
 
 ---
 
+## 5.b El job viene apagado por defecto
+
+`INSIGHTS_ENABLED` (default **`false`**) decide si el cron mensual se registra.
+
+Arranca apagado a propósito: el job manda **emails reales** y hace **una llamada
+a Claude por obra activa** — las dos cosas se pagan. En local eso es puro costo,
+porque además el informe lleva un botón que apunta a `FRONTEND_URL`, que sin
+desplegar es `localhost` y no le sirve a nadie más.
+
+- **Local:** dejarlo en `false`. Al arrancar, el backend loguea
+  `monthly_insights APAGADO (INSIGHTS_ENABLED=false)`.
+- **Al desplegar:** ponerlo en `true` en el `.env` del servidor, y recién después
+  de tener `FRONTEND_URL` con el dominio real y el sender de Brevo verificado.
+
+**El flag apaga el cron, no la funcionalidad.** El disparo manual
+(`run_obra_pipeline` / `run_monthly_insights`) funciona siempre, sin importar el
+flag — sirve para probar cuando uno quiere, no cuando lo decide el calendario.
+Hay test que lo verifica, y otro que confirma que apagar insights no desactiva
+ningún otro job del scheduler (recordatorios, alertas, limpieza).
+
+---
+
 ## 6. ⚠️ Antes de que esto sirva en producción
 
 Que Brevo haya devuelto `201 Created` significa que **aceptó** el mensaje, **no** que haya llegado a la bandeja de entrada. El sender sigue siendo `2226370@ucc.edu.ar`, un dominio de la Universidad Católica de Córdoba que **no autoriza a Brevo en su SPF** y cuyo DMARC probablemente esté en `quarantine` o `reject`. Según el audit 01 §8.5, lo más probable es que estos emails **caigan en spam**.
@@ -214,7 +236,7 @@ También sigue abierta la restricción por IP de la cuenta de Brevo: si el backe
 
 ## 7. Pruebas
 
-`backend/tests/test_insight_delivery.py` — **19 tests**, todos verdes. El envío real (Brevo/Twilio) se mockea: lo que se prueba es la lógica propia.
+`backend/tests/test_insight_delivery.py` — **23 tests**, todos verdes. El envío real (Brevo/Twilio) se mockea: lo que se prueba es la lógica propia.
 
 | Grupo | Casos |
 |---|---|
@@ -223,13 +245,14 @@ También sigue abierta la restricción por IP de la cuenta de Brevo: si el backe
 | Fallos | Brevo rechaza → `failed` con detalle; excepción del cliente → `failed`, no propaga; tenant sin owner → `skipped`; owner inactivo → `skipped`; sin snapshot → `no_snapshot` |
 | WhatsApp | Se manda si hay número, con el nombre de la obra y el link; sin número no se intenta; respeta la ventana horaria; **un fallo de WhatsApp no arruina la entrega** |
 | Pipeline | Encadena las 4 etapas de punta a punta; si falla la IA **no se manda email**; una obra que falla **no corta el resto**; las obras completadas se saltean |
+| Interruptor | El cron no se registra con el flag apagado (verificado quitando el guard: el test falla); sí con el flag encendido; no afecta a los demás jobs; el disparo manual anda igual |
 
 ```
 $ python -m pytest tests/test_insight_delivery.py -q
-19 passed
+23 passed
 
 $ python -m pytest -q          # suite completa, sin regresiones
-380 passed
+384 passed
 ```
 
 Migración `0064` verificada contra Postgres en ciclo `upgrade → downgrade → upgrade`, comprobando las columnas reales en `information_schema`.
@@ -250,5 +273,5 @@ Migración `0064` verificada contra Postgres en ciclo `upgrade → downgrade →
 
 1. La pantalla `/obras/{id}/insights` en el frontend (y que la app sepa resolver esa URL) — sin esto el CTA no lleva a ningún lado.
 2. La API para cambiar el estado de una conclusión (`vista` / `aplicada` / `descartada`). El modelo y el ciclo de vida ya los respetan, pero nada los setea: hoy todas quedan en `nueva`, así que el ciclo de "descartar y que no vuelva salvo evidencia doble" **todavía no se puede ejercitar desde la app**.
-3. El checklist de dominio/SPF/DKIM del audit 01 §8.11 y `FRONTEND_URL` en el `.env`.
+3. El checklist de dominio/SPF/DKIM del audit 01 §8.11, `FRONTEND_URL` en el `.env` y encender `INSIGHTS_ENABLED`.
 4. La decisión abierta de §2 sobre a cuántas personas del tenant se notifica.

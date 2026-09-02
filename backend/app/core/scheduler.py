@@ -15,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import engine
 from app.services.notification_service import NotificationService
 
@@ -195,13 +196,25 @@ def start_scheduler() -> None:
 
     # Motor de insights completo (etapas 1-5) — día 1 a las 4 AM, después de la
     # limpieza de sesiones y fuera de horario de obra.
-    scheduler.add_job(
-        _job_monthly_insights,
-        CronTrigger(day=1, hour=4, minute=0),
-        id="monthly_insights",
-        replace_existing=True,
-        misfire_grace_time=6 * 3600,
-    )
+    #
+    # Apagado por defecto (INSIGHTS_ENABLED): el job manda emails reales y gasta
+    # una llamada a Claude por obra activa. En local eso es puro costo — el link
+    # del informe apunta a localhost y no le sirve a nadie. Se enciende en el
+    # .env del servidor cuando se despliega.
+    if settings.INSIGHTS_ENABLED:
+        scheduler.add_job(
+            _job_monthly_insights,
+            CronTrigger(day=1, hour=4, minute=0),
+            id="monthly_insights",
+            replace_existing=True,
+            misfire_grace_time=6 * 3600,
+        )
+        logger.info("Scheduler: monthly_insights ACTIVO (día 1, 4 AM)")
+    else:
+        logger.info(
+            "Scheduler: monthly_insights APAGADO (INSIGHTS_ENABLED=false). "
+            "El disparo manual sigue disponible: run_monthly_insights() / run_obra_pipeline()."
+        )
 
     scheduler.start()
     logger.info("Scheduler started — reminder windows: %s hours ahead", hours_list)
