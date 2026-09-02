@@ -2373,3 +2373,41 @@ Frontend: `components/GanttTimeline.tsx` (bloque "Today vertical line" → "Toda
 
 ### Pending / next steps
 Queda pendiente un problema distinto que se ve en la misma captura: cuando varias dependencias llegan a tareas consecutivas, los badges de tipo (`SS`/`FF`/`SF`) se dibujan en posiciones muy cercanas y se solapan entre sí. Eso es cálculo de `labelX`/`labelY` en la capa de paths, no un tema de z-index, y no se tocó en este cambio.
+
+---
+
+## 2026-09-02 — Planilla de tareas reconstruida sobre `react-datasheet-grid`
+
+### Objective
+El usuario reportó que la carga de datos en la planilla no funcionaba: al agregar una fila nueva aparecía una fecha ya puesta y, al presionar Enter, no quedaba guardado ni la fecha, ni el responsable, ni nada. Pidió "reveer el funcionamiento de la planilla completa". Después de un primer intento de arreglar la implementación existente, el veredicto fue "no funciona, es incómodo y no funciona bien", acotado a "la interacción en sí (tabs, clics, fechas)". A partir de ahí el usuario preguntó qué alternativas había —incluyendo si se podía embeber una hoja de Google Sheets— y, tras descartarlo, aprobó investigar y usar una biblioteca ya hecha. El norte de diseño que fijó fue "lo hagamos lo más parecido a Excel".
+
+### Changes made
+
+**Se reemplazó la grilla propia por `react-datasheet-grid` (MIT, ~1.900 líneas hechas a mano → ~1.800 con más funcionalidad).** La biblioteca aporta selección de celdas y rangos, navegación con teclado, relleno por arrastre, copiar/pegar de bloques y deshacer, todo probado. El código propio quedó reducido a las celdas del dominio (título, responsable, fechas, duración, estado, predecesoras, hito, costo) y a la integración con la API. Se conservó el handle `SheetViewHandle` (`startNewRow`, `focusTask`) para que el salto desde una alerta a la celda correspondiente siga funcionando.
+
+**Celdas específicas.** Cada celda con editor propio replica el patrón interno de la biblioteca (input no controlado sincronizado por *layout effect*). Tres detalles costaron sesión: (1) escribir no hacía nada porque el `textColumn` de la biblioteca llama a `focus()` **y** `select()`, y solo se estaba haciendo lo segundo; (2) cada tecla se comía la anterior (`5SS+2` quedaba en `SS+2`) porque el texto estaba en las dependencias del efecto de foco, así que cada re-parseo volvía a hacer `select()` — se separó en dos efectos y la resincronización sólo ocurre cuando la celda **no** tiene el foco; (3) las celdas que necesitan la fila entera no pueden usar `keyColumn`, que pisa `columnData` y rompe con `Cannot read properties of undefined (reading 'component')`.
+
+**Fechas.** Cargar Inicio completa Fin con un día de duración, pero si Fin ya tenía valor no se lo pisa (`durationOf` devuelve null si falta alguna de las dos fechas, y `START_DATE.set` distingue tres casos explícitos). Esto corrige el comportamiento que el usuario marcó como incorrecto: antes, cargar Inicio después de Fin movía Fin.
+
+**Predecesoras con notación de MS Project.** Columna que acepta `5`, `5FS+2`, `3SS-1`, etc., por número de fila, y persiste en la tabla `task_dependencies` con su tipo y desfase. Como la nomenclatura no es evidente, el encabezado lleva un botón "?" que despliega la referencia (elegido por el usuario sobre un selector de opciones en la celda).
+
+**Costo de materiales.** La columna muestra el total de materiales de la tarea; al abrirla despliega la tabla de materiales en un *popover*. El botón "Abrir tarea" llevaba al modal de creación de tareas, que el usuario rechazó por confuso: ahora navega a la pestaña **Presupuesto** con esa tarea desplegada y centrada en pantalla, y el resto de las tareas colapsadas (`ComprasTab` acepta `focusTaskId`; `collapsed` pasó a ser `Set<number> | null`, donde `null` significa "todavía no tocaste ningún chevron, derivá la apertura del foco").
+
+**Sólo se envían al backend los campos que cambiaron.** Antes se mandaba siempre `estimated_progress`, y como el backend usa `exclude_unset=True`, editar cualquier campo de una tarea completada devolvía 422. Ahora se hace un diff contra `tasksById`.
+
+**Inserción de filas en el medio.** Cuando la fila creada no es la última, se llama a `reorderTasks`; sin eso quedaban `order_index` duplicados y el orden salía mal.
+
+**Detalles de hoja de cálculo:** columna "Tarea" fija al scroll horizontal, barra de estado tipo Excel (resumen de la obra a la izquierda; recuento, suma y promedio de la selección a la derecha, resolviendo las columnas por `colId` y no por índice), lienzo con filas fantasma hasta un mínimo de 14, mostrar/ocultar columnas y ancho de columna ajustable por arrastre. Se descartó el zoom por pedido explícito del usuario.
+
+### Files modified
+Frontend: `components/TaskSheetView.tsx` (reescrito), `components/ComprasTab.tsx` (`focusTaskId`, colapso derivado del foco, `scrollIntoView`), `pages/ObraDetailPage.tsx` (`budgetFocusTaskId`, nuevas props de la planilla), `index.css` (columna fija, manija de resize, botón de ayuda), `package.json` / `package-lock.json` (`react-datasheet-grid@4.11.6`). Documentación: `IPI-CONSTRUCTA.md` (§Módulo de planilla de tareas y §Decisiones tecnológicas del frontend).
+
+### Validation
+`npx tsc --noEmit -p tsconfig.app.json`, `npx eslint` y `npm run build` sin errores. **Advertencia sobre el chequeo de tipos:** `tsconfig.json` tiene `"files": []`, así que `npx tsc --noEmit -p .` no chequea nada — hay que usar `-p tsconfig.app.json` o `npm run build`.
+
+Verificado contra la API y la base real, no sólo en pantalla: relleno por arrastre y copiar/pegar (confirmado por el usuario), predecesoras (139→136 FS/0 y 142→139 SS/2 en `task_dependencies`), hito (reflejado en el formulario y en el Gantt), Ctrl+Z (45→8→deshacer→45 en la base), *popover* de materiales, mostrar/ocultar columnas, columna fija y barra de estado.
+
+### Pending / next steps
+**La biblioteca ignora los cambios de `columns` mientras está montada.** Se comprobó inspeccionando el *fiber* de React: el componente re-renderiza y la prop nueva llega al envoltorio `memo`, pero el render interno y el DOM siguen con las columnas viejas. Afecta tanto al ancho de columna como a mostrar/ocultar. La solución es remontar la grilla con una `key` derivada de las columnas y sus anchos; para que no se sienta una recarga, el scroll se guarda antes de remontar y se restaura después (con un reintento un *frame* después, porque recién montada la grilla todavía no midió su alto útil y el scroll se clampea a 0). Queda un redibujado de un *frame* al soltar el mouse. Si molestara, la alternativa sería escribir los anchos directamente en el DOM y remontar recién al cambiar de pestaña.
+
+No se restauró el modal de vista previa al pegar que tenía la planilla anterior: Excel pega directo y el usuario no lo pidió de vuelta. Queda anotado por si se lo extraña.
