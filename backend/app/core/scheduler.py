@@ -104,12 +104,23 @@ async def _job_obra_stats_snapshots() -> None:
     """
     from app.services.obra_stats_service import ObraStatsService, previous_period
 
+    from app.services.obra_insight_service import ObraInsightService
+
     period = previous_period()
     logger.info("Scheduler: obra_stats_snapshots(period=%s)", period)
     async with _db() as db:
         snapshots = await ObraStatsService(db).snapshot_all_active(period)
     logger.info(
         "Scheduler: obra_stats_snapshots(period=%s) → %d obras", period, len(snapshots)
+    )
+
+    # Etapa 3: redacción con IA sobre los snapshots recién calculados. Va en su
+    # propia transacción para que un fallo de la IA no invalide las estadísticas,
+    # que son el dato duro y ya quedaron guardadas.
+    async with _db() as db:
+        insights = await ObraInsightService(db).generate_for_all_active(period)
+    logger.info(
+        "Scheduler: obra_insights(period=%s) → %d conclusiones", period, insights
     )
 
 

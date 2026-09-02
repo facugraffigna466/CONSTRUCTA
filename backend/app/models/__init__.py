@@ -30,6 +30,7 @@ from app.models.tenant_membership import TenantMembership
 from app.models.whatsapp_tenant_context import WhatsappTenantContext
 from app.models.ai_mapping_cache import AiMappingCache
 from app.models.obra_stats_snapshot import ObraStatsSnapshot
+from app.models.obra_insight import ObraInsight, InsightStatus
 
 __all__ = [
     "Plan",
@@ -67,4 +68,6 @@ __all__ = [
     "SolicitudCotizacion",
     "SolicitudSupplier",
     "ObraStatsSnapshot",
+    "ObraInsight",
+    "InsightStatus",
 ]
