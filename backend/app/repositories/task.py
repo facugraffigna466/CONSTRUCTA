@@ -1,5 +1,5 @@
-from datetime import date, datetime
-from sqlalchemy import case, cast, DateTime as SADateTime, delete, func, literal, select, Time as SATime, update
+from datetime import date
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.obra import Obra
 from app.models.task import Task, TaskStatus, task_dependencies_table
@@ -46,25 +46,22 @@ class TaskRepository(BaseRepository[Task]):
         )
         return list(result.scalars().all())
 
-    async def list_due_in_window(
-        self, window_start: datetime, window_end: datetime
-    ) -> list[Task]:
-        """Tasks whose due datetime (due_date + due_time, Argentina tz) falls within the UTC window.
-        Tasks with no due_time are treated as due at 23:59 local time."""
-        local_naive = cast(Task.due_date, SADateTime) + func.coalesce(
-            Task.due_time,
-            cast(literal("23:59:00"), SATime),
-        )
-        utc_dt = func.timezone("America/Argentina/Buenos_Aires", local_naive)
+    async def list_due_on_date(self, target: date) -> list[Task]:
+        """Tareas activas cuyo vencimiento cae exactamente en `target` (fecha local).
+
+        Comparación por fecha, sin aritmética de horas: los recordatorios son
+        "N días antes", no "N horas antes". Antes se usaba una ventana de ±30 min
+        sobre due_date+due_time, y como casi ninguna tarea tiene hora cargada el
+        default de 23:59 dejaba el recordatorio fuera del horario laboral — nunca
+        se enviaba (ver docs/features/recordatorio-vencimiento.md).
+        """
         result = await self.session.execute(
             select(Task)
             .where(
-                Task.due_date.isnot(None),
-                utc_dt >= window_start,
-                utc_dt < window_end,
+                Task.due_date == target,
                 Task.status.notin_([TaskStatus.COMPLETADA, TaskStatus.CANCELADA]),
             )
-            .order_by(Task.due_date, Task.id)
+            .order_by(Task.id)
         )
         return list(result.scalars().all())
 
