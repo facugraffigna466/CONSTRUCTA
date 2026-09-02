@@ -31,7 +31,7 @@ backend/app/core/deps.py                — DbSession, CurrentUserId
 backend/app/core/database.py            — how get_db() works (commit/rollback boundary)
 ```
 
-Also read `docs/skills.md` sections BS-01 through BS-07 for project-specific rules.
+Also read `docs/referencia/skills.md` sections BS-01 through BS-07 for project-specific rules.
 
 ---
 

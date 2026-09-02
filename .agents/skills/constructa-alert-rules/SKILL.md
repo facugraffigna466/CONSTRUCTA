@@ -29,7 +29,7 @@ frontend/src/components/AlertasTab.tsx              — full alert view with fil
 frontend/src/components/ResumenTab.tsx              — KPI "Alertas activas" (solo el conteo de no leídas; no renderiza por tipo)
 frontend/src/types/index.ts                         — AlertType type
 frontend/src/api/alerts.ts                          — fetchAlerts(), markAlertRead()
-docs/skills.md                                      — AR-01 through AR-04
+docs/referencia/skills.md                                      — AR-01 through AR-04
 ```
 
 ---

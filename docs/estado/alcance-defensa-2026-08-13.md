@@ -4,7 +4,7 @@
 **Fuente de planificación:** `/Users/agustinllancaman/Downloads/Gantt_Proyecto.xlsx`  
 **Fecha oficial de presentación:** 2026-08-13
 
-> Este informe reemplaza, para el corte académico de agosto, la estimación global preliminar de `docs/estado-proyecto-agosto-2026.md`. Esa evaluación mezclaba el corte parcial con requisitos de entrega final y producción.
+> Este informe reemplaza, para el corte académico de agosto, la estimación global preliminar de `docs/estado/estado-proyecto-agosto-2026.md`. Esa evaluación mezclaba el corte parcial con requisitos de entrega final y producción.
 
 ## Consigna oficial
 
@@ -168,7 +168,7 @@ Escala:
 
 ## 6. Evidencia técnica disponible
 
-- Arquitectura y modelo: `docs/diagramas/`, `docs/database.md`, modelos SQLAlchemy y migraciones de código `0001–0043`. La base local auditada estaba en `0041` y debe actualizarse antes de depender de las funciones de `0042` y `0043`.
+- Arquitectura y modelo: `docs/diagramas/`, `docs/referencia/database.md`, modelos SQLAlchemy y migraciones de código `0001–0043`. La base local auditada estaba en `0041` y debe actualizarse antes de depender de las funciones de `0042` y `0043`.
 - Backend MVP: routers y servicios de usuarios, obras, responsables, tareas y alertas.
 - Frontend MVP: login, portfolio, obra, tareas, Gantt, resumen y alertas.
 - Chatbot: `message_service.py`, `conversation_service.py`, parser de Twilio y webhook.

@@ -26,7 +26,7 @@ Estás **remediando, uno por uno, los hallazgos del audit** del sistema, cada un
 **su propio PR chico y verificado**. El audit completo (con severidades y estado de
 resolución) es el documento maestro:
 
-**`docs/auditoria-sistema-consolidada.md`** ← leelo primero, entero. Ahí está el mapa,
+**`docs/auditoria/auditoria-sistema-consolidada.md`** ← leelo primero, entero. Ahí está el mapa,
 las 26 rutas del backend cubiertas, y el ranking P0/P1/P2. La §9 es la auditoría de
 frontend pantalla por pantalla (hallazgos "F1", "F2", …).
 
@@ -157,7 +157,7 @@ mergea → tag opcional). Esperá el "mergeado" y volvé al Paso 1.
    transitiva desde el entry point** (`frontend/src/main.tsx`). Hay un script de ejemplo
    en el historial (BFS parseando imports estáticos y dinámicos). El primer barrido
    encontró 7 muertos; el de reachability encontró 8 más.
-8. **Docs/skills stale:** varios skills (`.agents/skills/constructa-*`, `docs/skills.md`)
+8. **Docs/skills stale:** varios skills (`.agents/skills/constructa-*`, `docs/referencia/skills.md`)
    describían como "vivo" código ya borrado (`AlertsPanel`, `message_interpreter`, el
    array `TABS` que no existe). Al borrar/renombrar código, **reconciliá los skills**.
 9. **El preview server no arranca** en este entorno (no bindea el puerto). No pierdas
@@ -213,8 +213,8 @@ quedó mergeado. La suite pasó a **50 tests** en `backend/tests/` + CI.
 | 7 | **Routing por URL** | Feature/refactor | Migrar el estado de navegación de `App.tsx` (hoy por estado, no React Router) a un router. Habilita deep-links, back/forward y compartir URLs. Refactor grande pero acotado; toca `App.tsx` y todas las intercepciones de token (`/invite`, `/reset-password`, `/verify-email`). |
 | 8 | **Mega-componentes (F11)** | Refactor (mantenibilidad) | `ComprasTab` (2578), `TaskSheetView` (1923), `GanttTimeline` (1858) mezclan render+estado+API+interacción sin `React.memo`. Desglosar para mantenibilidad y jank en obras grandes. No es urgente; hacerlo por partes y con cuidado (ver F4 para el Gantt). |
 
-Detalle histórico de cada uno: `docs/auditoria-sistema-consolidada.md` (P1/P2 en §4, frontend en §9)
-y los `docs/analisis-modulo-*.md`. Las adendas **#16–#25** en ese mismo doc registran lo ya cerrado.
+Detalle histórico de cada uno: `docs/auditoria/auditoria-sistema-consolidada.md` (P1/P2 en §4, frontend en §9)
+y los `docs/analisis/analisis-modulo-*.md`. Las adendas **#16–#25** en ese mismo doc registran lo ya cerrado.
 
 ---
 
@@ -229,7 +229,7 @@ cd backend && .venv/bin/python -c "from app.main import app; print('OK')"
 cd frontend && npx tsc -b && npm run build
 
 # Ver el audit y su estado de resolución
-sed -n '1,30p' docs/auditoria-sistema-consolidada.md
+sed -n '1,30p' docs/auditoria/auditoria-sistema-consolidada.md
 
 # Reachability de código muerto (front) — escribir un script Python que parsee
 # imports desde frontend/src/main.tsx (BFS) y reporte los .tsx/.ts no alcanzables.

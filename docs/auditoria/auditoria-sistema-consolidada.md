@@ -2,7 +2,7 @@
 
 **Fecha:** 2026-07-17 (actualizado 2026-07-18: auditoría de frontend pantalla por pantalla — §9 — y **estado de resolución de los P0**, ver §1/§4/§7).
 **Estado:** 🟢 **cluster P0 de seguridad cerrado y mergeado a `main`** (14/15; abierto solo #14 por diseño). 50 tests + CI lo sostienen.
-**Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
+**Método:** reconciliación de los 8 análisis técnicos por módulo (`docs/analisis/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Se sumó una pasada por las **12 páginas y ~35 componentes** del frontend, una por una (§9).
 **Alcance:** todo el sistema — autenticación, planes/tenants, obras, tareas, cronograma, comunicación de campo (WhatsApp/alertas/presencia), compras y documentos, bitácora con IA, infraestructura transversal, frontend, y modelo de datos/integraciones.
 
 Este documento **no reemplaza** los análisis por módulo: los consolida. El detalle de cada hallazgo (solución propuesta con código, esfuerzo estimado) está en el documento del módulo correspondiente. Acá está el mapa completo, la cobertura verificada y el ranking de severidad de todo el sistema.
@@ -33,14 +33,14 @@ Este documento **no reemplaza** los análisis por módulo: los consolida. El det
 
 | Documento | Cubre |
 |-----------|-------|
-| [`analisis-modulo-auth-planes.md`](analisis-modulo-auth-planes.md) | Login/JWT, registro/tenants, planes y límites (402), invitaciones por email, roles/permisos, seguridad de auth |
-| [`analisis-modulo-obras-tareas-cronograma.md`](analisis-modulo-obras-tareas-cronograma.md) | Obras (CRUD), tareas (CRUD + estados), Gantt, planilla, ruta crítica CPM, baseline, import/export |
-| [`analisis-modulo-comunicacion-campo.md`](analisis-modulo-comunicacion-campo.md) | Chatbot WhatsApp (webhooks/reglas), integración Twilio, alertas, presencia/edición colaborativa (Socket.IO), bitácora IA |
-| [`analisis-modulo-compras-documentos.md`](analisis-modulo-compras-documentos.md) | Bitácora (audio→IA), solicitudes de cotización, órdenes de compra, materiales por tarea, planos/uploads |
-| [`analisis-modulo-transversal-infra.md`](analisis-modulo-transversal-infra.md) | Config/secretos, CORS, base de datos, tests, CI, manejo de errores, observabilidad, deployment |
-| [`analisis-modulo-complementos.md`](analisis-modulo-complementos.md) | Responsables, settings, exports, notificaciones/SSE, calendario |
-| [`analisis-modulo-frontend.md`](analisis-modulo-frontend.md) | Arquitectura React, cliente API, accesibilidad, responsive, performance |
-| [`analisis-modulo-datos-integraciones.md`](analisis-modulo-datos-integraciones.md) | Modelo de datos (`tenant_id`, nullability), email (Brevo), n8n, auth interno |
+| [`analisis-modulo-auth-planes.md`](../analisis/analisis-modulo-auth-planes.md) | Login/JWT, registro/tenants, planes y límites (402), invitaciones por email, roles/permisos, seguridad de auth |
+| [`analisis-modulo-obras-tareas-cronograma.md`](../analisis/analisis-modulo-obras-tareas-cronograma.md) | Obras (CRUD), tareas (CRUD + estados), Gantt, planilla, ruta crítica CPM, baseline, import/export |
+| [`analisis-modulo-comunicacion-campo.md`](../analisis/analisis-modulo-comunicacion-campo.md) | Chatbot WhatsApp (webhooks/reglas), integración Twilio, alertas, presencia/edición colaborativa (Socket.IO), bitácora IA |
+| [`analisis-modulo-compras-documentos.md`](../analisis/analisis-modulo-compras-documentos.md) | Bitácora (audio→IA), solicitudes de cotización, órdenes de compra, materiales por tarea, planos/uploads |
+| [`analisis-modulo-transversal-infra.md`](../analisis/analisis-modulo-transversal-infra.md) | Config/secretos, CORS, base de datos, tests, CI, manejo de errores, observabilidad, deployment |
+| [`analisis-modulo-complementos.md`](../analisis/analisis-modulo-complementos.md) | Responsables, settings, exports, notificaciones/SSE, calendario |
+| [`analisis-modulo-frontend.md`](../analisis/analisis-modulo-frontend.md) | Arquitectura React, cliente API, accesibilidad, responsive, performance |
+| [`analisis-modulo-datos-integraciones.md`](../analisis/analisis-modulo-datos-integraciones.md) | Modelo de datos (`tenant_id`, nullability), email (Brevo), n8n, auth interno |
 
 **Auditorías complementarias previas** (ya resueltas o de otro alcance): [`auditoria-ux.md`](auditoria-ux.md) (P0/P1/P2 de UX, cerrada), [`auditoria-general.md`](auditoria-general.md) (recorrido en navegador, 7 hallazgos cerrados), [`auditoria-flujo-alta.md`](auditoria-flujo-alta.md) (flujo de onboarding).
 
@@ -280,7 +280,7 @@ La recomendación era hacer **ambos** — y **ambos están hechos y mergeados** 
 8. 🟡 **Robustez operativa** — rate limiting (login/forgot/reset) ✅ + manejo global de errores ✅ **hechos**; **falta** multi-worker/Redis para presencia, rate-limit del webhook de WhatsApp, limpieza de sesiones, Sentry, validación de secretos y CORS por env (infra).
 9. 🟡 **P2 de UX/frontend** — código muerto ✅, `BACKEND_URL`/`upload.ts` localhost ✅, diálogos nativos (F6) ✅, alerts por obra (F5) ✅, contexto de invitación (F9) ✅, affords del Sidebar (F8) ✅, doc Tailwind (F10) ✅ **hechos**; **falta** a11y del Gantt/planilla (F4) y desglosar mega-componentes (F11) — refactors delicados.
 
-> **Resumen (act. 2026-07-30):** el barrido de **defectos** del audit está **cerrado** — pasos 1–5 (P0) + los hallazgos #16–#25 (P1/P2 accionables) hechos y mergeados; **50 tests + CI**. Lo que queda (pasos 6–9 en su parte ⬜) **no son bugs**: son features (refresh token, monetización), infra (multi-worker, Sentry, CORS/secretos) y refactors de UI (F4, F11), más la decisión de producto #14 (WhatsApp per-tenant). El desglose accionable de cada uno está en `docs/handoff-remediacion-audit.md` §5.
+> **Resumen (act. 2026-07-30):** el barrido de **defectos** del audit está **cerrado** — pasos 1–5 (P0) + los hallazgos #16–#25 (P1/P2 accionables) hechos y mergeados; **50 tests + CI**. Lo que queda (pasos 6–9 en su parte ⬜) **no son bugs**: son features (refresh token, monetización), infra (multi-worker, Sentry, CORS/secretos) y refactors de UI (F4, F11), más la decisión de producto #14 (WhatsApp per-tenant). El desglose accionable de cada uno está en `docs/estado/handoff-remediacion-audit.md` §5.
 
 ---
 

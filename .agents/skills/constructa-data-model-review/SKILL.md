@@ -34,8 +34,8 @@ backend/app/schemas/alert.py
 
 frontend/src/types/index.ts                  — must match Read schemas exactly
 
-docs/skills.md                               — all BS/FS/DR/DC rules
-docs/database.md                             — current full DB documentation
+docs/referencia/skills.md                               — all BS/FS/DR/DC rules
+docs/referencia/database.md                             — current full DB documentation
 documentacion.md                             — recent changes for context
 ```
 
