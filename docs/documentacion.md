@@ -2350,3 +2350,26 @@ Suite completa de backend: 317 passed. `npx tsc --noEmit` sin errores (nota: par
 
 ### Pending / next steps
 Quedó sin resolver, por falta de un caso de uso concreto: si Automatizaciones/Alertas debería admitir *overrides* por obra (ej. pausar recordatorios en una obra específica) en vez de ser una única config por tenant. La arquitectura actual es así a propósito (Auditoría 11 corrigió el bug de que fuera por-manager), así que un cambio a overrides por obra requeriría una tabla de overrides + UI que distinga "usa el default de la empresa" vs. "personalizado en esta obra" — no se justifica sin un caso real. También quedó sin resolver la utilidad original de `main_responsible`/`company_phone` en Datos generales: no lo usa ningún servicio del backend hoy, el usuario recordaba que el teléfono tenía algún propósito pero no cuál, y no se encontró rastro en git history ni en comentarios — se dejó como está a pedido del usuario.
+
+---
+
+## 2026-09-02 — Gantt: la línea de "hoy" tapaba las flechas de dependencia
+
+### Objective
+El usuario mostró una captura del Gantt donde la barra vertical naranja del día de hoy cae justo encima de un tramo de dependencias: la flecha que baja entre tareas y los badges de tipo (`SS`) quedaban cortados por el naranja y no se entendía qué conectaba con qué.
+
+### Changes made
+El marcador de hoy estaba en `zIndex: 4`, es decir **por encima** de las barras de tarea (`zIndex: 1`) y de la capa SVG de dependencias (`zIndex: 3`). Además no era una línea fina sino una barra sólida de 2px con `boxShadow: "0 0 0 4px rgba(231,106,45,0.06)"`, o sea unos 10px de ancho efectivo de naranja opaco pisando todo lo que cruzara.
+
+Se lo reemplazó por un marcador de fondo: `zIndex: 0` (justo encima del sombreado de fines de semana y debajo de barras y flechas), una banda del ancho de la columna del día con `rgba(231,106,45,0.07)` y un borde izquierdo punteado de 1px al 55% de opacidad como referencia exacta. Se eliminó el `boxShadow`.
+
+No se pierde legibilidad del "hoy" porque el header de fechas ya marca ese día con la celda en naranja sólido (`#E85A26`, texto blanco) y sigue existiendo el botón "Ir a hoy" que hace scroll a la columna. El criterio es el mismo que usa MS Project: la línea de hoy es contexto de fondo, no un elemento que compita con el contenido del diagrama.
+
+### Files modified
+Frontend: `components/GanttTimeline.tsx` (bloque "Today vertical line" → "Today marker").
+
+### Validation
+`npx tsc --noEmit -p tsconfig.app.json` sin errores.
+
+### Pending / next steps
+Queda pendiente un problema distinto que se ve en la misma captura: cuando varias dependencias llegan a tareas consecutivas, los badges de tipo (`SS`/`FF`/`SF`) se dibujan en posiciones muy cercanas y se solapan entre sí. Eso es cálculo de `labelX`/`labelY` en la capa de paths, no un tema de z-index, y no se tocó en este cambio.
