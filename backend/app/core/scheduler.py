@@ -96,6 +96,23 @@ async def _job_cleanup_expired_sessions() -> None:
     logger.info("Scheduler: cleanup_expired_sessions → %d filas eliminadas", count)
 
 
+async def _job_obra_stats_snapshots() -> None:
+    """Insights etapa 2: foto mensual de estadísticas por obra activa.
+
+    Corre el día 1 de cada mes y cubre el mes que acaba de cerrar. Es cálculo
+    determinístico (SQL/Python) — no llama a ninguna IA.
+    """
+    from app.services.obra_stats_service import ObraStatsService, previous_period
+
+    period = previous_period()
+    logger.info("Scheduler: obra_stats_snapshots(period=%s)", period)
+    async with _db() as db:
+        snapshots = await ObraStatsService(db).snapshot_all_active(period)
+    logger.info(
+        "Scheduler: obra_stats_snapshots(period=%s) → %d obras", period, len(snapshots)
+    )
+
+
 def _parse_hours() -> list[int]:
     raw = os.getenv("REMINDER_HOURS_AHEAD", "24,72")
     return [int(h.strip()) for h in raw.split(",") if h.strip().isdigit()]
@@ -160,6 +177,16 @@ def start_scheduler() -> None:
         id="cleanup_expired_sessions",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+
+    # Estadísticas mensuales por obra (insights, etapa 2) — día 1 a las 4 AM,
+    # después de la limpieza de sesiones y fuera de horario de obra.
+    scheduler.add_job(
+        _job_obra_stats_snapshots,
+        CronTrigger(day=1, hour=4, minute=0),
+        id="obra_stats_snapshots",
+        replace_existing=True,
+        misfire_grace_time=6 * 3600,
     )
 
     scheduler.start()
