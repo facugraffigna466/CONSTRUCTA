@@ -96,32 +96,35 @@ async def _job_cleanup_expired_sessions() -> None:
     logger.info("Scheduler: cleanup_expired_sessions → %d filas eliminadas", count)
 
 
-async def _job_obra_stats_snapshots() -> None:
-    """Insights etapa 2: foto mensual de estadísticas por obra activa.
+async def _job_monthly_insights() -> None:
+    """Motor de insights, pipeline mensual completo (etapas 1 a 5).
 
-    Corre el día 1 de cada mes y cubre el mes que acaba de cerrar. Es cálculo
-    determinístico (SQL/Python) — no llama a ninguna IA.
+    Corre el día 1 y cubre el mes que cerró. Por cada obra activa encadena:
+    estadísticas (determinísticas) → conclusiones con IA → render del email →
+    envío al owner del tenant + aviso por WhatsApp. Una obra que falla no corta
+    el resto, y el envío es idempotente por (obra, período): reintentar el job
+    no reenvía informes ya mandados.
     """
-    from app.services.obra_stats_service import ObraStatsService, previous_period
-
-    from app.services.obra_insight_service import ObraInsightService
+    from app.services.insight_delivery_service import run_pipeline_for_all_active
+    from app.services.obra_stats_service import previous_period
 
     period = previous_period()
-    logger.info("Scheduler: obra_stats_snapshots(period=%s)", period)
+    logger.info("Scheduler: monthly_insights(period=%s)", period)
     async with _db() as db:
-        snapshots = await ObraStatsService(db).snapshot_all_active(period)
-    logger.info(
-        "Scheduler: obra_stats_snapshots(period=%s) → %d obras", period, len(snapshots)
-    )
+        results = await run_pipeline_for_all_active(db, period)
 
-    # Etapa 3: redacción con IA sobre los snapshots recién calculados. Va en su
-    # propia transacción para que un fallo de la IA no invalide las estadísticas,
-    # que son el dato duro y ya quedaron guardadas.
-    async with _db() as db:
-        insights = await ObraInsightService(db).generate_for_all_active(period)
+    sent = sum(1 for r in results if r.get("status") == "sent")
+    already = sum(1 for r in results if r.get("status") == "already_sent")
+    failed = [r for r in results if r.get("status") not in ("sent", "already_sent")]
     logger.info(
-        "Scheduler: obra_insights(period=%s) → %d conclusiones", period, insights
+        "Scheduler: monthly_insights(period=%s) → %d obras | %d enviados, %d ya enviados, %d con problema",
+        period, len(results), sent, already, len(failed),
     )
+    for r in failed:
+        logger.warning(
+            "Scheduler: monthly_insights obra %s → %s (%s)",
+            r.get("obra_id"), r.get("status"), r.get("error") or r.get("reason") or "",
+        )
 
 
 def _parse_hours() -> list[int]:
@@ -190,12 +193,12 @@ def start_scheduler() -> None:
         misfire_grace_time=3600,
     )
 
-    # Estadísticas mensuales por obra (insights, etapa 2) — día 1 a las 4 AM,
-    # después de la limpieza de sesiones y fuera de horario de obra.
+    # Motor de insights completo (etapas 1-5) — día 1 a las 4 AM, después de la
+    # limpieza de sesiones y fuera de horario de obra.
     scheduler.add_job(
-        _job_obra_stats_snapshots,
+        _job_monthly_insights,
         CronTrigger(day=1, hour=4, minute=0),
-        id="obra_stats_snapshots",
+        id="monthly_insights",
         replace_existing=True,
         misfire_grace_time=6 * 3600,
     )

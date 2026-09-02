@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, JSON, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -46,5 +46,21 @@ class ObraStatsSnapshot(Base):
 
     # Las 5 métricas. Contrato en docs/features/insights-etapa-2-estadisticas.md.
     metrics: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+    # ── Entrega (etapa 5) ────────────────────────────────────────────────────
+    # El snapshot ya es único por (obra, period), así que es el lugar natural
+    # para la idempotencia del envío: si `email_status` ya es "sent", el job
+    # puede correr de nuevo sin reenviar el mismo informe.
+    # None = todavía no se intentó | "sent" | "failed" | "skipped"
+    email_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    email_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    email_recipient: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Motivo del fallo o del skip — para poder reintentar a mano sin adivinar.
+    email_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # El aviso por WhatsApp es complementario: si falla, el informe igual se
+    # considera entregado (el email es el canal principal).
+    whatsapp_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    whatsapp_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     obra: Mapped["Obra"] = relationship("Obra")

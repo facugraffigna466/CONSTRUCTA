@@ -596,3 +596,50 @@ async def send_plan_warning_email(
         ),
         text=text,
     )
+
+
+async def send_insights_email(
+    to_email: str,
+    *,
+    obra_id: int,
+    obra_name: str,
+    period: str,
+    insights: list,
+    frontend_url: str | None = None,
+) -> bool:
+    """Informe mensual de insights de una obra al owner del tenant.
+
+    El HTML lo arma `build_insights_email_html` (etapa 4); acá solo se define
+    asunto, versión en texto plano y se delega el POST a Brevo con el retry que
+    ya tiene `_send_via_brevo` (Fase 6)."""
+    base_url = (frontend_url or settings.FRONTEND_URL).rstrip("/")
+    cta_url = f"{base_url}/obras/{obra_id}/insights"
+    label = _period_label(period)
+    live = [i for i in insights if _insight_status(i) in _LIVE_INSIGHT_STATUSES]
+
+    subject = f"Informe de {obra_name} — {label}"
+    if live:
+        text = (
+            f"Tu informe mensual de {obra_name} ({label}) ya está listo.\n\n"
+            + "\n\n".join(
+                f"- {getattr(i, 'title', '')}\n  {getattr(i, 'description', '')}"
+                for i in live
+            )
+            + f"\n\nVer el informe completo: {cta_url}\n\n— Equipo Constructa"
+        )
+    else:
+        text = (
+            f"Informe mensual de {obra_name} ({label}).\n\n"
+            "Este mes no encontramos patrones nuevos que valga la pena marcarte.\n\n"
+            f"Ver el informe completo: {cta_url}\n\n— Equipo Constructa"
+        )
+
+    return await send_email(
+        to_email,
+        subject=subject,
+        html=build_insights_email_html(
+            obra_id=obra_id, obra_name=obra_name, period=period,
+            insights=insights, frontend_url=frontend_url,
+        ),
+        text=text,
+    )
