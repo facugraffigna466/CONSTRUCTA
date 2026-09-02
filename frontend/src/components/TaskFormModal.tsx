@@ -1,7 +1,7 @@
-import { useState, useEffect, type FormEvent, type ChangeEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "react";
 import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-react";
 import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
-import type { CascadeAffectedTask } from "../api/tasks";
+import type { CascadeAffectedTask, TaskUpdatePayload } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { TaskMaterialsSection, type DraftMaterial } from "./TaskMaterialsSection";
 import { TaskBitacoraOrigin } from "./TaskBitacoraOrigin";
@@ -179,6 +179,23 @@ export function TaskFormModal({
   const [isMilestone,       setIsMilestone]       = useState(task?.is_milestone ?? false);
   const [estimatedProgress, setEstimatedProgress] = useState(task?.estimated_progress ?? 0);
 
+  // Snapshot de los valores con los que se abrió el modal, para en edición mandar
+  // solo los campos que el usuario efectivamente tocó y no pisar cambios ajenos
+  // hechos por otro usuario mientras el modal estuvo abierto.
+  const initialPayloadRef = useRef<TaskUpdatePayload>({
+    title: title.trim(),
+    description: description.trim() || null,
+    responsible_id: responsibleId ? Number(responsibleId) : null,
+    start_date: startDate || null,
+    start_time: startTime || null,
+    due_date: dueDate || null,
+    due_time: dueTime || null,
+    parent_task_id: parentTaskId ? Number(parentTaskId) : null,
+    dependency_links: depLinks,
+    is_milestone: isMilestone,
+    estimated_progress: estimatedProgress,
+  });
+
   const [errors,   setErrors]   = useState<Record<string, string>>({});
   const [saving,   setSaving]   = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -235,22 +252,28 @@ export function TaskFormModal({
     setSaving(true);
     setApiError(null);
     try {
-      const payload = {
-        title: title.trim(),
-        description: description.trim() || null,
-        responsible_id: responsibleId ? Number(responsibleId) : null,
-        start_date: startDate || null,
-        start_time: startTime || null,
-        due_date: dueDate || null,
-        due_time: dueTime || null,
-        parent_task_id: parentTaskId ? Number(parentTaskId) : null,
-        dependency_links: depLinks,
-        is_milestone: isMilestone,
-        estimated_progress: estimatedProgress,
-      };
+      const trimmedTitle = title.trim();
+      const trimmedDescription = description.trim() || null;
+      const responsibleIdNum = responsibleId ? Number(responsibleId) : null;
+      const parentTaskIdNum = parentTaskId ? Number(parentTaskId) : null;
+
       let saved: Task;
       if (mode === "create") {
-        saved = await createTask({ ...payload, obra_id: obraId, order_index: taskCount });
+        saved = await createTask({
+          obra_id: obraId,
+          order_index: taskCount,
+          title: trimmedTitle,
+          description: trimmedDescription,
+          responsible_id: responsibleIdNum,
+          start_date: startDate || null,
+          start_time: startTime || null,
+          due_date: dueDate || null,
+          due_time: dueTime || null,
+          parent_task_id: parentTaskIdNum,
+          dependency_links: depLinks,
+          is_milestone: isMilestone,
+          estimated_progress: estimatedProgress,
+        });
         // Persistir los materiales cargados en borrador contra la tarea recién creada
         if (draftMaterials.length > 0) {
           await Promise.all(draftMaterials.map(m =>
@@ -264,7 +287,22 @@ export function TaskFormModal({
           ));
         }
       } else {
-        saved = await updateTask(task!.id, { ...payload, cascade_dates: cascade });
+        // Solo mandamos lo que el usuario cambió respecto al snapshot inicial,
+        // para no pisar cambios que haya hecho otro usuario mientras el modal estaba abierto.
+        const initial = initialPayloadRef.current;
+        const changed: TaskUpdatePayload = {};
+        if (trimmedTitle !== initial.title) changed.title = trimmedTitle;
+        if (trimmedDescription !== initial.description) changed.description = trimmedDescription;
+        if (responsibleIdNum !== initial.responsible_id) changed.responsible_id = responsibleIdNum;
+        if ((startDate || null) !== initial.start_date) changed.start_date = startDate || null;
+        if ((startTime || null) !== initial.start_time) changed.start_time = startTime || null;
+        if ((dueDate || null) !== initial.due_date) changed.due_date = dueDate || null;
+        if ((dueTime || null) !== initial.due_time) changed.due_time = dueTime || null;
+        if (parentTaskIdNum !== initial.parent_task_id) changed.parent_task_id = parentTaskIdNum;
+        if (JSON.stringify(depLinks) !== JSON.stringify(initial.dependency_links)) changed.dependency_links = depLinks;
+        if (isMilestone !== initial.is_milestone) changed.is_milestone = isMilestone;
+        if (estimatedProgress !== initial.estimated_progress) changed.estimated_progress = estimatedProgress;
+        saved = await updateTask(task!.id, { ...changed, cascade_dates: cascade });
       }
       onSaved(saved);
     } catch (err) {
