@@ -40,3 +40,83 @@
   50%       { transform: translateY(-6px); }
 }
 
+
+/* ── Planilla v2 (TaskSheetV2) ────────────────────────────────────────────── */
+/* La librería sólo trae sticky a la derecha; el gutter (nº de fila) ya es
+   sticky-left, así que anclamos "Tarea" justo después para que no se pierda
+   al scrollear horizontal. z-index 29 = debajo del gutter (30), encima del resto. */
+/* Las celdas son position:absolute con `left` inline, así que sticky las saca
+   del posicionamiento absoluto y las manda a flujo (debajo del gutter, que ya
+   es sticky). Misma técnica que usa la librería para su columna sticky-right:
+   margin-left la corre después del gutter y translateY la sube a su fila.
+   Especificidad .dsg-cell.x para ganarle a `.dsg-cell { position: absolute }`. */
+.dsg-cell.sheetv2-sticky-title {
+  position: sticky;
+  left: 40px;
+  margin-left: 40px;
+  transform: translateY(-100%);
+  /* z-index 1: alcanza para quedar sobre las celdas que scrollean (z-index
+     auto), pero por DEBAJO del recuadro de celda activa y del rango
+     seleccionado, que la librería dibuja en una capa aparte con z-index 20.
+     Con un valor mayor, la celda tapaba ese recuadro y "Tarea" era la única
+     columna que no se veía seleccionada. */
+  z-index: 1;
+}
+
+/* La celda del header es display:flex, así que su contenedor interno se
+   dimensionaba por el texto y no por la celda: el handle de resize terminaba
+   al final de la palabra en vez del borde de la columna (en "Tarea" quedaba
+   221px adentro). Con flex:1 el contenedor ocupa la celda entera. */
+.dsg-cell-header > .dsg-cell-header-container {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Handle para redimensionar columnas, dentro del header */
+.sheetv2-col-resize {
+  position: absolute;
+  top: 0;
+  /* Centrado en la línea divisoria: 10px del padding del contenedor + la mitad
+     del ancho. Ancho generoso (14px) porque con 8px el blanco quedaba tan
+     chico que apuntar 2px al costado ya erraba y seleccionaba la celda. */
+  right: -17px;
+  bottom: 0;
+  width: 14px;
+  cursor: col-resize;
+  z-index: 50;
+}
+.sheetv2-col-resize:hover::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 6px;
+  width: 2px;
+  background: #FF6B35;
+}
+
+/* "?" de ayuda en el encabezado de Predecesoras. Va en naranja de acción para
+   que se despegue del gris del encabezado: con el gris anterior pasaba
+   desapercibido y nadie lo tocaba. */
+.sheetv2-col-help {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 99px;
+  border: 1px solid #FFC7AF;
+  background: #FFF1EB;
+  color: #FF6B35;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.sheetv2-col-help:hover {
+  background: #FF6B35;
+  border-color: #FF6B35;
+  color: #fff;
+}
