@@ -165,58 +165,100 @@ def _section(title: str, body: str, *, subtitle: str = "") -> str:
 
 # ── Bloques de contenido ──────────────────────────────────────────────────────
 
+_PRIORITY = {
+    "alta":  ("#d03b3b", "Decidir ahora"),
+    "media": ("#c97d0e", "Para esta semana"),
+    "baja":  ("#5B6770", "Para tener en cuenta"),
+}
+
+
 def _conclusions_block(insights: list) -> str:
+    """Las decisiones, ordenadas por lo que más mueve el cronograma.
+
+    Cada tarjeta responde tres cosas en este orden: qué pasa, qué hacer, y qué
+    se destraba si lo hace. La evidencia va colapsada al final — está para
+    respaldar, no para leerse.
+    """
     if not insights:
         return (
             f'<p style="margin:0;padding:20px;background:{C_SURFACE};border:1px solid {C_LINE};'
             f'border-radius:12px;font-size:14px;color:{C_MUTED};line-height:1.6;">'
-            "Este mes no encontramos patrones nuevos que valga la pena marcarte. "
-            "Los números de abajo se siguen midiendo igual.</p>"
+            "Este mes no encontramos nada que requiera una decisión tuya. "
+            "Los números de la obra están más abajo.</p>"
         )
+
+    rank = {"alta": 0, "media": 1, "baja": 2}
+    ordered = sorted(insights, key=lambda i: rank.get(getattr(i, "priority", None) or "baja", 3))
+
     cards = []
-    for i in insights:
-        reps = getattr(i, "reinforcement_count", 0) or 0
-        badge = ""
-        if reps:
-            veces = "vez" if reps == 1 else "veces"
-            badge = (
-                f'<span style="margin-left:8px;padding:2px 8px;background:#FFF1EA;color:{C_BRAND};'
-                f'font-size:10.5px;font-weight:700;border-radius:20px;white-space:nowrap;">'
-                f'Se repitió {reps} {veces}</span>'
-            )
-        rec = getattr(i, "recommendation", None)
-        rec_html = (
-            f'<div style="margin:12px 0 0;padding:11px 13px;background:#FFF8F5;'
+    for n, i in enumerate(ordered, 1):
+        prio = getattr(i, "priority", None)
+        color, etiqueta = _PRIORITY.get(prio, _PRIORITY["baja"])
+        chip = (
+            f'<span style="display:inline-block;padding:3px 10px;border-radius:20px;'
+            f'background:{color};color:#fff;font-size:10px;font-weight:700;'
+            f'letter-spacing:0.04em;">{etiqueta}</span>'
+        )
+        decision = getattr(i, "recommendation", None)
+        impact = getattr(i, "impact", None)
+
+        decision_html = (
+            f'<div style="margin:12px 0 0;padding:12px 14px;background:#FFF8F5;'
             f'border-left:3px solid {C_BRAND};border-radius:0 8px 8px 0;">'
             f'<div style="font-size:10px;font-weight:700;color:{C_BRAND};text-transform:uppercase;'
-            f'letter-spacing:0.08em;margin-bottom:3px;">Para la próxima</div>'
-            f'<div style="font-size:13px;color:{C_MUTED};line-height:1.55;">{_e(rec)}</div></div>'
-        ) if rec else ""
+            f'letter-spacing:0.08em;margin-bottom:3px;">Qué hacer</div>'
+            f'<div style="font-size:13.5px;color:{C_INK};line-height:1.55;">{_e(decision)}</div>'
+            + (f'<div style="margin-top:7px;padding-top:7px;border-top:1px solid #F3E3DA;'
+               f'font-size:12.5px;color:{C_MUTED};line-height:1.5;">'
+               f'<strong style="color:{C_INK};">Si lo hacés:</strong> {_e(impact)}</div>'
+               if impact else "")
+            + "</div>"
+        ) if decision else ""
 
         ev = getattr(i, "evidence", None) or []
         ev_html = ""
         if ev:
             items = "".join(
-                f'<li style="margin:0 0 3px;font-size:11px;color:{C_FAINT};">'
+                f'<li style="margin:0 0 3px;font-size:10.5px;color:{C_FAINT};">'
                 f'{_e(e.get("path"))} = <strong style="color:{C_MUTED};">{_e(e.get("value"))}</strong></li>'
                 for e in ev[:6]
             )
             ev_html = (
-                f'<div style="margin-top:10px;padding-top:8px;border-top:1px dashed {C_LINE};">'
-                f'<div style="font-size:10px;font-weight:700;color:{C_FAINT};text-transform:uppercase;'
-                f'letter-spacing:0.06em;margin-bottom:4px;">Datos que la respaldan</div>'
-                f'<ul style="margin:0;padding-left:14px;">{items}</ul></div>'
+                f'<details style="margin-top:10px;">'
+                f'<summary style="font-size:11px;color:{C_FAINT};cursor:pointer;">'
+                f'De dónde sale este dato</summary>'
+                f'<ul style="margin:6px 0 0;padding-left:16px;list-style:none;">{items}</ul>'
+                f"</details>"
             )
 
         cards.append(
             f'<article style="margin:0 0 16px;padding:18px 20px;background:#fff;'
-            f'border:1px solid {C_LINE};border-radius:12px;page-break-inside:avoid;">'
-            f'<h3 style="margin:0 0 8px;font-size:15px;font-weight:800;color:{C_INK};line-height:1.35;">'
-            f'{_e(getattr(i, "title", ""))}{badge}</h3>'
-            f'<p style="margin:0;font-size:14px;color:{C_MUTED};line-height:1.65;">'
-            f'{_e(getattr(i, "description", ""))}</p>{rec_html}{ev_html}</article>'
+            f'border:1px solid {C_LINE};border-left:4px solid {color};border-radius:12px;'
+            f'page-break-inside:avoid;">'
+            f'<div style="margin:0 0 9px;">{chip}</div>'
+            f'<h3 style="margin:0 0 7px;font-size:16px;font-weight:800;color:{C_INK};line-height:1.35;">'
+            f'{n}. {_e(getattr(i, "title", ""))}</h3>'
+            f'<p style="margin:0;font-size:13.5px;color:{C_MUTED};line-height:1.6;">'
+            f'{_e(getattr(i, "description", ""))}</p>{decision_html}{ev_html}</article>'
         )
     return "".join(cards)
+
+
+def _dedup_by(rows: list[dict], key: str) -> list[dict]:
+    """Saca repetidos por el texto de `key`, conservando el primero.
+
+    El sistema re-avisa la misma condición varios días seguidos ("la tarea X
+    está vencida" tres veces), y en un informe para decidir eso es ruido: lo que
+    importa es que pasó y cuándo empezó, no cuántas veces se repitió el aviso.
+    """
+    seen: set[str] = set()
+    out: list[dict] = []
+    for r in rows:
+        text = " ".join((r.get(key) or "").lower().split())
+        if text and text not in seen:
+            seen.add(text)
+            out.append(r)
+    return out
 
 
 def _deviation_detail(metrics: dict) -> str:
@@ -230,7 +272,7 @@ def _deviation_detail(metrics: dict) -> str:
             f'<li style="margin:0 0 4px;font-size:12px;color:{C_MUTED};line-height:1.5;">'
             f'<span style="color:{C_FAINT};">{_e((e.get("created_at") or "")[:10])}</span> · '
             f'{_e(e.get("description"))}</li>'
-            for e in (it.get("historial_events") or [])[-6:]
+            for e in _dedup_by(it.get("historial_events") or [], "description")[:3]
         )
         al_rows = "".join(
             f'<li style="margin:0 0 4px;font-size:12px;color:{C_MUTED};line-height:1.5;">'
@@ -239,7 +281,7 @@ def _deviation_detail(metrics: dict) -> str:
             + (f' <span style="color:{C_FAINT};">(de una predecesora)</span>'
                if a.get("on_predecessor") else "")
             + "</li>"
-            for a in (it.get("alerts") or [])[:6]
+            for a in _dedup_by(it.get("alerts") or [], "message")[:3]
         )
         casc = it.get("cascade_impact") or {}
         casc_txt = ""
@@ -275,8 +317,17 @@ def _deviation_detail(metrics: dict) -> str:
     return "".join(blocks)
 
 
-def build_full_report_html(*, obra_name: str, period: str, metrics: dict, insights: list) -> str:
-    """Informe completo autocontenido, listo para imprimir a PDF."""
+def build_full_report_html(
+    *, obra_name: str, period: str, metrics: dict, insights: list,
+    autoprint: bool = False,
+) -> str:
+    """Informe completo autocontenido, listo para imprimir a PDF.
+
+    `autoprint` abre el diálogo de guardar-como-PDF apenas carga la página. Se usa
+    cuando el lector viene del botón del email, donde lo que pidió fue "descargar":
+    sin un generador de PDF en el servidor, esto es lo más cerca de una descarga
+    directa que se puede hacer sin sumar una dependencia pesada.
+    """
     m = metrics or {}
     obra = m.get("obra") or {}
     conc = (m.get("risk_concentration") or {}).get("by_task") or {}
@@ -397,6 +448,11 @@ def build_full_report_html(*, obra_name: str, period: str, metrics: dict, insigh
     )
 
     generated = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+    autoprint_script = (
+        "<script>window.addEventListener('load',function(){setTimeout(function(){"
+        "window.print();},400);});</script>"
+        if autoprint else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -435,7 +491,7 @@ def build_full_report_html(*, obra_name: str, period: str, metrics: dict, insigh
 
   <div class="print-bar">
     <span style="font-size:12.5px;color:{C_MUTED};">Informe generado el {generated}</span>
-    <button class="print-btn" onclick="window.print()">Imprimir informe completo</button>
+    <button class="print-btn" onclick="window.print()">Descargar PDF</button>
   </div>
 
   <header style="background:linear-gradient(135deg,#1B2A34 0%,#243642 100%);padding:34px 44px;color:#fff;">
@@ -451,15 +507,13 @@ def build_full_report_html(*, obra_name: str, period: str, metrics: dict, insigh
 
     <div style="display:flex;flex-wrap:wrap;gap:12px;margin:0 0 34px;">{stats}</div>
 
-    {_section("Conclusiones", _conclusions_block(insights),
-              subtitle="Redactadas automáticamente a partir de los números de esta obra. Cada cifra "
-                       "que aparece acá sale del cálculo — no es una estimación del modelo.")}
+    {_section("Qué decidir este mes", _conclusions_block(insights),
+              subtitle="Ordenado por lo que más mueve el cronograma.")}
     {chart_tasks}
     {chart_resp}
     {chart_est}
     {_section("Detalle de los mayores desvíos", _deviation_detail(m),
-              subtitle="Lo que registró el sistema alrededor de cada tarea: los cambios, las alertas "
-                       "que se dispararon y el efecto sobre las tareas que dependían de ella.")}
+              subtitle="El detalle de cada tarea trabada, por si querés ir al fondo.")}
     {alerts_block}
     {bitacora_block}
     {dq_block}
@@ -475,5 +529,6 @@ def build_full_report_html(*, obra_name: str, period: str, metrics: dict, insigh
     </section>
   </div>
 </div>
+{autoprint_script}
 </body>
 </html>"""

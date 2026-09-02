@@ -63,37 +63,49 @@ _INSIGHTS_SCHEMA = {
                     "subject": {
                         "type": "string",
                         "description": (
-                            "Sujeto concreto de la conclusión, para agrupar el mismo patrón "
-                            "entre meses: la disciplina, la categoría de bitácora, 'task_<id>', "
-                            "'by_task'/'by_responsible' o el tipo de alerta."
+                            "Sujeto concreto, para seguir el mismo patrón entre meses: la "
+                            "disciplina, la categoría de bitácora, 'task_<id>', 'by_task'/"
+                            "'by_responsible' o el tipo de alerta."
                         ),
                     },
-                    "title": {"type": "string", "description": "Título corto, sin punto final"},
-                    "description": {
+                    "priority": {"type": "string", "enum": ["alta", "media", "baja"]},
+                    "title": {
                         "type": "string",
-                        "description": "Narrativa de 2 a 4 líneas en español rioplatense",
+                        "description": "Titular accionable de una línea, sin punto final",
+                    },
+                    "situation": {
+                        "type": "string",
+                        "description": "Qué está pasando. UNA o DOS oraciones, con los números.",
+                    },
+                    "decision": {
+                        "type": "string",
+                        "description": (
+                            "La acción concreta a tomar, en imperativo y con sujeto real "
+                            "(quién, sobre qué tarea). Una o dos oraciones."
+                        ),
+                    },
+                    "impact": {
+                        "type": "string",
+                        "description": (
+                            "Qué se destraba si toma esa decisión, en días o tareas del "
+                            "snapshot. Una oración."
+                        ),
                     },
                     "evidence": {
                         "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "path": {
-                                    "type": "string",
-                                    "description": "Ruta con puntos dentro del snapshot, ej 'risk_concentration.by_task.concentration_percent'",
-                                },
-                                "value": {"type": "string", "description": "El valor exacto que hay en esa ruta"},
+                                "path": {"type": "string"},
+                                "value": {"type": "string"},
                             },
                             "required": ["path", "value"],
                             "additionalProperties": False,
                         },
                     },
-                    "recommendation": {
-                        "type": ["string", "null"],
-                        "description": "Sugerencia accionable con mirada hacia adelante, o null",
-                    },
                 },
-                "required": ["metric", "subject", "title", "description", "evidence", "recommendation"],
+                "required": ["metric", "subject", "priority", "title", "situation",
+                             "decision", "impact", "evidence"],
                 "additionalProperties": False,
             },
         }
@@ -103,48 +115,54 @@ _INSIGHTS_SCHEMA = {
 }
 
 SYSTEM_PROMPT = """\
-Sos el analista de obra de CONSTRUCTA, una app de gestión de obras de construcción. \
-Recibís un informe de estadísticas YA CALCULADO de una obra y escribís las conclusiones \
-para el jefe de obra.
+Escribís el informe mensual de una obra para el DUEÑO de la obra. No es un analista: \
+es quien decide y quien paga. Lee esto cinco minutos entre dos reuniones y necesita salir \
+sabiendo QUÉ HACER esta semana para que la obra no siga atrasándose.
 
 REGLA MÁS IMPORTANTE: vos redactás, NO calculás. Cada número que escribas tiene que estar \
-literalmente en el JSON que te paso. No estimes, no promedies, no redondees a ojo, no \
-infieras cifras que no estén. Un número inventado invalida la conclusión entera y se \
-descarta automáticamente.
+literalmente en el JSON que te paso. No estimes, no promedies, no saques porcentajes por tu \
+cuenta, no redondees a ojo. Un número inventado invalida la conclusión entera y se descarta \
+automáticamente.
 
-Sobre qué concluir — recorré estas cinco métricas y generá una conclusión por cada una que \
-tenga algo relevante que decir:
-1. estimation_accuracy — precisión de la estimación, si alguna disciplina tiene un desvío \
-   significativo respecto de lo planificado.
-2. bitacora_themes — temas que se repiten en la bitácora y su correlación con retrasos. \
-   OJO: es correlación temporal, NO causalidad. Escribí "en X de las Y veces que se mencionó \
-   Z hubo un retraso en los días siguientes", nunca "Z causó los retrasos".
-3. schedule_deviation — la cadena de hechos detrás del mayor desvío de cronograma. Acá SÍ \
-   armás la historia: usá el paquete de evidencia (historial, bitácoras, alertas, cascada) \
-   de top_deviations para explicar qué pasó y en qué orden.
-4. risk_concentration — si el atraso está concentrado en pocas tareas o pocos responsables.
-5. alert_reaction — si hay algo destacable en cuánto se tarda en reaccionar a las alertas.
+CÓMO ESCRIBIR (esto es lo que más importa):
+- Andá al grano. El dueño no quiere el análisis, quiere la conclusión y la acción.
+- Nada de relleno: "es importante destacar", "cabe mencionar", "se observa que" están prohibidos.
+- Nada de explicar la metodología ni de justificar cómo se midió. Eso ya está en el informe.
+- Español rioplatense, directo, como le hablarías al dueño en la obra. Sin jerga de consultora.
+- `situation`: UNA o DOS oraciones. Qué pasa y con qué números. Nada más.
+- `decision`: la acción concreta, en imperativo, con nombre y apellido de la tarea o la persona \
+  cuando el dato esté. "Sentate con X a destrabar la tarea Y esta semana", no "considerar \
+  evaluar mecanismos de seguimiento".
+- `impact`: qué se destraba si lo hace, en días o tareas que estén en el JSON. Esto es lo que \
+  justifica que le dedique tiempo.
+- `priority`: alta si mueve la aguja del cronograma ya; media si importa pero no es urgente; \
+  baja si es para tener en cuenta.
 
-Si una métrica no tiene nada relevante ese mes, NO generes una conclusión sobre ella. \
-Mejor tres conclusiones que importen que cinco rellenadas con paja. Si el snapshot no tiene \
-datos suficientes para ninguna, devolvé la lista vacía.
+QUÉ BUSCAR — pensá como quien tiene que salvar el cronograma, no como quien lo describe. \
+Lo más valioso es el CUELLO DE BOTELLA: la tarea o la persona que, si se destraba, arrastra \
+al resto. Priorizá:
+1. La cadena de dependencias: una tarea trabada que bloquea a varias vale mucho más que una \
+   tarea aislada con el mismo atraso. Miralo en top_deviations → cascade_impact y en las \
+   alertas de predecesoras.
+2. Concentración: si pocas tareas o pocas personas explican la mayoría del atraso, ahí está \
+   la palanca. Si el atraso está repartido parejo, el problema es el cronograma original y \
+   eso también es una decisión (replanificar).
+3. Alertas que nadie resolvió: si el sistema avisó y no pasó nada, el problema es de proceso, \
+   no de obra.
+4. Patrones que se repiten en la bitácora y anticipan retrasos (correlación temporal, NO causa: \
+   nunca escribas que X causó el retraso).
+5. Disciplinas que se estiman sistemáticamente mal: sirve para la próxima obra.
 
-Antes de concluir, mirá `data_quality`: si hay muchas tareas excluidas del cálculo, las \
-métricas hablan de una parte de la obra y tu redacción tiene que matizarlo, no afirmar \
-sobre el total.
+Generá entre 2 y 4 conclusiones. MENOS ES MEJOR: cuatro decisiones buenas valen más que seis \
+tibias. Si una métrica no tiene nada que aporte a una decisión, no generes nada sobre ella. Si \
+el snapshot no alcanza para ninguna decisión, devolvé la lista vacía.
 
-Para cada conclusión:
-- `title`: corto y concreto, sin punto final.
-- `description`: 2 a 4 líneas, español rioplatense, tono profesional y directo. Nada de \
-  relleno tipo "es importante destacar que".
-- `evidence`: los datos exactos del snapshot que la sustentan, cada uno con su ruta con \
-  puntos y el valor tal cual figura ahí. Citá el dato preciso, no una paráfrasis vaga.
-- `recommendation`: cuando aplique, una acción concreta con mirada hacia adelante — no \
-  "esto pasó" sino "esto pasó, y para tu próxima obra convendría…". Es una lección \
-  aprendida que tiene que servir más allá de esta obra. Si no hay nada accionable, null.
-- `subject`: el sujeto concreto del patrón, para poder seguirlo mes a mes — el nombre de la \
-  disciplina, la categoría de bitácora, "task_<id>" para un desvío puntual, "by_task" o \
-  "by_responsible" para concentración, o el tipo de alerta.
+Antes de escribir mirá `data_quality`: si hay tareas excluidas del cálculo, los números hablan \
+de una parte de la obra. Si eso cambia lo que conviene decidir, decilo en una línea; si no, no \
+gastes espacio.
+
+En `evidence` poné los datos exactos del snapshot que sostienen la conclusión, cada uno con su \
+ruta y el valor tal cual figura. No se muestran en el resumen: son la trazabilidad del informe.
 """
 
 
@@ -383,8 +401,10 @@ class ObraInsightService:
             return f"métrica desconocida: {conclusion.get('metric')!r}"
         if not (conclusion.get("title") or "").strip():
             return "sin título"
-        if not (conclusion.get("description") or "").strip():
-            return "sin descripción"
+        if not (conclusion.get("situation") or "").strip():
+            return "sin situación"
+        if not (conclusion.get("decision") or "").strip():
+            return "sin decisión — el informe es para decidir, no para describir"
 
         kept = []
         for item in conclusion.get("evidence") or []:
@@ -408,7 +428,12 @@ class ObraInsightService:
 
         numbers = collect_numbers(metrics)
         strings = collect_strings(metrics)
-        text = f"{conclusion['title']} {conclusion['description']}"
+        # Todos los textos que ve el usuario, no solo el título: la decisión y el
+        # impacto son justamente donde el modelo tiende a inventar magnitudes.
+        text = " ".join(
+            conclusion.get(f) or ""
+            for f in ("title", "situation", "decision", "impact")
+        )
         for value in _numbers_in_text(text, strings):
             if not _number_is_supported(value, numbers):
                 return f"el texto cita {value:g}, que no está en el snapshot"
@@ -470,9 +495,11 @@ class ObraInsightService:
             # Mismo patrón, ya vivo: se refuerza, no se duplica.
             active.reinforcement_count += 1
             active.title = conclusion["title"]
-            active.description = conclusion["description"]
+            active.description = conclusion["situation"]
             active.evidence = conclusion["evidence"]
-            active.recommendation = conclusion.get("recommendation")
+            active.recommendation = conclusion.get("decision")
+            active.impact = conclusion.get("impact")
+            active.priority = conclusion.get("priority")
             active.strength = strength
             active.last_period = period
             active.updated_at = datetime.now(timezone.utc)
@@ -510,9 +537,11 @@ class ObraInsightService:
             metric=conclusion["metric"],
             topic_key=topic_key,
             title=conclusion["title"],
-            description=conclusion["description"],
+            description=conclusion["situation"],
             evidence=conclusion["evidence"],
-            recommendation=conclusion.get("recommendation"),
+            recommendation=conclusion.get("decision"),
+            impact=conclusion.get("impact"),
+            priority=conclusion.get("priority"),
             status=InsightStatus.NUEVA,
             reinforcement_count=0,
             strength=strength,

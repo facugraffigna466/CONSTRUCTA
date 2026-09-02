@@ -50,19 +50,22 @@ SNAPSHOT = {
 
 
 def _conclusion(**over) -> dict:
+    """Respuesta tipo de la IA, con la forma que exige el schema actual."""
     base = {
         "metric": "bitacora_themes",
         "subject": "falta_material",
+        "priority": "alta",
         "title": "La falta de material precede a los retrasos",
-        "description": (
+        "situation": (
             "Se mencionó falta de material 5 veces y en 4 de esas hubo un retraso "
             "en los días siguientes."
         ),
+        "decision": "Confirmá el stock la semana previa a cada hormigonado.",
+        "impact": "Evitás que se repita el patrón en las 5 tareas que vienen.",
         "evidence": [
             {"path": "bitacora_themes.categories.0.mentions", "value": "5"},
             {"path": "bitacora_themes.categories.0.mentions_followed_by_delay", "value": "4"},
         ],
-        "recommendation": "Para la próxima obra, confirmá el stock la semana previa a cada hito.",
     }
     base.update(over)
     return base
@@ -112,8 +115,10 @@ async def test_conclusion_nueva_se_crea(ctx, db):
     assert row.first_period == PERIOD and row.last_period == PERIOD
     assert row.tenant_id == ctx["tenant"].id
     # La narrativa se guarda tal cual la escribió la IA
-    assert "5 veces" in row.description
-    assert row.recommendation.startswith("Para la próxima obra")
+    assert "5 veces" in row.description          # `situation` se guarda como description
+    assert row.recommendation.startswith("Confirmá el stock")
+    assert row.impact.startswith("Evitás que se repita")
+    assert row.priority == "alta"
     # strength = cantidad de menciones de esa categoría en el snapshot
     assert row.strength == 5.0
 
@@ -123,7 +128,7 @@ async def test_conclusiones_de_varias_metricas_conviven(ctx, db):
     otra = _conclusion(
         metric="risk_concentration", subject="by_task",
         title="El atraso está repartido, no concentrado",
-        description="Las 7 tareas atrasadas suman 210 días y el top concentra el 34.8 %.",
+        situation="Las 7 tareas atrasadas suman 210 días y el top concentra el 34.8 %.",
         evidence=[{"path": "risk_concentration.by_task.concentration_percent", "value": "34.8"}],
     )
     rows = await _service(db, [_conclusion(), otra]).generate_for_obra(obra.id, PERIOD)
@@ -145,7 +150,7 @@ async def test_conclusion_repetida_refuerza_y_no_duplica(ctx, db):
     await db.flush()
 
     nueva_redaccion = _conclusion(
-        description="Se mencionó falta de material 5 veces y hubo retraso en 4 de ellas.",
+        situation="Se mencionó falta de material 5 veces y hubo retraso en 4 de ellas.",
     )
     rows = await _service(db, [nueva_redaccion]).generate_for_obra(obra.id, "2026-07")
 
@@ -176,7 +181,7 @@ async def test_conclusion_no_reforzada_queda_intacta(ctx, db):
     otra = _conclusion(
         metric="alert_reaction", subject="task_overdue",
         title="Las alertas vencidas se atienden rápido",
-        description="Las alertas de vencimiento se resuelven en 3.0 horas promedio.",
+        situation="Las alertas de vencimiento se resuelven en 3.0 horas promedio.",
         evidence=[{"path": "alert_reaction.by_type.0.avg_hours", "value": "3.0"}],
     )
     await _service(db, [otra]).generate_for_obra(obra.id, "2026-07")
@@ -241,7 +246,7 @@ async def test_numero_inventado_se_descarta(ctx, db):
     """La IA cita un 87 % que no está en ningún lado del snapshot."""
     obra = ctx["obra"]
     mentirosa = _conclusion(
-        description="La falta de material explica el 87 % de los retrasos de la obra.",
+        situation="La falta de material explica el 87 % de los retrasos de la obra.",
     )
     rows = await _service(db, [mentirosa]).generate_for_obra(obra.id, PERIOD)
 
@@ -262,7 +267,7 @@ async def test_evidencia_con_valor_que_no_coincide_se_descarta(ctx, db):
     """La ruta existe pero el valor citado no es el que hay en el snapshot."""
     obra = ctx["obra"]
     rows = await _service(db, [_conclusion(
-        description="Se mencionó falta de material varias veces.",
+        situation="Se mencionó falta de material varias veces.",
         evidence=[{"path": "bitacora_themes.categories.0.mentions", "value": "12"}],
     )]).generate_for_obra(obra.id, PERIOD)
     assert rows == []
@@ -292,7 +297,7 @@ async def test_evidencia_con_notacion_de_corchetes_resuelve(ctx, db):
     rows = await _service(db, [_conclusion(
         metric="schedule_deviation", subject="task_36",
         title="Estructura y losa arrastró al resto",
-        description="La tarea acumuló 39 días de desvío.",
+        situation="La tarea acumuló 39 días de desvío.",
         evidence=[{"path": "top_deviations.items[0].task.deviation_days", "value": "39"}],
     )]).generate_for_obra(obra.id, PERIOD)
 
@@ -306,7 +311,7 @@ async def test_redondeo_legitimo_no_se_descarta(ctx, db):
     rows = await _service(db, [_conclusion(
         metric="risk_concentration", subject="by_task",
         title="Atraso repartido",
-        description="El top de tareas concentra cerca del 35 % del atraso acumulado.",
+        situation="El top de tareas concentra cerca del 35 % del atraso acumulado.",
         evidence=[{"path": "risk_concentration.by_task.concentration_percent", "value": "34.8"}],
     )]).generate_for_obra(obra.id, PERIOD)
     assert len(rows) == 1
@@ -318,7 +323,7 @@ async def test_fechas_del_snapshot_no_cuentan_como_numeros_inventados(ctx, db):
     rows = await _service(db, [_conclusion(
         metric="schedule_deviation", subject="task_36",
         title="Estructura y losa arrastró al resto",
-        description="La tarea 'Estructura y losa' acumuló 39 días de desvío.",
+        situation="La tarea 'Estructura y losa' acumuló 39 días de desvío.",
         evidence=[{"path": "top_deviations.items.0.task.deviation_days", "value": "39"}],
     )]).generate_for_obra(obra.id, PERIOD)
     assert len(rows) == 1

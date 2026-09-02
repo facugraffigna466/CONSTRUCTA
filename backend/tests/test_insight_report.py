@@ -64,6 +64,8 @@ class FakeInsight:
     title: str = "El atraso está repartido"
     description: str = "Las 6 tareas suman 246 días de atraso."
     recommendation: str | None = "Revisar el cronograma original."
+    impact: str | None = "Recuperás margen en las 6 tareas abiertas."
+    priority: str | None = "alta"
     reinforcement_count: int = 0
     status: str = "nueva"
     evidence: list = field(default_factory=lambda: [
@@ -84,7 +86,7 @@ def test_encabezado_con_obra_y_periodo():
     html = _html()
     assert "Local Comercial" in html
     assert "septiembre de 2026" in html
-    assert "Imprimir informe completo" in html
+    assert "Descargar PDF" in html
 
 
 def test_muestra_la_narrativa_completa_de_la_ia():
@@ -95,16 +97,36 @@ def test_muestra_la_narrativa_completa_de_la_ia():
     assert narrativa in html
 
 
-def test_incluye_recomendacion_y_evidencia():
+def test_cada_decision_dice_que_hacer_y_que_se_destraba():
+    """El informe es para decidir: acción concreta + qué gana si la toma."""
     html = _html()
-    assert "Para la próxima" in html
+    assert "Qué hacer" in html
     assert "Revisar el cronograma original." in html
+    assert "Si lo hacés:" in html
+    assert "Recuperás margen en las 6 tareas abiertas." in html
     assert "risk_concentration.by_task.total_delay_days" in html
+
+
+def test_las_decisiones_se_ordenan_por_prioridad():
+    html = _html(insights=[
+        FakeInsight(title="La menos urgente", priority="baja"),
+        FakeInsight(title="La urgente", priority="alta"),
+    ])
+    assert "Decidir ahora" in html
+    assert "Para tener en cuenta" in html
+    assert html.index("La urgente") < html.index("La menos urgente")
+
+
+def test_autoprint_solo_cuando_se_pide():
+    """Al venir del email se abre el diálogo de guardar PDF; si no, no molesta."""
+    assert "window.print()" in _html(autoprint=True)
+    assert "window.addEventListener('load'" in _html(autoprint=True)
+    assert "window.addEventListener('load'" not in _html()
 
 
 def test_sin_conclusiones_no_queda_una_seccion_vacia():
     html = _html(insights=[])
-    assert "Este mes no encontramos patrones nuevos" in html
+    assert "no encontramos nada que requiera una decisión tuya" in html
 
 
 def test_hero_con_los_numeros_principales():
@@ -260,3 +282,26 @@ async def test_link_vencido_no_sirve(client, ctx):
     q = sign(ctx["obra"].id, PERIOD, ctx["tenant"].id, ttl=-10)   # ya expirado
     r = await client.get(f"{API}/obras/{ctx['obra'].id}/insights/report?period={PERIOD}&{q}")
     assert r.status_code == 403
+
+
+def test_no_repite_la_misma_alerta_tres_veces():
+    """El sistema re-avisa la misma condición varios días; en el informe es ruido."""
+    metrics = {**METRICS, "top_deviations": {"items": [{
+        "task": {"task_id": 46, "title": "Instalación eléctrica", "status": "pendiente",
+                 "start_date": "2026-08-09", "due_date": "2026-08-14",
+                 "completed_date": None, "deviation_days": 47},
+        "historial_events": [
+            {"created_at": "2026-08-22T10:00:00+00:00", "description": "La tarea está vencida"},
+            {"created_at": "2026-08-24T10:00:00+00:00", "description": "La tarea está vencida"},
+            {"created_at": "2026-08-25T10:00:00+00:00", "description": "Se movió la fecha"},
+        ],
+        "alerts": [
+            {"created_at": "2026-08-22T10:00:00+00:00", "message": "Tarea vencida", "on_predecessor": False},
+            {"created_at": "2026-08-24T10:00:00+00:00", "message": "Tarea vencida", "on_predecessor": False},
+        ],
+        "cascade_impact": {"direct_dependent_count": 0, "direct_dependent_task_ids": []},
+    }]}}
+    html = _html(metrics=metrics)
+    assert html.count("La tarea está vencida") == 1
+    assert html.count("Tarea vencida") == 1
+    assert "Se movió la fecha" in html      # lo distinto sí se conserva

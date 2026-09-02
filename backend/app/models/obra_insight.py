@@ -59,7 +59,12 @@ class ObraInsight(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     # [{"path": "risk_concentration.by_task.concentration_percent", "value": "34.8"}]
     evidence: Mapped[list[Any] | None] = mapped_column(JSON)
+    # La decisión concreta que tiene que tomar el dueño de la obra.
     recommendation: Mapped[str | None] = mapped_column(Text)
+    # Qué se destraba si toma esa decisión — en días o tareas, no en adjetivos.
+    impact: Mapped[str | None] = mapped_column(Text)
+    # "alta" | "media" | "baja" — ordena el informe por lo que más mueve la aguja.
+    priority: Mapped[str | None] = mapped_column(String(10))
 
     status: Mapped[InsightStatus] = mapped_column(
         SAEnum(

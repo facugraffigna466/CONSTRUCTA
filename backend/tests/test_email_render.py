@@ -10,7 +10,6 @@ from app.services.email_service import (
     _build_invite_html,
     _build_reset_html,
     _build_verification_html,
-    _first_sentence,
     _period_label,
     build_insights_email_html,
 )
@@ -27,6 +26,8 @@ class FakeInsight:
     status: str = "nueva"
     reinforcement_count: int = 0
     recommendation: str | None = None
+    impact: str | None = None
+    priority: str | None = "media"
     evidence: list = field(default_factory=list)
 
 
@@ -86,8 +87,12 @@ def test_el_email_no_es_de_ancho_fijo():
 
 
 # ── Email de insights ─────────────────────────────────────────────────────────
+#
+# El email es el vistazo de diez segundos: titular, prioridad e impacto. La
+# narrativa, la evidencia y los gráficos viven en el informe completo, del otro
+# lado del botón. Estos tests fijan esa división.
 
-def test_saludo_con_obra_y_periodo_en_castellano():
+def test_encabezado_con_obra_y_periodo():
     html = _render([FakeInsight("T", "D")])
     assert "Vivienda Unifamiliar — Barrio Jardín" in html
     assert "septiembre de 2026" in html
@@ -99,86 +104,77 @@ def test_periodo_label():
     assert _period_label("basura") == "basura"
 
 
-def test_nuevas_muestran_la_narrativa_completa_tal_cual():
-    """Requisito de la etapa: presentación pura, sin resumir ni reescribir."""
-    narrativa = (
-        "La tarea 'Estructura y losa' venció el 22/08 y acumula 39 días de retraso. "
-        "El sistema generó dos alertas que nadie resolvió. La cadena de dependientes "
-        "quedó frenada detrás de ella."
-    )
-    html = _render([FakeInsight("Estructura frenada", narrativa)])
-
-    assert "Nuevo este mes" in html
-    assert narrativa in html          # íntegra, palabra por palabra
-
-
-def test_recomendacion_se_muestra_cuando_existe():
-    html = _render([FakeInsight("T", "D", recommendation="Reforzá el stock antes del hito.")])
-    assert "Para la próxima" in html
-    assert "Reforzá el stock antes del hito." in html
+def test_muestra_titulo_e_impacto_pero_no_la_narrativa():
+    """Lo largo va al informe: en el email entra el titular y qué se destraba."""
+    html = _render([FakeInsight(
+        "Obra civil traba tres frentes",
+        "Narrativa larga que explica todo el detalle y no debería viajar en el email.",
+        impact="Destraba 3 tareas y 92 días de atraso.",
+    )])
+    assert "Obra civil traba tres frentes" in html
+    assert "Destraba 3 tareas y 92 días de atraso." in html
+    assert "Narrativa larga" not in html
 
 
-def test_sin_recomendacion_no_aparece_el_bloque():
-    assert "Para la próxima" not in _render([FakeInsight("T", "D", recommendation=None)])
+def test_la_decision_tampoco_va_en_el_email():
+    """La acción concreta se lee en el informe, no en la vista previa."""
+    html = _render([FakeInsight("T", "D", recommendation="Sentate con Carlos el lunes.")])
+    assert "Sentate con Carlos el lunes." not in html
 
 
-def test_reforzadas_muestran_badge_con_el_contador():
-    html = _render([FakeInsight("T", "D", reinforcement_count=3)])
-    assert "Se repitió 3 veces" in html
-    assert "Se repitió 1 vez" in _render([FakeInsight("T", "D", reinforcement_count=1)])
-
-
-def test_seguimiento_va_resumido_a_titulo_y_una_linea():
-    """Las de meses anteriores se muestran compactas: no la narrativa entera."""
-    primera = "Primera oración que sí se muestra."
-    resto = " Segunda oración que no debería aparecer en el resumen."
+def test_las_prioridades_se_ven_y_ordenan():
+    """Primero lo que más mueve la aguja, sin importar el orden de entrada."""
     html = _render([
-        FakeInsight("Nueva de este mes", "Narrativa nueva.", last_period=PERIOD),
-        FakeInsight("Vieja en seguimiento", primera + resto, last_period="2026-08", status="vista"),
+        FakeInsight("La de prioridad baja", "x", priority="baja"),
+        FakeInsight("La urgente", "x", priority="alta"),
+        FakeInsight("La del medio", "x", priority="media"),
     ])
-
-    assert "Nuevo este mes" in html
-    assert "Seguimos viendo" in html
-    assert "Vieja en seguimiento" in html
-    assert primera in html
-    assert resto.strip() not in html      # solo la primera oración
+    assert "Alta" in html and "Media" in html and "Baja" in html
+    assert html.index("La urgente") < html.index("La del medio") < html.index("La de prioridad baja")
 
 
-def test_first_sentence_recorta_sin_reescribir():
-    assert _first_sentence("Una sola. Y otra.") == "Una sola."
-    assert _first_sentence("Sin punto final") == "Sin punto final"
-    largo = "x" * 300
-    assert _first_sentence(largo).endswith("…")
-    assert len(_first_sentence(largo)) <= 160
+def test_avisa_cuantas_necesitan_decision():
+    html = _render([
+        FakeInsight("Una", "x", priority="alta"),
+        FakeInsight("Otra", "x", priority="alta"),
+        FakeInsight("Tercera", "x", priority="baja"),
+    ])
+    assert "3 cosas para revisar" in html
+    assert "2 de las 3 necesitan una decisión tuya" in html
+
+
+def test_sin_prioridades_altas_lo_dice_distinto():
+    html = _render([FakeInsight("Una", "x", priority="media")])
+    assert "Ninguna urgente, pero conviene mirarlas" in html
 
 
 def test_descartadas_nunca_entran():
     html = _render([
-        FakeInsight("Visible", "Narrativa visible.", status="nueva"),
-        FakeInsight("Descartada por el jefe", "No debería salir.", status="descartada"),
+        FakeInsight("Visible", "x"),
+        FakeInsight("Descartada por el jefe", "x", status="descartada"),
     ])
     assert "Visible" in html
     assert "Descartada por el jefe" not in html
 
 
-def test_solo_seguimiento_no_rompe_ni_muestra_seccion_vacia():
-    html = _render([FakeInsight("Vieja", "Narrativa vieja.", last_period="2026-07", status="vista")])
-    assert "Seguimos viendo" in html
-    assert "Nuevo este mes" not in html
-
-
 def test_sin_conclusiones_lo_dice_explicitamente():
     """Nunca un email vacío o con secciones en blanco sin explicación."""
     html = _render([])
-    assert "Este mes no encontramos patrones nuevos que valga la pena marcarte" in html
-    assert "Nuevo este mes" not in html
-    assert "Seguimos viendo" not in html
-    assert "Imprimir informe completo" in html      # el CTA sigue estando
+    assert "no encontramos nada nuevo que valga la pena marcarte" in html
+    assert "Descargar informe completo" in html      # el CTA sigue estando
 
 
 def test_solo_descartadas_cae_en_el_estado_vacio():
     html = _render([FakeInsight("Descartada", "x", status="descartada")])
-    assert "Este mes no encontramos patrones nuevos" in html
+    assert "no encontramos nada nuevo" in html
+
+
+def test_html_del_contenido_se_escapa():
+    """Los textos vienen de la IA: no deben poder inyectar markup en el email."""
+    html = _render([FakeInsight("<script>alert(1)</script>", "x", impact="5 < 7 & 8 > 2")])
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "5 &lt; 7 &amp; 8 &gt; 2" in html
 
 
 def test_cta_apunta_al_informe_imprimible_firmado():
@@ -190,7 +186,7 @@ def test_cta_apunta_al_informe_imprimible_firmado():
     html = _render([FakeInsight("T", "D")], obra_id=42, tenant_id=7)
     assert "/api/v1/obras/42/insights/report?period=2026-09" in html
     assert "sig=" in html and "tid=7" in html and "exp=" in html
-    assert "Imprimir informe completo" in html
+    assert "Descargar informe completo" in html
 
 
 def test_el_link_del_informe_no_sirve_para_otra_obra():
@@ -207,11 +203,3 @@ def test_el_link_del_informe_no_sirve_para_otra_obra():
     assert verify_report(43, "2026-09", q["tid"], q["exp"], q["sig"]) is False
     assert verify_report(42, "2026-08", q["tid"], q["exp"], q["sig"]) is False
     assert verify_report(42, "2026-09", "8", q["exp"], q["sig"]) is False
-
-
-def test_html_del_contenido_se_escapa():
-    """Los textos vienen de la IA: no deben poder inyectar markup en el email."""
-    html = _render([FakeInsight("<script>alert(1)</script>", "5 < 7 & 8 > 2")])
-    assert "<script>alert(1)</script>" not in html
-    assert "&lt;script&gt;" in html
-    assert "5 &lt; 7 &amp; 8 &gt; 2" in html

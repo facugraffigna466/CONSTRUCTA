@@ -35,6 +35,7 @@ async def get_insights_report(
     obra_id: int,
     db: DbSession,
     period: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
+    download: int = Query(0, description="1 = abre el diálogo de guardar PDF al cargar"),
     exp: str | None = Query(None),
     tid: str | None = Query(None),
     sig: str | None = Query(None),
@@ -71,6 +72,7 @@ async def get_insights_report(
         period=period,
         metrics=snapshot.metrics or {},
         insights=insights,
+        autoprint=bool(download),
     )
     logger.info(
         "Informe servido: obra %d, período %s, %d conclusiones", obra_id, period, len(insights)

@@ -384,50 +384,6 @@ def _insight_status(insight: object) -> str:
     return str(getattr(raw, "value", raw))
 
 
-def _insight_card(insight: object) -> str:
-    """Conclusión completa: título, badge de refuerzo, narrativa y recomendación."""
-    reinforcements = getattr(insight, "reinforcement_count", 0) or 0
-    badge = ""
-    if reinforcements:
-        veces = "vez" if reinforcements == 1 else "veces"
-        badge = f"""
-                <span style="display:inline-block;margin-left:8px;padding:3px 9px;background:#FFF1EA;color:{_BRAND_ORANGE};font-size:11px;font-weight:700;border-radius:20px;vertical-align:middle;">
-                  Se repitió {reinforcements} {veces}
-                </span>"""
-
-    recommendation = getattr(insight, "recommendation", None)
-    recommendation_html = ""
-    if recommendation:
-        recommendation_html = f"""
-                <div style="margin:14px 0 0;padding:12px 14px;background:#FFF8F5;border-left:3px solid {_BRAND_ORANGE};border-radius:0 8px 8px 0;">
-                  <p style="margin:0 0 4px;font-size:11px;font-weight:700;color:{_BRAND_ORANGE};text-transform:uppercase;letter-spacing:0.08em;">
-                    Para la próxima
-                  </p>
-                  <p style="margin:0;font-size:14px;color:{_BRAND_MUTED};line-height:1.55;">
-                    {_escape(recommendation)}
-                  </p>
-                </div>"""
-
-    return f"""
-              <div style="margin:0 0 18px;padding:20px;background:#FBFAF8;border:1px solid #EDEBE7;border-radius:12px;">
-                <h2 style="margin:0 0 10px;font-size:16px;font-weight:800;color:{_BRAND_INK};line-height:1.35;">
-                  {_escape(getattr(insight, 'title', ''))}{badge}
-                </h2>
-                <p style="margin:0;font-size:14.5px;color:{_BRAND_MUTED};line-height:1.65;">
-                  {_escape(getattr(insight, 'description', ''))}
-                </p>{recommendation_html}
-              </div>"""
-
-
-def _insight_followup_row(insight: object) -> str:
-    """Conclusión en seguimiento: solo título + una línea."""
-    return f"""
-                <li style="margin:0 0 12px;">
-                  <span style="font-size:14px;font-weight:700;color:{_BRAND_INK};">{_escape(getattr(insight, 'title', ''))}</span><br>
-                  <span style="font-size:13px;color:#8E97A0;line-height:1.5;">{_escape(_first_sentence(getattr(insight, 'description', '')))}</span>
-                </li>"""
-
-
 def insights_report_url(obra_id: int, period: str, tenant_id: int | None = None) -> str:
     """URL del informe completo imprimible, firmada para abrirse desde el email.
 
@@ -438,7 +394,45 @@ def insights_report_url(obra_id: int, period: str, tenant_id: int | None = None)
 
     base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
     query = sign_report_query(obra_id, period, tenant_id)
-    return f"{base}/api/v1/obras/{obra_id}/insights/report?period={period}&{query}"
+    return f"{base}/api/v1/obras/{obra_id}/insights/report?period={period}&download=1&{query}"
+
+
+_PRIORITY_STYLE = {
+    "alta":  ("#d03b3b", "Alta"),
+    "media": ("#c97d0e", "Media"),
+    "baja":  ("#5B6770", "Baja"),
+}
+
+
+def _priority_chip(priority: str | None) -> str:
+    if priority not in _PRIORITY_STYLE:
+        return ""
+    color, label = _PRIORITY_STYLE[priority]
+    return (
+        f'<span style="display:inline-block;padding:2px 8px;border-radius:20px;'
+        f'background:{color};color:#fff;font-size:10px;font-weight:700;'
+        f'letter-spacing:0.04em;vertical-align:middle;">{label}</span>'
+    )
+
+
+def _insight_line(insight: object) -> str:
+    """Una conclusión en el email: prioridad, titular y el impacto en una línea.
+
+    El email es el vistazo de diez segundos — el detalle, la evidencia y los
+    gráficos están en el informe completo. Acá va lo mínimo para que el dueño
+    decida si abre el informe ahora o después.
+    """
+    impact = getattr(insight, "impact", None)
+    impact_html = (
+        f'<div style="margin:3px 0 0;font-size:12.5px;color:#8E97A0;line-height:1.5;">'
+        f'{_escape(impact)}</div>'
+    ) if impact else ""
+    return (
+        f'<tr><td style="padding:0 0 14px;">'
+        f'<div style="font-size:14px;font-weight:700;color:{_BRAND_INK};line-height:1.45;">'
+        f'{_priority_chip(getattr(insight, "priority", None))} '
+        f'{_escape(getattr(insight, "title", ""))}</div>{impact_html}</td></tr>'
+    )
 
 
 def build_insights_email_html(
@@ -450,45 +444,30 @@ def build_insights_email_html(
     frontend_url: str | None = None,
     tenant_id: int | None = None,
 ) -> str:
-    """Arma el email mensual de insights de una obra.
+    """Email mensual: el vistazo. El detalle vive en el informe completo.
 
-    Recibe conclusiones YA generadas y guardadas (etapa 3) y solo las presenta:
-    la narrativa de cada una se muestra tal cual la escribió la IA.
-
-    Separa en dos secciones según el ciclo en que aparecieron:
-      - "Nuevo este mes": `last_period == period` (nacieron o se reforzaron ahora).
-      - "Seguimos viendo": activas de meses anteriores que no se movieron —
-        resumidas a título + una línea para no saturar.
-    Las descartadas nunca entran. Si no hay nada de nada, el email lo dice
-    explícitamente en vez de salir vacío.
+    Deliberadamente corto — el dueño de la obra lo abre en el teléfono y tiene
+    que entender en diez segundos si hay algo que lo obligue a actuar. Por eso
+    solo van los titulares con su prioridad e impacto; la narrativa, la
+    evidencia y los gráficos están del otro lado del botón.
     """
     cta_url = insights_report_url(obra_id, period, tenant_id)
-
     live = [i for i in insights if _insight_status(i) in _LIVE_INSIGHT_STATUSES]
-    fresh = [i for i in live if getattr(i, "last_period", None) == period]
-    ongoing = [i for i in live if getattr(i, "last_period", None) != period]
-
-    intro = f"""              <p style="margin:0 0 24px;font-size:15px;color:{_BRAND_MUTED};line-height:1.6;">
-                Esto es lo que encontramos en <strong style="color:{_BRAND_INK};">{_escape(obra_name)}</strong>
-                durante {_period_label(period)}.
-              </p>"""
 
     if not live:
-        body = intro + f"""
-              <div style="margin:0;padding:24px;background:#FBFAF8;border:1px solid #EDEBE7;border-radius:12px;text-align:center;">
-                <p style="margin:0;font-size:15px;color:{_BRAND_MUTED};line-height:1.6;">
-                  Este mes no encontramos patrones nuevos que valga la pena marcarte.
-                </p>
-                <p style="margin:8px 0 0;font-size:13px;color:#8E97A0;line-height:1.55;">
-                  Seguimos midiendo la obra igual: si aparece algo, te lo contamos en el próximo informe.
-                </p>
-              </div>"""
+        body = f"""              <p style="margin:0 0 20px;font-size:15px;color:{_BRAND_MUTED};line-height:1.6;">
+                Revisamos <strong style="color:{_BRAND_INK};">{_escape(obra_name)}</strong> y este mes
+                no encontramos nada nuevo que valga la pena marcarte.
+              </p>
+              <p style="margin:0;font-size:14px;color:#8E97A0;line-height:1.6;">
+                Los números de la obra están igual en el informe completo, por si querés mirarlos.
+              </p>"""
         return _email_shell(
             title="Sin novedades este mes",
             body_html=body,
             cta_url=cta_url,
-            cta_label="Imprimir informe completo",
-            eyebrow=f"Informe de obra · {_period_label(period)}",
+            cta_label="Descargar informe completo",
+            eyebrow=f"{_escape(obra_name)} · {_period_label(period)}",
             cta_fallback=False,
             footer_html=(
                 "Recibís este resumen mensual porque seguís esta obra en Constructa.<br>\n"
@@ -496,29 +475,34 @@ def build_insights_email_html(
             ),
         )
 
-    body = intro
+    # Orden: primero lo que más mueve la aguja.
+    rank = {"alta": 0, "media": 1, "baja": 2}
+    live = sorted(live, key=lambda i: rank.get(getattr(i, "priority", None) or "baja", 3))
+    altas = sum(1 for i in live if getattr(i, "priority", None) == "alta")
 
-    if fresh:
-        body += f"""
-              <p style="margin:28px 0 14px;font-size:13px;font-weight:700;color:{_BRAND_INK};text-transform:uppercase;letter-spacing:0.08em;">
-                Nuevo este mes
-              </p>"""
-        body += "".join(_insight_card(i) for i in fresh)
+    if altas:
+        cabecera = (
+            f'{altas} de las {len(live)} necesita{"n" if altas > 1 else ""} una decisión tuya'
+            if altas > 1 else
+            f'1 de las {len(live)} necesita una decisión tuya'
+        )
+    else:
+        cabecera = "Ninguna urgente, pero conviene mirarlas"
 
-    if ongoing:
-        body += f"""
-              <p style="margin:28px 0 14px;font-size:13px;font-weight:700;color:{_BRAND_INK};text-transform:uppercase;letter-spacing:0.08em;">
-                Seguimos viendo
+    lines = "".join(_insight_line(i) for i in live)
+    body = f"""              <p style="margin:0 0 22px;font-size:15px;color:{_BRAND_MUTED};line-height:1.6;">
+                {len(live)} cosa{"s" if len(live) != 1 else ""} para revisar en
+                <strong style="color:{_BRAND_INK};">{_escape(obra_name)}</strong>.
+                {_escape(cabecera)}.
               </p>
-              <ul style="margin:0;padding:0 0 0 18px;">{''.join(_insight_followup_row(i) for i in ongoing)}
-              </ul>"""
+              <table width="100%" cellpadding="0" cellspacing="0">{lines}</table>"""
 
     return _email_shell(
-        title="Tu resumen mensual de obra",
+        title="Tu obra este mes",
         body_html=body,
         cta_url=cta_url,
-        cta_label="Imprimir informe completo",
-        eyebrow=f"Informe de obra · {_period_label(period)}",
+        cta_label="Descargar informe completo",
+        eyebrow=f"{_escape(obra_name)} · {_period_label(period)}",
         cta_fallback=False,
         footer_html=(
             "Recibís este resumen mensual porque seguís esta obra en Constructa.<br>\n"

@@ -129,11 +129,13 @@ async def main() -> None:
             marca = "NUEVA" if i.last_period == period and not i.reinforcement_count else (
                 f"REFORZADA x{i.reinforcement_count}" if i.last_period == period else "EN SEGUIMIENTO"
             )
-            print(f"  [{marca}]  {i.title}")
+            prio = (i.priority or "?").upper()
+            print(f"  [{prio}] [{marca}]  {i.title}")
             print(f"      {i.description}")
             if i.recommendation:
-                print(f"      → {i.recommendation}")
-            print(f"      evidencia: {[e['path'] for e in (i.evidence or [])][:3]}")
+                print(f"      QUÉ HACER: {i.recommendation}")
+            if i.impact:
+                print(f"      SI LO HACÉS: {i.impact}")
             print()
 
         # ── Etapa 4 ──
