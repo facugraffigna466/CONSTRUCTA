@@ -653,7 +653,11 @@ Los 15 riesgos de la tabla §7 quedaron cerrados el 21/08 (`#78`) y el 24/08 (`#
 
 **Corrección:** el tope de carga sigue en 25 MB (el plano se descarga bien desde la web), pero el sistema ahora lo advierte al elegir el archivo, al subir una versión nueva y con un badge permanente en la fila. El umbral vive en el backend (`WHATSAPP_MAX_BYTES`) y se expone como campo calculado `too_big_for_whatsapp`.
 
-**Brecha conocida, aceptada:** quien pide por WhatsApp un plano que excede el límite sigue sin recibir respuesta. Se evaluó responderle con una explicación, pero los responsables que usan el bot no tienen acceso a la aplicación web, de modo que derivarlos ahí no resuelve su necesidad. La alternativa de fondo —comprimir automáticamente— quedó fuera de alcance: es viable para imágenes (Pillow) pero riesgosa para PDF vectorial, donde una compresión agresiva compromete la legibilidad de las cotas.
+**Cierre de la brecha (2026-08-28, misma jornada).** En una primera pasada solo se avisaba a quien cargaba el plano, de modo que el responsable que lo pedía desde la obra seguía sin recibir nada. Se cerró: `_format_plano_reply` verifica el tamaño **antes** de construir la URL y, si excede el límite, responde con el nombre y la versión del plano más la explicación de por qué no puede adjuntarlo, sin `media_url`.
+
+El texto no deriva a la aplicación web deliberadamente —quien pide un plano por WhatsApp es, por definición, alguien que no tiene acceso a ella—; la única salida accionable desde la obra es pedírselo a quien sí lo tiene. Hay un test que verifica esa restricción explícitamente, además de que no se intente adjuntar el archivo.
+
+Lo que permanece fuera de alcance es **entregar** el plano igualmente, es decir la compresión automática: viable para imágenes (Pillow) pero riesgosa para PDF vectorial, donde una compresión agresiva compromete la legibilidad de las cotas.
 
 ### D.4 — Nota metodológica
 

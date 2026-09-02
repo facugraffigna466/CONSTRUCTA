@@ -1202,15 +1202,18 @@ export function GanttTimeline({
                   })}
                 </div>
 
-                {/* Today vertical line */}
+                {/* Today marker — banda de fondo + línea fina.
+                    Va DEBAJO de barras y flechas (zIndex 0) para no tapar
+                    dependencias ni etiquetas; el día de hoy ya se destaca en
+                    el header de fechas con la celda naranja. */}
                 {0 >= rangeStart && 0 <= rangeEnd && (
                   <div style={{
                     position: "absolute", top: 0, bottom: 0,
                     left: offsetToLeft(0),
-                    width: 2,
-                    background: "linear-gradient(180deg,#E76A2D 0%,rgba(231,106,45,0.35) 100%)",
-                    boxShadow: "0 0 0 4px rgba(231,106,45,0.06)",
-                    pointerEvents: "none", zIndex: 4,
+                    width: dayW,
+                    background: "rgba(231,106,45,0.07)",
+                    borderLeft: "1px dashed rgba(231,106,45,0.55)",
+                    pointerEvents: "none", zIndex: 0,
                   }} />
                 )}
 

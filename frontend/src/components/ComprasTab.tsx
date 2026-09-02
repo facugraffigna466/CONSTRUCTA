@@ -1324,7 +1324,7 @@ function SolicitudAllModal({
 
 // ─── Tab principal ────────────────────────────────────────────────────────────
 
-export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; obraName: string; tasks?: Task[] }) {
+export function ComprasTab({ obraId, obraName, tasks = [], focusTaskId }: { obraId: number; obraName: string; tasks?: Task[]; focusTaskId?: number | null }) {
   const { confirm } = useConfirm();
   const [data, setData]                 = useState<PresupuestoResponse | null>(null);
   const [orders, setOrders]             = useState<PurchaseOrder[]>([]);
@@ -1338,7 +1338,10 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
   const [statusFilter, setStatusFilter] = useState("todos");
   const [taskFilter]                     = useState("todas");
   const [search, setSearch]             = useState("");
-  const [collapsed, setCollapsed]       = useState<Set<number>>(new Set());
+  // null = el usuario todavía no tocó ningún chevron: la apertura se deriva
+  // del foco (si venís desde la planilla, sólo esa tarea queda desplegada).
+  const [collapsed, setCollapsed]       = useState<Set<number> | null>(null);
+  const scrolledToFocus                 = useRef(false);
 
   const [showOrderModal, setShowOrderModal]           = useState(false);
   const [showAddMaterial, setShowAddMaterial]         = useState(false);
@@ -1419,6 +1422,17 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
         return !q || g.title.toLowerCase().includes(q) || g.rows.length > 0;
       });
   }, [groups, search, statusFilter, taskFilter]);
+
+  // Al llegar desde la planilla, centramos la tarea en pantalla para que se vea
+  // sin scrollear. Una sola vez: después el usuario navega como quiera.
+  useEffect(() => {
+    if (focusTaskId == null || scrolledToFocus.current) return;
+    if (!filteredGroups.some((g) => g.taskId === focusTaskId)) return; // aún sin datos
+    const el = document.querySelector(`[data-task-group="${focusTaskId}"]`);
+    if (!el) return;
+    scrolledToFocus.current = true;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusTaskId, filteredGroups]);
 
   async function handleSend(order: PurchaseOrder, channel: "whatsapp" | "email") {
     setActingOrder(order.id); setActionError(null);
@@ -1736,7 +1750,11 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {filteredGroups.map((g, gi) => {
-                      const isOpen = !collapsed.has(gi);
+                      // Sin interacción previa: abierta sólo la tarea enfocada
+                      // (o todas, si no venís de la planilla).
+                      const isOpen = collapsed
+                        ? !collapsed.has(gi)
+                        : (focusTaskId == null || g.taskId === focusTaskId);
                       const mPend = g.rows.filter(r => r.status === "pendiente").length;
                       const mPed  = g.rows.filter(r => r.status === "pedido").length;
                       const mRec  = g.rows.filter(r => r.status === "recibido").length;
@@ -1749,11 +1767,22 @@ export function ComprasTab({ obraId, obraName, tasks = [] }: { obraId: number; o
                       return (
                         <div
                           key={g.taskId}
+                          data-task-group={g.taskId}
                           style={{ background: "#fff", border: `1px solid ${mPend > 0 ? "#F0D0A8" : "#E6E7E5"}`, borderRadius: 14, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.07)" }}
                         >
                           {/* Card header */}
                           <button
-                            onClick={() => setCollapsed(prev => { const n = new Set(prev); n.has(gi) ? n.delete(gi) : n.add(gi); return n; })}
+                            onClick={() => setCollapsed(prev => {
+                              // Primer click: partimos del estado que se ve ahora.
+                              const base = prev ?? new Set(
+                                focusTaskId == null
+                                  ? []
+                                  : filteredGroups.flatMap((x, i) => (x.taskId === focusTaskId ? [] : [i]))
+                              );
+                              const n = new Set(base);
+                              if (n.has(gi)) n.delete(gi); else n.add(gi);
+                              return n;
+                            })}
                             style={{ width: "100%", display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", background: "none", border: "none", cursor: "pointer", textAlign: "left", boxSizing: "border-box", fontFamily: FONT }}
                           >
                             <span style={{ color: "#8E97A0", flexShrink: 0, display: "flex", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)", transition: "transform 0.2s" }}>

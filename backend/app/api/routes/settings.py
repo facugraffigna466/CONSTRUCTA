@@ -3,15 +3,8 @@ from sqlalchemy import text
 
 from app.core.config import settings as app_settings
 from app.core.deps import AdminUser, DbSession
-from app.integrations.twilio.client import send_whatsapp_message
 from app.repositories.settings import SettingsRepository
-from app.schemas.settings import (
-    SettingsPatch,
-    SettingsRead,
-    SystemHealth,
-    TestWhatsAppRequest,
-)
-from app.services.notification_service import NotificationService
+from app.schemas.settings import SettingsPatch, SettingsRead, SystemHealth
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -51,25 +44,3 @@ async def system_health(db: DbSession, _: AdminUser) -> SystemHealth:
         whatsapp_configured=whatsapp_configured,
         whatsapp_number=whatsapp_number,
     )
-
-
-@router.post("/test-whatsapp")
-async def test_whatsapp(body: TestWhatsAppRequest, _: AdminUser) -> dict:
-    sid = await send_whatsapp_message(
-        body.phone_number,
-        "✅ Mensaje de prueba desde CONSTRUCTA. El chatbot está funcionando correctamente.",
-    )
-    if sid:
-        return {"success": True, "sid": sid}
-    return {"success": False, "detail": "Twilio no configurado o error al enviar."}
-
-
-@router.post("/simulate-overdue")
-async def simulate_overdue(db: DbSession, current_user: AdminUser) -> dict:
-    # Scopeado al tenant del admin que dispara la simulación — sin esto,
-    # "Simular vencidos" en Configuración marcaba como vencidas las tareas de
-    # TODAS las empresas del sistema (docs/auditoria/11-panel-configuracion.md,
-    # hallazgo 3). El cron real (scheduler.py) sigue llamando sin tenant_id
-    # a propósito: ese sí debe procesar todo el sistema en cada corrida.
-    count = await NotificationService(db).mark_overdue_tasks(tenant_id=current_user.tenant_id)
-    return {"alerts_created": count}

@@ -2292,3 +2292,122 @@ Se verificó además que el test del `[]` **falla** si se reintroduce el `or Non
 ### Pending / next steps
 - **Compresión automática de planos pesados** — evaluada y postergada por decisión de alcance. Para imágenes (PNG/JPG) es sencilla con Pillow y cubriría el caso real observado; para PDFs requiere Ghostscript o `pikepdf` y tiene un riesgo concreto: comprimir mal un plano vectorial arruina la legibilidad de las cotas, que es justamente lo que se necesita leer en obra. Quedaría además por decidir si el archivo comprimido reemplaza al original o convive como copia liviana solo para WhatsApp.
 - **Nota de infraestructura detectada en el camino:** `npx tsc --noEmit` **no chequea nada** en este repositorio — el `tsconfig.json` raíz tiene `"files": []` y solo referencias, que no se siguen sin `--build`. El comando correcto es `npx tsc -b`. Varias entradas previas de esta bitácora reportan "tsc sin errores" usando el comando que no verifica; si hay verificación de tipos en integración continua, conviene revisar que use `-b`.
+
+---
+
+## 2026-08-28 (cont.) — Cierre de la brecha de tamaño: el bot ahora explica
+
+### Objective
+La entrada anterior dejó declarada una brecha: se avisaba a quien **carga** un plano de más de 16 MB, pero el responsable que lo **pedía** desde la obra seguía recibiendo silencio absoluto. Al revisarla se concluyó que estaba a medio resolver — el aviso de la interfaz protege a quien tiene acceso a la aplicación, que es justamente quien menos lo necesita.
+
+### Changes made
+`_format_plano_reply` verifica el tamaño **antes** de construir la URL firmada. Si el plano excede el límite, devuelve el mismo encabezado de siempre (disciplina, sector, versión y fecha) más la explicación, y **sin `media_url`** — así no se le pide a Twilio un envío que va a rechazar. Antes se le pasaba la URL igual: Twilio aceptaba el mensaje, fallaba después al bajar el media (error 63019) y el usuario no recibía nada, ni siquiera el texto.
+
+El mensaje resultante:
+
+> 📐 Plano de electricidad — Tablero principal (v3, 27/08/2026).
+>
+> ⚠️ No te lo puedo mandar por acá: pesa 19.5 MB y WhatsApp no permite archivos de más de 16 MB. Pedíselo al jefe de obra.
+
+Decisión de redacción: **no deriva a la aplicación web**. Quien pide un plano por WhatsApp es, por definición, alguien que no tiene acceso a ella —fue el motivo por el que se descartó la primera versión de este aviso—, así que la única salida accionable desde la obra es pedírselo a quien sí lo tiene. Hay un test que verifica esa restricción explícitamente, buscando las formas en que el mensaje podría nombrar la aplicación.
+
+Se verificó que este es el **único** punto del sistema que envía media por WhatsApp, de modo que no quedan otros flujos con el mismo problema latente.
+
+### Files modified
+Backend: `services/message_service.py`. Tests: 2 casos nuevos en `test_whatsapp_planos_desambiguacion.py` (13 en total). Documentación: `IPI-CONSTRUCTA.md` (fila 10 de trazabilidad, que declaraba la brecha abierta) y `auditoria/05-planos.md` (§D.3, que la declaraba aceptada).
+
+### Validation
+Suite completa: 317 passed. `npx tsc -b` sin errores. Se comprobó que el test **falla** si se neutraliza la condición de tamaño, para confirmar que la protección es efectiva y no decorativa. El mensaje final se verificó ejecutando la función con los datos del plano real que originó el hallazgo (19,5 MB).
+
+### Pending / next steps
+Queda fuera de alcance **entregar** el plano igualmente, es decir la compresión automática: viable para imágenes con Pillow, riesgosa para PDF vectorial porque comprimir de más arruina la legibilidad de las cotas. Con este cambio el usuario al menos entiende qué pasó y sabe a quién recurrir, que era el vacío real.
+
+---
+
+## 2026-08-31 — Limpieza del panel de Configuración: duplicados, herramientas de dev y badges falsos
+
+### Objective
+El usuario reportó que la sección "Calendario laboral" de Configuración se ve rota (un `<select>` desplegado con overlay oscuro tapando toda la tarjeta) y desconfió de que estuviera en ese lugar, notando además que Configuración es accesible sin ninguna obra seleccionada (desde el panel principal), lo cual no encaja con una feature que es *por obra*. La revisión se extendió a discutir qué debería ser configuración global vs. por obra, y de ahí a la sección "Testing" (Probar WhatsApp / Simular tarea vencida) y al módulo de Automatizaciones y Alertas.
+
+### Changes made
+
+**Calendario laboral — duplicado eliminado (no relocalizado).** El componente `CalendarSection` en `ConfiguracionPage.tsx` llamaba a `fetchCalendar(selectedObraId)` con un selector de obra propio, redundante y confuso al no haber obra en contexto. Se encontró que `GanttSettingsDrawer.tsx` ya implementa exactamente la misma funcionalidad (días laborables, horario, excepciones, feriados) recibiendo `obraId` como prop, sin selector, correctamente scoped desde el Gantt de cada obra. No hizo falta construir nada nuevo: se eliminó la versión global completa (función, card, entrada del índice, imports que quedaban sin uso).
+
+**Sección "Testing" eliminada de raíz.** Se determinó que "Probar mensaje WhatsApp" y "Simular tarea vencida" no le sirven a un usuario final — son herramientas de QA que en el mejor caso confunden y en el peor generan alertas falsas o mandan un WhatsApp real a un número al azar. Estaban ocultas en el frontend por `import.meta.env.DEV`, pero el backend nunca validaba ese modo: cualquier admin podía pegarle directo a `POST /settings/test-whatsapp` o `/settings/simulate-overdue` en producción (brecha ya señalada en `docs/auditoria/11-panel-configuracion.md` y no resuelta hasta ahora). Se eliminaron ambos endpoints por completo — no se los gateó, se los sacó —, confirmado con `curl` (404 tras el cambio). La lógica real que usaban (`NotificationService.mark_overdue_tasks`, `send_whatsapp_message`) sigue viva vía el cron del scheduler, que es su único consumidor legítimo. Dos tests (`test_settings_per_tenant.py`) dependían del endpoint HTTP para ejercitar esa lógica; se migraron a invocar el servicio directamente, lo cual de paso deja el test menos acoplado a una ruta que ya no existe.
+
+**Dos badges de Automatizaciones no reflejaban el comportamiento real del backend** (encontrado auditando el módulo a pedido del usuario, con alcance acotado a "mantenerlo global, revisar lo que hay" tras descartar overrides por obra por falta de un caso de uso concreto):
+- "Alertar sin respuesta" mostraba `24h` fijo en el badge, sin importar el valor real de `max_response_hours` (configurable en 6/12/24/48/72h). Pasa a ser dinámico.
+- "Reintentar envío fallido" decía `×3`; el backend (`notification_service.py:mark_no_response`) reintenta **una sola vez** por recordatorio sin respuesta (un chequeo booleano, no un contador). Corregido a `×1`.
+- Ese mismo toggle no se deshabilitaba cuando "Recordatorios automáticos" está apagado, pese a que el backend ya lo bloquea en ese caso (`if cfg.retry_failed and cfg.auto_reminders`). Se le agregó el mismo `disabled={!form.auto_reminders}` que ya tenían los otros dos recordatorios.
+
+Se revisaron también los 4 toggles de "Configuración de alertas" (`notify_task_overdue/blocked/no_response/rescheduled`): los cuatro están correctamente conectados a sus servicios (confirmado por comentarios en el código citando la Auditoría 11 y por los tests existentes), así que no hicieron falta cambios ahí — el hallazgo de "campos decorativos" de esa auditoría ya estaba resuelto de antes.
+
+### Files modified
+Backend: `api/routes/settings.py` (elimina `test_whatsapp`/`simulate_overdue`), `schemas/settings.py` (elimina `TestWhatsAppRequest`), `services/notification_service.py` (docstring). Tests: `tests/test_settings_per_tenant.py` (2 tests migrados a llamar al servicio directo). Frontend: `api/settings.ts` (elimina `testWhatsApp`/`simulateOverdue`), `pages/ConfiguracionPage.tsx` (elimina `CalendarSection` completa y la sección Testing; corrige los dos badges de Automatizaciones).
+
+### Validation
+Suite completa de backend: 317 passed. `npx tsc --noEmit` sin errores (nota: para chequeo real de tipos en este repo hay que usar `tsc -b`, ver entrada del 2026-08-28 — se corrió también `-b` sin errores). Verificado en navegador con un usuario de prueba creado vía API: Configuración sin obra seleccionada ya no muestra "Calendario" ni "Testing" en el índice de secciones ni en el contenido; los endpoints eliminados devuelven 404; el badge de "Alertar sin respuesta" se actualiza en vivo al cambiar el select de horas; "Reintentar envío fallido" se deshabilita junto con "Recordatorio 1 día antes" al apagar "Recordatorios automáticos" (confirmado inspeccionando el DOM). Mergeado a `main` vía PR #103.
+
+### Pending / next steps
+Quedó sin resolver, por falta de un caso de uso concreto: si Automatizaciones/Alertas debería admitir *overrides* por obra (ej. pausar recordatorios en una obra específica) en vez de ser una única config por tenant. La arquitectura actual es así a propósito (Auditoría 11 corrigió el bug de que fuera por-manager), así que un cambio a overrides por obra requeriría una tabla de overrides + UI que distinga "usa el default de la empresa" vs. "personalizado en esta obra" — no se justifica sin un caso real. También quedó sin resolver la utilidad original de `main_responsible`/`company_phone` en Datos generales: no lo usa ningún servicio del backend hoy, el usuario recordaba que el teléfono tenía algún propósito pero no cuál, y no se encontró rastro en git history ni en comentarios — se dejó como está a pedido del usuario.
+
+---
+
+## 2026-09-02 — Gantt: la línea de "hoy" tapaba las flechas de dependencia
+
+### Objective
+El usuario mostró una captura del Gantt donde la barra vertical naranja del día de hoy cae justo encima de un tramo de dependencias: la flecha que baja entre tareas y los badges de tipo (`SS`) quedaban cortados por el naranja y no se entendía qué conectaba con qué.
+
+### Changes made
+El marcador de hoy estaba en `zIndex: 4`, es decir **por encima** de las barras de tarea (`zIndex: 1`) y de la capa SVG de dependencias (`zIndex: 3`). Además no era una línea fina sino una barra sólida de 2px con `boxShadow: "0 0 0 4px rgba(231,106,45,0.06)"`, o sea unos 10px de ancho efectivo de naranja opaco pisando todo lo que cruzara.
+
+Se lo reemplazó por un marcador de fondo: `zIndex: 0` (justo encima del sombreado de fines de semana y debajo de barras y flechas), una banda del ancho de la columna del día con `rgba(231,106,45,0.07)` y un borde izquierdo punteado de 1px al 55% de opacidad como referencia exacta. Se eliminó el `boxShadow`.
+
+No se pierde legibilidad del "hoy" porque el header de fechas ya marca ese día con la celda en naranja sólido (`#E85A26`, texto blanco) y sigue existiendo el botón "Ir a hoy" que hace scroll a la columna. El criterio es el mismo que usa MS Project: la línea de hoy es contexto de fondo, no un elemento que compita con el contenido del diagrama.
+
+### Files modified
+Frontend: `components/GanttTimeline.tsx` (bloque "Today vertical line" → "Today marker").
+
+### Validation
+`npx tsc --noEmit -p tsconfig.app.json` sin errores.
+
+### Pending / next steps
+Queda pendiente un problema distinto que se ve en la misma captura: cuando varias dependencias llegan a tareas consecutivas, los badges de tipo (`SS`/`FF`/`SF`) se dibujan en posiciones muy cercanas y se solapan entre sí. Eso es cálculo de `labelX`/`labelY` en la capa de paths, no un tema de z-index, y no se tocó en este cambio.
+
+---
+
+## 2026-09-02 — Planilla de tareas reconstruida sobre `react-datasheet-grid`
+
+### Objective
+El usuario reportó que la carga de datos en la planilla no funcionaba: al agregar una fila nueva aparecía una fecha ya puesta y, al presionar Enter, no quedaba guardado ni la fecha, ni el responsable, ni nada. Pidió "reveer el funcionamiento de la planilla completa". Después de un primer intento de arreglar la implementación existente, el veredicto fue "no funciona, es incómodo y no funciona bien", acotado a "la interacción en sí (tabs, clics, fechas)". A partir de ahí el usuario preguntó qué alternativas había —incluyendo si se podía embeber una hoja de Google Sheets— y, tras descartarlo, aprobó investigar y usar una biblioteca ya hecha. El norte de diseño que fijó fue "lo hagamos lo más parecido a Excel".
+
+### Changes made
+
+**Se reemplazó la grilla propia por `react-datasheet-grid` (MIT, ~1.900 líneas hechas a mano → ~1.800 con más funcionalidad).** La biblioteca aporta selección de celdas y rangos, navegación con teclado, relleno por arrastre, copiar/pegar de bloques y deshacer, todo probado. El código propio quedó reducido a las celdas del dominio (título, responsable, fechas, duración, estado, predecesoras, hito, costo) y a la integración con la API. Se conservó el handle `SheetViewHandle` (`startNewRow`, `focusTask`) para que el salto desde una alerta a la celda correspondiente siga funcionando.
+
+**Celdas específicas.** Cada celda con editor propio replica el patrón interno de la biblioteca (input no controlado sincronizado por *layout effect*). Tres detalles costaron sesión: (1) escribir no hacía nada porque el `textColumn` de la biblioteca llama a `focus()` **y** `select()`, y solo se estaba haciendo lo segundo; (2) cada tecla se comía la anterior (`5SS+2` quedaba en `SS+2`) porque el texto estaba en las dependencias del efecto de foco, así que cada re-parseo volvía a hacer `select()` — se separó en dos efectos y la resincronización sólo ocurre cuando la celda **no** tiene el foco; (3) las celdas que necesitan la fila entera no pueden usar `keyColumn`, que pisa `columnData` y rompe con `Cannot read properties of undefined (reading 'component')`.
+
+**Fechas.** Cargar Inicio completa Fin con un día de duración, pero si Fin ya tenía valor no se lo pisa (`durationOf` devuelve null si falta alguna de las dos fechas, y `START_DATE.set` distingue tres casos explícitos). Esto corrige el comportamiento que el usuario marcó como incorrecto: antes, cargar Inicio después de Fin movía Fin.
+
+**Predecesoras con notación de MS Project.** Columna que acepta `5`, `5FS+2`, `3SS-1`, etc., por número de fila, y persiste en la tabla `task_dependencies` con su tipo y desfase. Como la nomenclatura no es evidente, el encabezado lleva un botón "?" que despliega la referencia (elegido por el usuario sobre un selector de opciones en la celda).
+
+**Costo de materiales.** La columna muestra el total de materiales de la tarea; al abrirla despliega la tabla de materiales en un *popover*. El botón "Abrir tarea" llevaba al modal de creación de tareas, que el usuario rechazó por confuso: ahora navega a la pestaña **Presupuesto** con esa tarea desplegada y centrada en pantalla, y el resto de las tareas colapsadas (`ComprasTab` acepta `focusTaskId`; `collapsed` pasó a ser `Set<number> | null`, donde `null` significa "todavía no tocaste ningún chevron, derivá la apertura del foco").
+
+**Sólo se envían al backend los campos que cambiaron.** Antes se mandaba siempre `estimated_progress`, y como el backend usa `exclude_unset=True`, editar cualquier campo de una tarea completada devolvía 422. Ahora se hace un diff contra `tasksById`.
+
+**Inserción de filas en el medio.** Cuando la fila creada no es la última, se llama a `reorderTasks`; sin eso quedaban `order_index` duplicados y el orden salía mal.
+
+**Detalles de hoja de cálculo:** columna "Tarea" fija al scroll horizontal, barra de estado tipo Excel (resumen de la obra a la izquierda; recuento, suma y promedio de la selección a la derecha, resolviendo las columnas por `colId` y no por índice), lienzo con filas fantasma hasta un mínimo de 14, mostrar/ocultar columnas y ancho de columna ajustable por arrastre. Se descartó el zoom por pedido explícito del usuario.
+
+### Files modified
+Frontend: `components/TaskSheetView.tsx` (reescrito), `components/ComprasTab.tsx` (`focusTaskId`, colapso derivado del foco, `scrollIntoView`), `pages/ObraDetailPage.tsx` (`budgetFocusTaskId`, nuevas props de la planilla), `index.css` (columna fija, manija de resize, botón de ayuda), `package.json` / `package-lock.json` (`react-datasheet-grid@4.11.6`). Documentación: `IPI-CONSTRUCTA.md` (§Módulo de planilla de tareas y §Decisiones tecnológicas del frontend).
+
+### Validation
+`npx tsc --noEmit -p tsconfig.app.json`, `npx eslint` y `npm run build` sin errores. **Advertencia sobre el chequeo de tipos:** `tsconfig.json` tiene `"files": []`, así que `npx tsc --noEmit -p .` no chequea nada — hay que usar `-p tsconfig.app.json` o `npm run build`.
+
+Verificado contra la API y la base real, no sólo en pantalla: relleno por arrastre y copiar/pegar (confirmado por el usuario), predecesoras (139→136 FS/0 y 142→139 SS/2 en `task_dependencies`), hito (reflejado en el formulario y en el Gantt), Ctrl+Z (45→8→deshacer→45 en la base), *popover* de materiales, mostrar/ocultar columnas, columna fija y barra de estado.
+
+### Pending / next steps
+**La biblioteca ignora los cambios de `columns` mientras está montada.** Se comprobó inspeccionando el *fiber* de React: el componente re-renderiza y la prop nueva llega al envoltorio `memo`, pero el render interno y el DOM siguen con las columnas viejas. Afecta tanto al ancho de columna como a mostrar/ocultar. La solución es remontar la grilla con una `key` derivada de las columnas y sus anchos; para que no se sienta una recarga, el scroll se guarda antes de remontar y se restaura después (con un reintento un *frame* después, porque recién montada la grilla todavía no midió su alto útil y el scroll se clampea a 0). Queda un redibujado de un *frame* al soltar el mouse. Si molestara, la alternativa sería escribir los anchos directamente en el DOM y remontar recién al cambiar de pestaña.
+
+No se restauró el modal de vista previa al pegar que tenía la planilla anterior: Excel pega directo y el usuario no lo pidió de vuelta. Queda anotado por si se lo extraña.
