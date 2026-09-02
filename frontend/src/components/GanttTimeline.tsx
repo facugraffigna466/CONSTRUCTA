@@ -5,6 +5,7 @@ import { GanttSettingsDrawer, type GanttViewOptions } from "./GanttSettingsDrawe
 import type { Task, TaskStatus, Responsible } from "../types";
 import { fetchCriticalPath, type CriticalPathResult } from "../api/criticalPath";
 import { fetchBaseline, type BaselineEntry } from "../api/baseline";
+import { useGanttCursors, emitCursorMove, emitCursorLeave } from "../hooks/useGanttCursors";
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
@@ -269,6 +270,9 @@ export function GanttTimeline({
   const autoScrollVel = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
 
   useEffect(() => { onEditRef.current = onEditTask; }, [onEditTask]);
+
+  // Cursores en vivo de otros usuarios viendo este mismo Gantt (obraId).
+  const liveCursors = useGanttCursors(obraId ?? -1);
 
   // ── Pinch-to-zoom (trackpad) / Ctrl+rueda sobre el cronograma ────────────────
   // El trackpad reporta el pellizco como un evento `wheel` con ctrlKey=true.
@@ -1169,6 +1173,12 @@ export function GanttTimeline({
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
+                onMouseMove={e => {
+                  if (!obraId) return;
+                  const rect = railRef.current?.getBoundingClientRect();
+                  if (rect) emitCursorMove(obraId, e.clientX - rect.left, e.clientY - rect.top);
+                }}
+                onMouseLeave={() => { if (obraId) emitCursorLeave(obraId); }}
                 style={{
                   position: "relative",
                   width: gridWidth, minWidth: "100%",
@@ -1641,6 +1651,30 @@ export function GanttTimeline({
                     </svg>
                   );
                 })()}
+
+                {/* Live cursors — otros usuarios viendo este mismo Gantt en simultáneo */}
+                {obraId && Array.from(liveCursors.values()).map(c => (
+                  <div key={c.id} style={{
+                    position: "absolute", left: c.x, top: c.y,
+                    pointerEvents: "none", zIndex: 20,
+                    transition: "left 90ms linear, top 90ms linear",
+                  }}>
+                    <svg width={16} height={20} viewBox="0 0 16 20" style={{
+                      display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.25))",
+                    }}>
+                      <path d="M1 1 L1 15 L5 11.5 L7.5 17 L10 16 L7.5 10.5 L13 10.5 Z" fill={c.color} stroke="#fff" strokeWidth={1} />
+                    </svg>
+                    <div style={{
+                      marginTop: 2, padding: "2px 7px", borderRadius: 6,
+                      background: c.color, color: "#fff",
+                      fontSize: 10.5, fontWeight: 700, whiteSpace: "nowrap",
+                      fontFamily: "'Plus Jakarta Sans', sans-serif",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                    }}>
+                      {c.name.split(" ")[0]}
+                    </div>
+                  </div>
+                ))}
 
             </div>{/* end railRef = scrollable bars area */}
             </div>{/* end scrollRef */}
