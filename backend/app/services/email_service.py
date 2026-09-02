@@ -428,6 +428,19 @@ def _insight_followup_row(insight: object) -> str:
                 </li>"""
 
 
+def insights_report_url(obra_id: int, period: str, tenant_id: int | None = None) -> str:
+    """URL del informe completo imprimible, firmada para abrirse desde el email.
+
+    Apunta al backend, no al frontend: el informe es una página autocontenida que
+    se imprime a PDF, así que no depende de que exista una pantalla en la app.
+    """
+    from app.core.signing import sign_report_query
+
+    base = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+    query = sign_report_query(obra_id, period, tenant_id)
+    return f"{base}/api/v1/obras/{obra_id}/insights/report?period={period}&{query}"
+
+
 def build_insights_email_html(
     *,
     obra_id: int,
@@ -435,6 +448,7 @@ def build_insights_email_html(
     period: str,
     insights: list,
     frontend_url: str | None = None,
+    tenant_id: int | None = None,
 ) -> str:
     """Arma el email mensual de insights de una obra.
 
@@ -448,8 +462,7 @@ def build_insights_email_html(
     Las descartadas nunca entran. Si no hay nada de nada, el email lo dice
     explícitamente en vez de salir vacío.
     """
-    base_url = (frontend_url or settings.FRONTEND_URL).rstrip("/")
-    cta_url = f"{base_url}/obras/{obra_id}/insights"
+    cta_url = insights_report_url(obra_id, period, tenant_id)
 
     live = [i for i in insights if _insight_status(i) in _LIVE_INSIGHT_STATUSES]
     fresh = [i for i in live if getattr(i, "last_period", None) == period]
@@ -474,7 +487,7 @@ def build_insights_email_html(
             title="Sin novedades este mes",
             body_html=body,
             cta_url=cta_url,
-            cta_label="Ver informe completo",
+            cta_label="Imprimir informe completo",
             eyebrow=f"Informe de obra · {_period_label(period)}",
             cta_fallback=False,
             footer_html=(
@@ -504,7 +517,7 @@ def build_insights_email_html(
         title="Tu resumen mensual de obra",
         body_html=body,
         cta_url=cta_url,
-        cta_label="Ver informe completo",
+        cta_label="Imprimir informe completo",
         eyebrow=f"Informe de obra · {_period_label(period)}",
         cta_fallback=False,
         footer_html=(
@@ -606,14 +619,14 @@ async def send_insights_email(
     period: str,
     insights: list,
     frontend_url: str | None = None,
+    tenant_id: int | None = None,
 ) -> bool:
     """Informe mensual de insights de una obra al owner del tenant.
 
     El HTML lo arma `build_insights_email_html` (etapa 4); acá solo se define
     asunto, versión en texto plano y se delega el POST a Brevo con el retry que
     ya tiene `_send_via_brevo` (Fase 6)."""
-    base_url = (frontend_url or settings.FRONTEND_URL).rstrip("/")
-    cta_url = f"{base_url}/obras/{obra_id}/insights"
+    cta_url = insights_report_url(obra_id, period, tenant_id)
     label = _period_label(period)
     live = [i for i in insights if _insight_status(i) in _LIVE_INSIGHT_STATUSES]
 
@@ -625,13 +638,13 @@ async def send_insights_email(
                 f"- {getattr(i, 'title', '')}\n  {getattr(i, 'description', '')}"
                 for i in live
             )
-            + f"\n\nVer el informe completo: {cta_url}\n\n— Equipo Constructa"
+            + f"\n\nInforme completo (se puede imprimir): {cta_url}\n\n— Equipo Constructa"
         )
     else:
         text = (
             f"Informe mensual de {obra_name} ({label}).\n\n"
             "Este mes no encontramos patrones nuevos que valga la pena marcarte.\n\n"
-            f"Ver el informe completo: {cta_url}\n\n— Equipo Constructa"
+            f"Informe completo (se puede imprimir): {cta_url}\n\n— Equipo Constructa"
         )
 
     return await send_email(
@@ -639,7 +652,7 @@ async def send_insights_email(
         subject=subject,
         html=build_insights_email_html(
             obra_id=obra_id, obra_name=obra_name, period=period,
-            insights=insights, frontend_url=frontend_url,
+            insights=insights, frontend_url=frontend_url, tenant_id=tenant_id,
         ),
         text=text,
     )

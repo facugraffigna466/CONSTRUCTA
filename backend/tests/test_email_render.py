@@ -173,7 +173,7 @@ def test_sin_conclusiones_lo_dice_explicitamente():
     assert "Este mes no encontramos patrones nuevos que valga la pena marcarte" in html
     assert "Nuevo este mes" not in html
     assert "Seguimos viendo" not in html
-    assert "Ver informe completo" in html      # el CTA sigue estando
+    assert "Imprimir informe completo" in html      # el CTA sigue estando
 
 
 def test_solo_descartadas_cae_en_el_estado_vacio():
@@ -181,10 +181,32 @@ def test_solo_descartadas_cae_en_el_estado_vacio():
     assert "Este mes no encontramos patrones nuevos" in html
 
 
-def test_cta_apunta_a_la_pagina_de_insights_de_la_obra():
-    html = _render([FakeInsight("T", "D")], obra_id=42)
-    assert f"{FRONT}/obras/42/insights" in html
-    assert "Ver informe completo" in html
+def test_cta_apunta_al_informe_imprimible_firmado():
+    """El botón lleva al informe completo del backend, con la URL firmada.
+
+    No apunta al frontend: el informe es una página autocontenida que se imprime
+    a PDF, así que no depende de que exista una pantalla en la app.
+    """
+    html = _render([FakeInsight("T", "D")], obra_id=42, tenant_id=7)
+    assert "/api/v1/obras/42/insights/report?period=2026-09" in html
+    assert "sig=" in html and "tid=7" in html and "exp=" in html
+    assert "Imprimir informe completo" in html
+
+
+def test_el_link_del_informe_no_sirve_para_otra_obra():
+    """La firma ata el link a una obra y un período concretos."""
+    import urllib.parse as up
+
+    from app.core.signing import verify_report
+    from app.services.email_service import insights_report_url
+
+    url = insights_report_url(42, "2026-09", 7)
+    q = dict(up.parse_qsl(up.urlparse(url).query))
+
+    assert verify_report(42, "2026-09", q["tid"], q["exp"], q["sig"]) is True
+    assert verify_report(43, "2026-09", q["tid"], q["exp"], q["sig"]) is False
+    assert verify_report(42, "2026-08", q["tid"], q["exp"], q["sig"]) is False
+    assert verify_report(42, "2026-09", "8", q["exp"], q["sig"]) is False
 
 
 def test_html_del_contenido_se_escapa():

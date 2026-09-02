@@ -108,6 +108,7 @@ class InsightDeliveryService:
                 obra_name=obra.name if obra else f"Obra {obra_id}",
                 period=period,
                 insights=insights,
+                tenant_id=obra.tenant_id if obra else None,
             )
         except Exception as exc:
             # Fire-and-forget del caller: el fallo se traza, no se propaga.
@@ -197,8 +198,11 @@ class InsightDeliveryService:
 
             from app.integrations.twilio.client import send_whatsapp_message
 
-            base = settings_frontend_url()
-            link = f"{base}/obras/{snapshot.obra_id}/insights"
+            from app.services.email_service import insights_report_url
+
+            link = insights_report_url(
+                snapshot.obra_id, period, obra.tenant_id if obra else None
+            )
             name = obra.name if obra else f"obra {snapshot.obra_id}"
             body = (
                 f"📊 Tu informe mensual de la obra {name} ya está listo. "
