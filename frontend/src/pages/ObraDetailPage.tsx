@@ -70,7 +70,7 @@ interface ObraDetailPageProps {
 
 export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAlert }: ObraDetailPageProps) {
   const can = useCan();
-  const viewingUsers = useViewingUsers(obra.id);
+  const viewingUsers = useViewingUsers(obra.id, activeTab);
   const [tasks, setTasks] = useState<Task[]>([]);
   const editingMap   = useEditingSimulation(obra.id);
   const [alerts, setAlerts] = useState<Alert[]>([]);

@@ -1,9 +1,20 @@
+from datetime import datetime, timezone
+
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant_denorm import tenant_for_obra
 from app.models.alert import Alert, AlertType
 from app.repositories.base import BaseRepository
+
+
+def _resolved_now() -> dict[str, object]:
+    """Valores del UPDATE que resuelve una alerta.
+
+    `resolved_at` acompaña siempre a `is_read=True` para que la métrica de
+    velocidad de reacción (insights, etapa 2) tenga el CUÁNDO, no solo el SI.
+    """
+    return {"is_read": True, "resolved_at": datetime.now(timezone.utc)}
 
 
 class AlertRepository(BaseRepository[Alert]):
@@ -116,7 +127,7 @@ class AlertRepository(BaseRepository[Alert]):
         )
         if tenant_id is not None:
             stmt = stmt.where(Alert.tenant_id == tenant_id)
-        await self.session.execute(stmt.values(is_read=True))
+        await self.session.execute(stmt.values(**_resolved_now()))
 
     async def mark_read_by_task_and_fragment(
         self, task_id: int, alert_type: AlertType, fragment: str, tenant_id: int | None = None
@@ -135,14 +146,14 @@ class AlertRepository(BaseRepository[Alert]):
         )
         if tenant_id is not None:
             stmt = stmt.where(Alert.tenant_id == tenant_id)
-        await self.session.execute(stmt.values(is_read=True))
+        await self.session.execute(stmt.values(**_resolved_now()))
 
     async def mark_read_by_task(self, task_id: int, tenant_id: int | None = None) -> None:
         """Mark all unread alerts for a task as read. Called before task deletion."""
         stmt = update(Alert).where(Alert.task_id == task_id, Alert.is_read == False)  # noqa: E712
         if tenant_id is not None:
             stmt = stmt.where(Alert.tenant_id == tenant_id)
-        await self.session.execute(stmt.values(is_read=True))
+        await self.session.execute(stmt.values(**_resolved_now()))
 
     async def mark_all_read(self, obra_id: int | None = None, tenant_id: int | None = None) -> list[Alert]:
         """Mark every unread alert as read (optionally scoped to an obra). Returns the updated rows."""
@@ -152,8 +163,10 @@ class AlertRepository(BaseRepository[Alert]):
         if tenant_id is not None:
             stmt = stmt.where(Alert.tenant_id == tenant_id)
         alerts = list((await self.session.execute(stmt)).scalars().all())
+        resolved = _resolved_now()
         for alert in alerts:
             alert.is_read = True
+            alert.resolved_at = resolved["resolved_at"]  # type: ignore[assignment]
         await self.session.flush()
         return alerts
 

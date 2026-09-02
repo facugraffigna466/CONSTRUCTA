@@ -10,6 +10,7 @@ All operations respect the per-tenant SystemSettings configured in the UI.
 """
 import logging
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,15 @@ from app.services.message_templates import fmt_date
 
 logger = logging.getLogger(__name__)
 
+_AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+def _ar_today(now: datetime | None = None) -> date:
+    """Hoy en hora argentina. Cerca de medianoche UTC la fecha local es la de
+    ayer, y los vencimientos se cargan en fecha local — compararlos contra la
+    fecha UTC corría el recordatorio un día."""
+    return (now or datetime.now(timezone.utc)).astimezone(_AR_TZ).date()
+
 
 class NotificationService:
     def __init__(self, session: AsyncSession) -> None:
@@ -50,19 +60,23 @@ class NotificationService:
     # ── public methods ─────────────────────────────────────────────────────────
 
     async def send_reminders(self, hours_ahead: int = 24) -> int:
-        """Send proactive WhatsApp reminders for tasks due in approximately hours_ahead hours.
+        """Recordatorio de WhatsApp a los responsables de las tareas que vencen
+        en `hours_ahead` horas, redondeado a días (24h → 1 día, 72h → 3 días).
 
-        Uses a ±30-minute window around (now + hours_ahead) so the scheduler can
-        run hourly and each task is hit exactly once per reminder window.
-        Skips tasks whose tenant has disabled auto_reminders or the specific
-        reminder flag for this hour window (reminder_1day=24h, reminder_3days=72h).
+        **Por día, no por hora exacta.** El job corre cada hora y manda el
+        recordatorio en la primera corrida del día que caiga dentro del horario
+        laboral de la obra; la deduplicación evita que se repita. La versión
+        anterior buscaba tareas cuyo vencimiento cayera en una ventana de ±30 min
+        alrededor de `ahora + N horas`: como las tareas sin `due_time` se toman
+        como que vencen 23:59, ese instante caía siempre fuera del horario
+        laboral y el recordatorio no se enviaba nunca (ver
+        docs/features/recordatorio-vencimiento.md).
         """
+        days_ahead = max(1, round(hours_ahead / 24))
         now = datetime.now(timezone.utc)
-        target = now + timedelta(hours=hours_ahead)
-        window_start = target - timedelta(minutes=30)
-        window_end   = target + timedelta(minutes=30)
+        target_date = _ar_today(now) + timedelta(days=days_ahead)
 
-        tasks = await self.task_repo.list_due_in_window(window_start, window_end)
+        tasks = await self.task_repo.list_due_on_date(target_date)
 
         count = 0
         for task in tasks:
@@ -77,29 +91,28 @@ class NotificationService:
             if not cfg.chatbot_enabled:
                 logger.debug("chatbot disabled for obra %d — skipping task %d", task.obra_id, task.id)
                 continue
-
             if not cfg.auto_reminders:
                 logger.debug("auto_reminders disabled for obra %d — skipping task %d", task.obra_id, task.id)
                 continue
-
-            if hours_ahead <= 24 and not cfg.reminder_1day:
+            if days_ahead <= 1 and not cfg.reminder_1day:
                 logger.debug("reminder_1day disabled — skipping task %d", task.id)
                 continue
-            if hours_ahead > 24 and not cfg.reminder_3days:
+            if days_ahead > 1 and not cfg.reminder_3days:
                 logger.debug("reminder_3days disabled — skipping task %d", task.id)
                 continue
 
             cal = await self.calendar_repo.get_for_obra(task.obra_id)
             if not is_within_working_hours(cal, now):
-                logger.debug("outside working hours/day for obra %d — skipping task %d", task.obra_id, task.id)
+                # Todavía no es horario laboral: la próxima corrida horaria del
+                # mismo día lo vuelve a intentar, así que no se pierde.
+                logger.debug("fuera de horario laboral para obra %d — task %d espera", task.obra_id, task.id)
                 continue
 
-            # Avoid duplicate if a reminder was already sent in the last hours_ahead*0.9 hours
-            dedup_since = now - timedelta(hours=hours_ahead * 0.9)
-            already_sent = await self.msg_repo.has_recent_reminder_for_task(
+            # Un solo recordatorio por tarea y por ventana: si ya salió hoy, no repite.
+            dedup_since = now - timedelta(hours=max(12, hours_ahead * 0.9))
+            if await self.msg_repo.has_recent_reminder_for_task(
                 task.id, task.responsible_id, dedup_since
-            )
-            if already_sent:
+            ):
                 logger.debug("Reminder already sent recently for task %d — skipping", task.id)
                 continue
 
@@ -108,26 +121,68 @@ class NotificationService:
 
             try:
                 msg_text = await self.conv_service.seed_for_task(responsible, task, obra_name)
-                outbound_sid = await send_whatsapp_message(
-                    responsible.whatsapp_number, msg_text
-                )
-                await self._save_outbound(
-                    responsible=responsible,
-                    task=task,
-                    body=msg_text,
-                    external_sid=outbound_sid,
-                    awaits_response=True,
+                await self.notify_responsible(
+                    responsible, msg_text, task=task, awaits_response=True,
                 )
                 count += 1
-                logger.info("Reminder sent to %s for task %d", responsible.whatsapp_number, task.id)
+                logger.info(
+                    "Recordatorio de %d día/s enviado a %s por la tarea %d",
+                    days_ahead, responsible.whatsapp_number, task.id,
+                )
             except Exception:
                 logger.exception(
                     "Failed to send reminder for task %d to %s",
-                    task.id,
-                    responsible.whatsapp_number,
+                    task.id, responsible.whatsapp_number,
                 )
 
         return count
+
+    async def notify_responsible(
+        self,
+        responsible: Responsible,
+        body: str,
+        *,
+        task: Task | None = None,
+        notification_type: str = "reminder",
+        awaits_response: bool = False,
+    ) -> str | None:
+        """Manda un WhatsApp a un responsable y lo deja registrado en `messages`.
+
+        Punto único de salida para las notificaciones proactivas: envía por
+        Twilio y persiste el saliente con su SID. **No** chequea configuración
+        ni horario — eso lo decide quien llama, que es el que sabe qué flag de
+        `SystemSettings` le corresponde. Devuelve el SID de Twilio (o None si el
+        envío quedó deshabilitado por falta de credenciales).
+        """
+        sid = await send_whatsapp_message(responsible.whatsapp_number, body)
+        await self._save_outbound(
+            responsible=responsible,
+            task=task,
+            body=body,
+            external_sid=sid,
+            awaits_response=awaits_response,
+            notification_type=notification_type,
+        )
+        return sid
+
+    async def can_notify_obra(self, obra_id: int) -> tuple[bool, str]:
+        """¿Se le puede mandar un WhatsApp automático a esta obra ahora mismo?
+
+        Reúne los tres chequeos que comparten todas las notificaciones
+        proactivas (chatbot prendido, envíos automáticos prendidos, y estar
+        dentro del horario laboral de la obra) para que un flujo nuevo no tenga
+        que redescubrirlos ni olvidarse de alguno. Devuelve el motivo cuando da
+        que no, para poder loguearlo.
+        """
+        cfg = await self.settings_repo.get_for_obra(obra_id)
+        if not cfg.chatbot_enabled:
+            return False, "chatbot_enabled=False"
+        if not cfg.auto_reminders:
+            return False, "auto_reminders=False"
+        cal = await self.calendar_repo.get_for_obra(obra_id)
+        if not is_within_working_hours(cal, datetime.now(timezone.utc)):
+            return False, "fuera del horario laboral de la obra"
+        return True, ""
 
     async def mark_overdue_tasks(self, tenant_id: int | None = None) -> int:
         """Create TASK_OVERDUE alerts for tasks past their due_date.
@@ -284,7 +339,7 @@ class NotificationService:
     async def _save_outbound(
         self,
         responsible: Responsible,
-        task: Task,
+        task: Task | None,
         body: str,
         external_sid: str | None,
         awaits_response: bool = False,
@@ -299,7 +354,7 @@ class NotificationService:
             to_number=responsible.whatsapp_number,
             body=body,
             responsible_id=responsible.id,
-            task_id=task.id,
+            task_id=task.id if task else None,
             external_message_id=external_sid,
             processing_status=MessageProcessingStatus.PROCESSED,
             ai_interpretation={"notification_type": notification_type, "awaits_response": awaits_response},

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,7 +46,11 @@ class AlertService:
                 raise NotFoundError("Alert", alert_id)
         if alert.is_read:
             return alert
-        updated = await self.repo.update_fields(alert_id, is_read=True)
+        # resolved_at junto con is_read: sin el timestamp no se puede medir la
+        # velocidad de reacción (insights, etapa 2).
+        updated = await self.repo.update_fields(
+            alert_id, is_read=True, resolved_at=datetime.now(timezone.utc)
+        )
         return updated  # type: ignore[return-value]
 
     async def mark_all_read(self, obra_id: int | None = None, tenant_id: int | None = None) -> list[Alert]:

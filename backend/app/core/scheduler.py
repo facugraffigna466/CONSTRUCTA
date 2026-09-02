@@ -15,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import engine
 from app.services.notification_service import NotificationService
 
@@ -96,6 +97,37 @@ async def _job_cleanup_expired_sessions() -> None:
     logger.info("Scheduler: cleanup_expired_sessions → %d filas eliminadas", count)
 
 
+async def _job_monthly_insights() -> None:
+    """Motor de insights, pipeline mensual completo (etapas 1 a 5).
+
+    Corre el día 1 y cubre el mes que cerró. Por cada obra activa encadena:
+    estadísticas (determinísticas) → conclusiones con IA → render del email →
+    envío al owner del tenant + aviso por WhatsApp. Una obra que falla no corta
+    el resto, y el envío es idempotente por (obra, período): reintentar el job
+    no reenvía informes ya mandados.
+    """
+    from app.services.insight_delivery_service import run_pipeline_for_all_active
+    from app.services.obra_stats_service import previous_period
+
+    period = previous_period()
+    logger.info("Scheduler: monthly_insights(period=%s)", period)
+    async with _db() as db:
+        results = await run_pipeline_for_all_active(db, period)
+
+    sent = sum(1 for r in results if r.get("status") == "sent")
+    already = sum(1 for r in results if r.get("status") == "already_sent")
+    failed = [r for r in results if r.get("status") not in ("sent", "already_sent")]
+    logger.info(
+        "Scheduler: monthly_insights(period=%s) → %d obras | %d enviados, %d ya enviados, %d con problema",
+        period, len(results), sent, already, len(failed),
+    )
+    for r in failed:
+        logger.warning(
+            "Scheduler: monthly_insights obra %s → %s (%s)",
+            r.get("obra_id"), r.get("status"), r.get("error") or r.get("reason") or "",
+        )
+
+
 def _parse_hours() -> list[int]:
     raw = os.getenv("REMINDER_HOURS_AHEAD", "24,72")
     return [int(h.strip()) for h in raw.split(",") if h.strip().isdigit()]
@@ -161,6 +193,28 @@ def start_scheduler() -> None:
         replace_existing=True,
         misfire_grace_time=3600,
     )
+
+    # Motor de insights completo (etapas 1-5) — día 1 a las 4 AM, después de la
+    # limpieza de sesiones y fuera de horario de obra.
+    #
+    # Apagado por defecto (INSIGHTS_ENABLED): el job manda emails reales y gasta
+    # una llamada a Claude por obra activa. En local eso es puro costo — el link
+    # del informe apunta a localhost y no le sirve a nadie. Se enciende en el
+    # .env del servidor cuando se despliega.
+    if settings.INSIGHTS_ENABLED:
+        scheduler.add_job(
+            _job_monthly_insights,
+            CronTrigger(day=1, hour=4, minute=0),
+            id="monthly_insights",
+            replace_existing=True,
+            misfire_grace_time=6 * 3600,
+        )
+        logger.info("Scheduler: monthly_insights ACTIVO (día 1, 4 AM)")
+    else:
+        logger.info(
+            "Scheduler: monthly_insights APAGADO (INSIGHTS_ENABLED=false). "
+            "El disparo manual sigue disponible: run_monthly_insights() / run_obra_pipeline()."
+        )
 
     scheduler.start()
     logger.info("Scheduler started — reminder windows: %s hours ahead", hours_list)
