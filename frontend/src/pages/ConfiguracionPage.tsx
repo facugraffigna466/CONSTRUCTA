@@ -245,36 +245,45 @@ function RiskRuleRow({ rule, form, set, first }: {
 }) {
   const enabled = form[rule.toggle] as boolean;
   const Icon = ALERT_ICON[rule.type];
+  // Layout en tres líneas fijas (título + interruptor / descripción / umbrales) y
+  // no una sola fila que envuelve: la tarjeta vive en una grilla de dos columnas
+  // y mide ~470 px, así que con flex-wrap cada regla rompía en un punto distinto
+  // según el largo de su texto y la lista quedaba despareja.
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 0", borderTop: first ? "none" : `1px solid ${C.line}`, paddingTop: first ? 2 : 13, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 0", borderTop: first ? "none" : `1px solid ${C.line}`, paddingTop: first ? 2 : 13 }}>
       <div style={{
-        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+        width: 30, height: 30, borderRadius: 8, flexShrink: 0, marginTop: 1,
         background: enabled ? C.secondary50 : "#F4F5F4",
         color: enabled ? C.secondary : C.text3,
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
         <Icon size={14} />
       </div>
-      <div style={{ flex: 1, minWidth: 190 }}>
-        <h4 style={{ margin: "0 0 2px", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13.5, color: C.text, letterSpacing: "-0.01em" }}>
-          {ALERT_LABEL[rule.type]}
-        </h4>
-        <p style={{ margin: 0, fontSize: 12.5, color: C.text2, lineHeight: 1.45 }}>{rule.description}</p>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <h4 style={{ flex: 1, margin: 0, fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13.5, color: C.text, letterSpacing: "-0.01em" }}>
+            {ALERT_LABEL[rule.type]}
+          </h4>
+          <Switch checked={enabled} onChange={v => set(rule.toggle, v as SystemSettings[typeof rule.toggle])} />
+        </div>
+
+        <p style={{ margin: "3px 0 0", fontSize: 12.5, color: C.text2, lineHeight: 1.45 }}>{rule.description}</p>
+
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 9 }}>
+          {rule.thresholds.map(t => (
+            <span key={String(t.key)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: enabled ? C.text2 : C.text3 }}>
+              {t.prefix}
+              <ThresholdInput
+                value={form[t.key] as number}
+                onChange={v => set(t.key, v as SystemSettings[typeof t.key])}
+                disabled={!enabled}
+              />
+              {t.suffix}
+            </span>
+          ))}
+        </div>
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-        {rule.thresholds.map(t => (
-          <span key={String(t.key)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: enabled ? C.text2 : C.text3 }}>
-            {t.prefix}
-            <ThresholdInput
-              value={form[t.key] as number}
-              onChange={v => set(t.key, v as SystemSettings[typeof t.key])}
-              disabled={!enabled}
-            />
-            {t.suffix}
-          </span>
-        ))}
-      </div>
-      <Switch checked={enabled} onChange={v => set(rule.toggle, v as SystemSettings[typeof rule.toggle])} />
     </div>
   );
 }
