@@ -97,6 +97,21 @@ async def _job_cleanup_expired_sessions() -> None:
     logger.info("Scheduler: cleanup_expired_sessions → %d filas eliminadas", count)
 
 
+async def _job_weekly_digest() -> None:
+    """Resumen semanal de WhatsApp a cada responsable activo, los lunes.
+
+    Corre **cada hora** los lunes, no una sola vez a las 8: la ventana horaria
+    es configurable por tenant, así que una empresa que arranca a las 9 nunca
+    recibiría un envío agendado a las 8 en punto. El servicio manda en la primera
+    corrida que caiga dentro de la ventana y marca `last_weekly_digest_at` para
+    no repetir.
+    """
+    logger.info("Scheduler: weekly_digest")
+    async with _db() as db:
+        count = await NotificationService(db).send_weekly_digest()
+    logger.info("Scheduler: weekly_digest → %d resúmenes enviados", count)
+
+
 async def _job_monthly_insights() -> None:
     """Motor de insights, pipeline mensual completo (etapas 1 a 5).
 
@@ -190,6 +205,17 @@ def start_scheduler() -> None:
         _job_cleanup_expired_sessions,
         CronTrigger(hour=3, minute=0),
         id="cleanup_expired_sessions",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+
+    # Resumen semanal a los responsables — lunes, cada hora entre las 6 y las 12.
+    # El rango cubre cualquier ventana horaria razonable que configure un tenant;
+    # el servicio decide en qué hora concreta enviar y no repite.
+    scheduler.add_job(
+        _job_weekly_digest,
+        CronTrigger(day_of_week="mon", hour="6-12", minute=10),
+        id="weekly_digest",
         replace_existing=True,
         misfire_grace_time=3600,
     )

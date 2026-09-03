@@ -19,7 +19,7 @@ from app.integrations.twilio.client import send_whatsapp_message
 from app.models.alert import AlertType
 from app.models.message import Message, MessageDirection, MessageProcessingStatus, MessageType
 from app.models.responsible import Responsible
-from app.models.task import Task
+from app.models.task import Task, TaskStatus
 from app.repositories.alert import AlertRepository
 from app.repositories.calendar import CalendarRepository
 from app.repositories.historial import HistorialRepository
@@ -28,9 +28,9 @@ from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
-from app.services.calendar_service import is_within_working_hours
+from app.services.calendar_service import is_within_send_window, is_within_working_hours
 from app.services.conversation_service import ConversationService
-from app.services.message_templates import fmt_date
+from app.services.message_templates import build_weekly_digest_message, fmt_date
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +136,116 @@ class NotificationService:
                 )
 
         return count
+
+    async def send_weekly_digest(self) -> int:
+        """Resumen del lunes para cada responsable activo con algo que mirar.
+
+        Qué entra en el mensaje de cada persona:
+          · vencidas o bloqueadas — sin importar la fecha, primero de todo;
+          · las que vencen en la semana en curso (lunes a domingo);
+          · las que están en progreso aunque venzan más adelante, para que no se
+            le escape algo que ya arrancó.
+
+        Quien no tenga nada de eso **no recibe mensaje**: un "no tenés nada"
+        semanal entrena a ignorar al bot.
+
+        Se apoya en `notify_responsible()` y `can_notify_*`, los mismos que usa
+        el recordatorio de vencimiento — acá no se arma ni se manda nada a mano.
+        """
+        now = datetime.now(timezone.utc)
+        hoy = _ar_today(now)
+        lunes = hoy - timedelta(days=hoy.weekday())
+        domingo = lunes + timedelta(days=6)
+
+        responsables = await self.resp_repo.list_active()
+        enviados = 0
+
+        for resp in responsables:
+            if not resp.whatsapp_number:
+                continue
+
+            # Ya salió el de esta semana (el job corre cada hora los lunes).
+            ultimo = resp.last_weekly_digest_at
+            if ultimo is not None:
+                ultimo_utc = ultimo if ultimo.tzinfo else ultimo.replace(tzinfo=timezone.utc)
+                if ultimo_utc.astimezone(_AR_TZ).date() >= lunes:
+                    continue
+
+            cfg = await self.settings_repo.get_for_responsible(resp.id)
+            if not cfg.chatbot_enabled or not cfg.auto_reminders:
+                logger.debug("digest: %s tiene el chatbot/recordatorios apagados", resp.id)
+                continue
+            if not is_within_send_window(cfg.send_hour_from, cfg.send_hour_to, now):
+                # Todavía no abrió la ventana: la corrida de la hora siguiente reintenta.
+                continue
+
+            buckets = await self._weekly_buckets(resp.id, hoy, domingo)
+            if not any(buckets.values()):
+                continue
+
+            body = build_weekly_digest_message(
+                resp.full_name,
+                urgentes=buckets["urgentes"],
+                semana=buckets["semana"],
+                en_curso=buckets["en_curso"],
+            )
+            try:
+                await self.notify_responsible(
+                    resp, body, notification_type="weekly_digest",
+                )
+                resp.last_weekly_digest_at = now
+                enviados += 1
+                logger.info(
+                    "Resumen semanal enviado a %s (%d urgentes, %d de la semana, %d en curso)",
+                    resp.whatsapp_number, len(buckets["urgentes"]),
+                    len(buckets["semana"]), len(buckets["en_curso"]),
+                )
+            except Exception:
+                logger.exception("Falló el resumen semanal de %s", resp.whatsapp_number)
+
+        await self.db.flush()
+        return enviados
+
+    async def _weekly_buckets(
+        self, responsible_id: int, hoy: date, domingo: date
+    ) -> dict[str, list[dict]]:
+        """Agrupa las tareas de un responsable por urgencia, para el resumen.
+
+        Una tarea cae en un solo grupo: lo urgente gana sobre lo de la semana, y
+        lo de la semana sobre lo que solo está en curso. Sin esto, una tarea
+        bloqueada que además vence el jueves aparecería dos veces.
+        """
+        tareas = await self.task_repo.list_by_responsible(responsible_id)
+        urgentes: list[dict] = []
+        semana: list[dict] = []
+        en_curso: list[dict] = []
+
+        for t in tareas:
+            fila = {
+                "task_id": t.id,
+                "title": t.title,
+                "due_date": t.due_date.isoformat() if t.due_date else None,
+                "status": t.status.value,
+            }
+            vencida = t.due_date is not None and t.due_date < hoy
+            if t.status == TaskStatus.BLOQUEADA:
+                urgentes.append({**fila, "motivo": "bloqueada"})
+            elif vencida:
+                urgentes.append({**fila, "motivo": "vencida"})
+            elif t.due_date is not None and t.due_date <= domingo:
+                semana.append(fila)
+            elif t.status == TaskStatus.EN_PROGRESO:
+                en_curso.append(fila)
+
+        # Dentro de cada grupo, lo que vence antes va primero; sin fecha, al final.
+        def por_fecha(f: dict):
+            return (f["due_date"] is None, f["due_date"] or "")
+
+        return {
+            "urgentes": sorted(urgentes, key=por_fecha),
+            "semana": sorted(semana, key=por_fecha),
+            "en_curso": sorted(en_curso, key=por_fecha),
+        }
 
     async def notify_responsible(
         self,

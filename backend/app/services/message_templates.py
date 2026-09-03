@@ -245,3 +245,48 @@ def build_cancelled_message() -> str:
 
 def build_non_text_message(name: str) -> str:
     return f"Hola {name}. Por favor respondé con el número de la opción."
+
+
+def build_weekly_digest_message(
+    name: str,
+    *,
+    urgentes: list[dict],
+    semana: list[dict],
+    en_curso: list[dict],
+) -> str:
+    """Resumen del lunes: la foto de la semana de un responsable.
+
+    Es deliberadamente distinto del recordatorio individual
+    (`build_reminder_message`): aquel apunta a UNA tarea y abre el menú numerado
+    de estados esperando respuesta; este es una lista de varias tareas, sin menú
+    y sin sesión de conversación. Si el mismo lunes salen los dos, el destinatario
+    ve dos mensajes con propósito y forma distintos, no el mismo texto repetido.
+
+    Cada dict trae: title, due_date, status, obra_name, motivo ("vencida"/"bloqueada").
+    """
+    lines = [f"👋 ¡Buen lunes, {name}!", ""]
+
+    if urgentes:
+        lines.append("🔴 Necesita atención:")
+        for t in urgentes:
+            if t.get("motivo") == "bloqueada":
+                detalle = "está bloqueada"
+            else:
+                detalle = f"venció el {fmt_date(t.get('due_date'))}"
+            lines.append(f"• {t['title']} — {detalle}")
+        lines.append("")
+
+    if semana:
+        lines.append("📅 Esta semana:")
+        for t in semana:
+            lines.append(f"• {t['title']} — vence {fmt_date(t.get('due_date'))}")
+        lines.append("")
+
+    if en_curso:
+        lines.append("🔧 También tenés en curso:")
+        for t in en_curso:
+            lines.append(f"• {t['title']}")
+        lines.append("")
+
+    lines.append("Cualquier cosa, escribime.")
+    return "\n".join(lines)
