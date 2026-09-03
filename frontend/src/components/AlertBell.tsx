@@ -1,18 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, CalendarClock, Clock, MessageCircle, OctagonAlert, Package } from "lucide-react";
+import { iconOf, labelOf, paletteOf } from "../lib/alertMeta";
 import type { Alert } from "../types";
 
-const TYPE_META: Record<Alert["type"], { Icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string; label: string }> = {
-  task_blocked:          { Icon: OctagonAlert,  color: "#D03A3A", label: "Tarea bloqueada" },
-  task_overdue:          { Icon: Clock,         color: "#D03A3A", label: "Tarea vencida" },
-  delay_risk:            { Icon: AlertTriangle, color: "#C97D0E", label: "Riesgo de demora" },
-  no_response:           { Icon: MessageCircle, color: "#C97D0E", label: "Sin respuesta" },
-  reschedule_requested:  { Icon: CalendarClock, color: "#3A6BD9", label: "Reprogramación solicitada" },
-  order_received:        { Icon: Package,       color: "#1F8A5B", label: "Pedido recibido" },
-};
-
 function AlertRow({ alert, onAlertClick, setOpen, obraName }: { alert: Alert; onAlertClick: (a: Alert) => void; setOpen: (v: boolean) => void; obraName?: string }) {
-  const meta = TYPE_META[alert.type] ?? { Icon: AlertTriangle, color: "#C97D0E", label: alert.type };
+  const palette = paletteOf(alert);
+  const meta = { Icon: iconOf(alert), color: palette.color, label: labelOf(alert) };
   return (
     <div
       onClick={() => { if (alert.obra_id) { setOpen(false); onAlertClick(alert); } }}

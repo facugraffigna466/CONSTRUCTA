@@ -58,9 +58,14 @@ def upgrade() -> None:
     )
     op.create_index("idx_alerts_severity", "alerts", ["severity"])
 
+    # `type::text`: la columna es el enum alert_type y los parámetros llegan como
+    # varchar. Postgres no define el operador `alert_type = varchar`, así que sin
+    # el cast explícito la migración falla con UndefinedFunctionError.
     for severity, types in _BACKFILL.items():
         op.execute(
-            sa.text("UPDATE alerts SET severity = :sev WHERE type IN :types").bindparams(
+            sa.text(
+                "UPDATE alerts SET severity = :sev WHERE type::text IN :types"
+            ).bindparams(
                 sa.bindparam("types", value=types, expanding=True), sev=severity
             )
         )
@@ -73,7 +78,9 @@ def downgrade() -> None:
     # declarados. Las alertas que los usen se degradan a delay_risk para que el
     # frontend viejo (que tipa los 6 originales) siga pudiendo renderizarlas.
     op.execute(
-        sa.text("UPDATE alerts SET type = 'delay_risk' WHERE type IN :types").bindparams(
+        sa.text(
+            "UPDATE alerts SET type = 'delay_risk' WHERE type::text IN :types"
+        ).bindparams(
             sa.bindparam("types", value=tuple(_NEW_TYPES), expanding=True)
         )
     )

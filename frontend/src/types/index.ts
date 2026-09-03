@@ -99,13 +99,25 @@ export interface HistorialEvento {
   created_at: string;
 }
 
-export type AlertType = "task_blocked" | "delay_risk" | "task_overdue" | "no_response" | "reschedule_requested" | "order_received";
+export type AlertType =
+  // Reglas originales
+  | "task_blocked" | "delay_risk" | "task_overdue" | "no_response"
+  | "reschedule_requested" | "order_received"
+  // Detección de riesgo (docs/propuesta-reglas-riesgo.md)
+  | "critical_task_delayed" | "float_shrinking" | "baseline_deviation"
+  | "material_pending_too_long" | "order_sent_no_confirmation" | "material_blocking_task"
+  | "progress_stalled" | "deadline_conflicts_holiday"
+  | "recurring_blocker" | "chronic_no_response" | "milestone_at_risk";
+
+/** Peso de la alerta. Ordenadas de mayor a menor en SEVERITY_ORDER (lib/alertMeta.ts). */
+export type AlertSeverity = "critica" | "alta" | "media" | "baja";
 
 export interface Alert {
   id: number;
   obra_id: number | null;
   task_id: number | null;
   type: AlertType;
+  severity: AlertSeverity;
   message: string;
   is_read: boolean;
   created_at: string;

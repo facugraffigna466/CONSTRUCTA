@@ -14,6 +14,7 @@ import {
   Trash2,
   Truck,
   Users,
+  ShieldAlert,
   Wifi,
   X,
   Zap,
@@ -35,7 +36,8 @@ import {
   updateSupplier,
   deleteSupplier,
 } from "../api/suppliers";
-import type { HistorialEvento, PlanUsage, Supplier } from "../types";
+import { ALERT_ICON, ALERT_LABEL } from "../lib/alertMeta";
+import type { AlertType, HistorialEvento, PlanUsage, Supplier } from "../types";
 
 // ─── Shared style tokens ──────────────────────────────────────────────────────
 
@@ -126,6 +128,157 @@ function AutoRow({ label, kbd, checked, onChange, disabled = false, icon, first 
   );
 }
 
+
+/** Catálogo de las reglas de detección de riesgo (docs/propuesta-reglas-riesgo.md).
+ *  Se declara como dato y no como JSX repetido: son once reglas con la misma
+ *  forma, y así agregar una es sumar una entrada. `type` es el AlertType, que da
+ *  el ícono desde lib/alertMeta sin volver a elegirlo acá. */
+const RISK_RULES: {
+  type: AlertType;
+  toggle: keyof SystemSettings;
+  description: string;
+  thresholds: { key: keyof SystemSettings; prefix: string; suffix: string }[];
+}[] = [
+  {
+    type: "critical_task_delayed",
+    toggle: "risk_critical_task_delayed",
+    description: "Tareas sin holgura vencidas o por vencer. Si se atrasan, se corre la fecha de fin de obra.",
+    thresholds: [{ key: "risk_critical_delay_lookahead_days", prefix: "Avisar", suffix: "días antes" }],
+  },
+  {
+    type: "milestone_at_risk",
+    toggle: "risk_milestone_at_risk",
+    description: "Hitos próximos con tareas previas sin terminar.",
+    thresholds: [{ key: "risk_milestone_lookahead_days", prefix: "Avisar", suffix: "días antes" }],
+  },
+  {
+    type: "baseline_deviation",
+    toggle: "risk_baseline_deviation",
+    description: "El fin de una tarea se corrió respecto de la línea base guardada.",
+    thresholds: [{ key: "risk_baseline_deviation_days", prefix: "Desde", suffix: "días de atraso" }],
+  },
+  {
+    type: "float_shrinking",
+    toggle: "risk_float_shrinking",
+    description: "La holgura de una tarea se achicó y está por entrar en la ruta crítica.",
+    thresholds: [{ key: "risk_float_threshold_days", prefix: "Por debajo de", suffix: "días de holgura" }],
+  },
+  {
+    type: "material_blocking_task",
+    toggle: "risk_material_blocking_task",
+    description: "Tareas por arrancar con materiales que todavía no llegaron a la obra.",
+    thresholds: [{ key: "risk_material_blocking_days", prefix: "Mirar", suffix: "días hacia adelante" }],
+  },
+  {
+    type: "material_pending_too_long",
+    toggle: "risk_material_pending",
+    description: "Materiales cargados que nunca pasaron a pedido.",
+    thresholds: [{ key: "risk_material_pending_days", prefix: "Después de", suffix: "días" }],
+  },
+  {
+    type: "order_sent_no_confirmation",
+    toggle: "risk_order_no_confirmation",
+    description: "Pedidos enviados que el proveedor nunca confirmó.",
+    thresholds: [{ key: "risk_order_confirmation_days", prefix: "Después de", suffix: "días" }],
+  },
+  {
+    type: "progress_stalled",
+    toggle: "risk_progress_stalled",
+    description: "Tareas en progreso que hace días no mueven el porcentaje de avance.",
+    thresholds: [{ key: "risk_progress_stalled_days", prefix: "Después de", suffix: "días sin avance" }],
+  },
+  {
+    type: "recurring_blocker",
+    toggle: "risk_recurring_blocker",
+    description: "Una misma tarea que se bloquea una y otra vez: el problema es de fondo.",
+    thresholds: [{ key: "risk_recurring_blocker_count", prefix: "Desde", suffix: "bloqueos" }],
+  },
+  {
+    type: "chronic_no_response",
+    toggle: "risk_chronic_no_response",
+    description: "Un responsable que acumula alertas por no contestar.",
+    thresholds: [
+      { key: "risk_chronic_no_response_count", prefix: "Desde", suffix: "alertas" },
+      { key: "risk_chronic_no_response_window_days", prefix: "en los últimos", suffix: "días" },
+    ],
+  },
+  {
+    type: "deadline_conflicts_holiday",
+    toggle: "risk_deadline_holiday",
+    description: "Vencimientos que caen en feriado o día no laborable de la obra.",
+    thresholds: [{ key: "risk_holiday_lookahead_days", prefix: "Mirar", suffix: "días hacia adelante" }],
+  },
+];
+
+function ThresholdInput({ value, onChange, disabled }: {
+  value: number; onChange: (v: number) => void; disabled: boolean;
+}) {
+  return (
+    <input
+      type="number"
+      min={1}
+      value={value}
+      disabled={disabled}
+      onChange={e => {
+        // Un umbral vacío o en cero haría que la regla dispare para todo: se
+        // ignora el valor inválido en vez de guardarlo.
+        const parsed = parseInt(e.target.value, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) onChange(parsed);
+      }}
+      style={{
+        width: 52, height: 28, textAlign: "center",
+        border: `1px solid ${C.line}`, borderRadius: 7,
+        background: disabled ? "#F7F7F6" : C.surface,
+        color: disabled ? C.text3 : C.text,
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 12.5,
+        outline: "none",
+      }}
+    />
+  );
+}
+
+function RiskRuleRow({ rule, form, set, first }: {
+  rule: (typeof RISK_RULES)[number];
+  form: SystemSettings;
+  set: <K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) => void;
+  first?: boolean;
+}) {
+  const enabled = form[rule.toggle] as boolean;
+  const Icon = ALERT_ICON[rule.type];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 0", borderTop: first ? "none" : `1px solid ${C.line}`, paddingTop: first ? 2 : 13, flexWrap: "wrap" }}>
+      <div style={{
+        width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+        background: enabled ? C.secondary50 : "#F4F5F4",
+        color: enabled ? C.secondary : C.text3,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <Icon size={14} />
+      </div>
+      <div style={{ flex: 1, minWidth: 190 }}>
+        <h4 style={{ margin: "0 0 2px", fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, fontSize: 13.5, color: C.text, letterSpacing: "-0.01em" }}>
+          {ALERT_LABEL[rule.type]}
+        </h4>
+        <p style={{ margin: 0, fontSize: 12.5, color: C.text2, lineHeight: 1.45 }}>{rule.description}</p>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        {rule.thresholds.map(t => (
+          <span key={String(t.key)} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, color: enabled ? C.text2 : C.text3 }}>
+            {t.prefix}
+            <ThresholdInput
+              value={form[t.key] as number}
+              onChange={v => set(t.key, v as SystemSettings[typeof t.key])}
+              disabled={!enabled}
+            />
+            {t.suffix}
+          </span>
+        ))}
+      </div>
+      <Switch checked={enabled} onChange={v => set(rule.toggle, v as SystemSettings[typeof rule.toggle])} />
+    </div>
+  );
+}
+
 function FieldRow({ label, value, onChange, type = "text", placeholder, icon, hint, required }: {
   label: string; value: string; onChange: (v: string) => void;
   type?: string; placeholder?: string; icon?: React.ReactNode; hint?: string; required?: boolean;
@@ -204,6 +357,31 @@ const DEFAULT_SETTINGS: SystemSettings = {
   notify_task_blocked: true,
   notify_no_response: true,
   notify_rescheduled: true,
+  // Detección de riesgo: mismos defaults que el backend (migración 0063). Es un
+  // placeholder hasta que responde GET /settings, no la fuente de verdad.
+  risk_critical_task_delayed: true,
+  risk_critical_delay_lookahead_days: 3,
+  risk_float_shrinking: true,
+  risk_float_threshold_days: 3,
+  risk_baseline_deviation: true,
+  risk_baseline_deviation_days: 5,
+  risk_material_pending: true,
+  risk_material_pending_days: 7,
+  risk_order_no_confirmation: true,
+  risk_order_confirmation_days: 7,
+  risk_material_blocking_task: true,
+  risk_material_blocking_days: 5,
+  risk_progress_stalled: true,
+  risk_progress_stalled_days: 7,
+  risk_deadline_holiday: true,
+  risk_holiday_lookahead_days: 14,
+  risk_recurring_blocker: true,
+  risk_recurring_blocker_count: 3,
+  risk_chronic_no_response: true,
+  risk_chronic_no_response_count: 3,
+  risk_chronic_no_response_window_days: 30,
+  risk_milestone_at_risk: true,
+  risk_milestone_lookahead_days: 7,
   company_name: null,
   main_responsible: null,
   company_email: null,
@@ -543,6 +721,7 @@ export function ConfiguracionPage() {
           { id: "cfg-datos", label: "Datos generales" },
           { id: "cfg-whatsapp", label: "WhatsApp" },
           { id: "cfg-auto", label: "Automatizaciones" },
+          { id: "cfg-riesgo", label: "Detección de riesgo" },
           { id: "cfg-tiempo", label: "Tiempo real" },
           ...(canEdit && planUsage ? [{ id: "cfg-plan", label: "Tu plan" }] : []),
           ...(canEdit ? [{ id: "cfg-proveedores", label: "Proveedores" }] : []),
@@ -860,6 +1039,34 @@ export function ConfiguracionPage() {
                   icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3.5" width="11" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M5.5 2v3M10.5 2v3M2.5 7h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>}
                   iconStyle={{ background: C.secondary50, color: C.secondary }}
                 />
+              </div>
+            </div>
+
+            {/* Detección de riesgo */}
+            <div id="cfg-riesgo" style={{ scrollMarginTop: 112, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden" }}>
+              <div style={{ padding: "14px 22px", borderBottom: `1px solid ${C.line}` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                    background: "linear-gradient(135deg, #FFF0E8 0%, #FFE0CC 100%)",
+                    border: "1px solid #F5D5C0",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <ShieldAlert size={15} color="#E76A2D" />
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: "-0.015em", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                    Detección de riesgo
+                  </span>
+                </div>
+                <p style={{ margin: "8px 0 0", fontSize: 12.5, color: C.text2, lineHeight: 1.45 }}>
+                  Reglas que se evalúan solas sobre el cronograma, la línea base, las compras y
+                  el historial de la obra. Cada una avisa antes de que el problema se vuelva un atraso.
+                </p>
+              </div>
+              <div style={{ padding: "8px 22px 10px" }}>
+                {RISK_RULES.map((rule, i) => (
+                  <RiskRuleRow key={rule.toggle} rule={rule} form={form} set={set} first={i === 0} />
+                ))}
               </div>
             </div>
           </div>

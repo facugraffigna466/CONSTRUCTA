@@ -7,6 +7,7 @@ interface AlertCreatedPayload {
   obraId: number | null;
   taskId: number | null;
   type: Alert["type"];
+  severity?: Alert["severity"];
   message: string;
   is_read: boolean;
   created_at: string;
@@ -23,7 +24,10 @@ export function useAlertSocket(
         id:         payload.id,
         obra_id:    payload.obraId,
         task_id:    payload.taskId,
+        // El backend siempre la manda; el fallback cubre un front nuevo
+        // hablando con un backend anterior a la migración 0062.
         type:       payload.type,
+        severity:   payload.severity ?? "media",
         message:    payload.message,
         is_read:    payload.is_read,
         created_at: payload.created_at,
