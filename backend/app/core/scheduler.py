@@ -66,6 +66,21 @@ async def _job_evaluate_delay_risk() -> None:
     logger.info("Scheduler: evaluate_delay_risk → %d alerts", count)
 
 
+async def _job_evaluate_risk_rules() -> None:
+    """Reglas de detección de riesgo (docs/propuesta-reglas-riesgo.md).
+
+    Separado de _job_evaluate_delay_risk a propósito: aquel corre además en cada
+    carga del dashboard y tiene que ser barato, mientras que estas reglas
+    recalculan el CPM y leen línea base, materiales y calendario. Se corre en un
+    horario distinto (:45) para no solaparse con la corrida de delay_risk (:30).
+    """
+    logger.info("Scheduler: evaluate_risk_rules")
+    from app.services.risk_service import RiskService
+    async with _db() as db:
+        count = await RiskService(db).evaluate_all_obras()
+    logger.info("Scheduler: evaluate_risk_rules → %d alerts", count)
+
+
 async def _job_remind_bitacora_obra() -> None:
     logger.info("Scheduler: remind_bitacora_obra")
     from app.services.message_service import MessageService
@@ -139,6 +154,15 @@ def start_scheduler() -> None:
         _job_evaluate_delay_risk,
         CronTrigger(hour="*/4", minute=30),
         id="evaluate_delay_risk",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
+    # Reglas de detección de riesgo — cada 4 horas, desfasadas de delay_risk.
+    scheduler.add_job(
+        _job_evaluate_risk_rules,
+        CronTrigger(hour="*/4", minute=45),
+        id="evaluate_risk_rules",
         replace_existing=True,
         misfire_grace_time=600,
     )

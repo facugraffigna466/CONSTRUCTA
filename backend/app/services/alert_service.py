@@ -3,7 +3,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError
-from app.models.alert import Alert, AlertType
+from app.models.alert import Alert, AlertSeverity, AlertType
 from app.models.obra import ObraStatus
 from app.models.task import TaskStatus
 from app.repositories.alert import AlertRepository
@@ -156,32 +156,46 @@ class AlertService:
                 )
         return created
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    # ── Emisor genérico ───────────────────────────────────────────────────────
 
-    async def _task_alert(
+    async def emit(
         self,
+        *,
         obra_id: int,
-        task_id: int,
+        alert_type: AlertType,
         message: str,
         reason: str,
+        task_id: int | None = None,
+        severity: AlertSeverity | None = None,
         extra: dict[str, Any] | None = None,
     ) -> int:
-        """Create a task-level delay_risk alert unless an identical unread one exists.
+        """Crea una alerta salvo que ya exista una idéntica sin leer. Devuelve 0 o 1.
 
-        Dedup is against unread alerts only. Auto-resolve in TaskService.update() marks
-        alerts as read when the underlying condition is fixed, so the cycle is:
-        condition active → unread alert created → condition fixed → alert auto-resolved
-        → condition recurs → new unread alert created (correct recurrence detection).
+        Único punto de emisión de alertas de riesgo: garantiza las dos invariantes
+        que la propuesta pide sostener para toda regla nueva —dedup por
+        (task_id/obra_id, tipo, mensaje) contra alertas NO leídas, y exactamente un
+        evento en historial por alerta creada.
+
+        La dedup contra no-leídas (y no contra todas) es deliberada: junto con el
+        auto-resolve de TaskService cierra el ciclo condición activa → alerta →
+        condición resuelta → alerta leída → condición reaparece → alerta nueva.
+        Por eso los mensajes de las reglas NO deben incluir contadores volátiles
+        tipo "faltan N días": cambiarían todos los días y cada corrida crearía una
+        alerta nueva en vez de deduplicar.
         """
-        already = await self.repo.exists_unread_for_task(
-            task_id, AlertType.DELAY_RISK, message
-        )
+        if task_id is not None:
+            already = await self.repo.exists_unread_for_task(task_id, alert_type, message)
+        else:
+            already = await self.repo.exists_unread_for_obra(obra_id, alert_type, message)
         if already:
             return 0
+
         await self.repo.create_alert(
-            AlertType.DELAY_RISK, message, obra_id=obra_id, task_id=task_id
+            alert_type, message, obra_id=obra_id, task_id=task_id, severity=severity
         )
-        payload: dict[str, Any] = {"alert_type": "delay_risk", "reason": reason}
+        payload: dict[str, Any] = {"alert_type": alert_type.value, "reason": reason}
+        if severity is not None:
+            payload["severity"] = severity.value
         if extra:
             payload.update(extra)
         await self.historial.log(
@@ -194,6 +208,26 @@ class AlertService:
         )
         return 1
 
+    # ── Private helpers ───────────────────────────────────────────────────────
+
+    async def _task_alert(
+        self,
+        obra_id: int,
+        task_id: int,
+        message: str,
+        reason: str,
+        extra: dict[str, Any] | None = None,
+    ) -> int:
+        """Alerta DELAY_RISK a nivel tarea. Ver emit() para dedup e historial."""
+        return await self.emit(
+            obra_id=obra_id,
+            task_id=task_id,
+            alert_type=AlertType.DELAY_RISK,
+            message=message,
+            reason=reason,
+            extra=extra,
+        )
+
     async def _obra_alert(
         self,
         obra_id: int,
@@ -201,29 +235,11 @@ class AlertService:
         reason: str,
         extra: dict[str, Any] | None = None,
     ) -> int:
-        """Create an obra-level delay_risk alert unless an identical unread one exists.
-
-        Obra-level messages embed counts, so a severity change produces a different message
-        and correctly bypasses dedup. Unread-only dedup is sufficient here — obra-level
-        conditions do not have a direct auto-resolve path (no single task update fixes them).
-        """
-        already = await self.repo.exists_unread_for_obra(
-            obra_id, AlertType.DELAY_RISK, message
-        )
-        if already:
-            return 0
-        await self.repo.create_alert(
-            AlertType.DELAY_RISK, message, obra_id=obra_id, task_id=None
-        )
-        payload: dict[str, Any] = {"alert_type": "delay_risk", "reason": reason}
-        if extra:
-            payload.update(extra)
-        await self.historial.log(
+        """Alerta DELAY_RISK a nivel obra (task_id NULL). Ver emit()."""
+        return await self.emit(
             obra_id=obra_id,
-            task_id=None,
-            event_type="alert_created",
-            description=message,
-            payload=payload,
-            triggered_by="system",
+            alert_type=AlertType.DELAY_RISK,
+            message=message,
+            reason=reason,
+            extra=extra,
         )
-        return 1
