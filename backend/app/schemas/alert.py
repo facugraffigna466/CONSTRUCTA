@@ -8,6 +8,7 @@ class AlertRead(BaseModel):
     obra_id: int | None
     task_id: int | None
     type: AlertType
+    severity: str
     message: str
     is_read: bool
     created_at: datetime

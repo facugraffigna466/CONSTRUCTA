@@ -2,7 +2,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant_denorm import tenant_for_obra
-from app.models.alert import Alert, AlertType
+from app.models.alert import DEFAULT_SEVERITY, Alert, AlertSeverity, AlertType
 from app.repositories.base import BaseRepository
 
 
@@ -16,13 +16,22 @@ class AlertRepository(BaseRepository[Alert]):
         message: str,
         obra_id: int | None = None,
         task_id: int | None = None,
+        severity: AlertSeverity | None = None,
     ) -> Alert:
+        """Crea la alerta y la emite por Socket.IO.
+
+        `severity` es opcional: si no se pasa, se usa la severidad por defecto del
+        tipo (DEFAULT_SEVERITY en models/alert.py). Solo las reglas que calculan un
+        peso dinámico —por ejemplo baseline_deviation, que escala con los días de
+        desvío— necesitan pasarla explícitamente.
+        """
         from app.core.socket_manager import emit_alert_created
         alert = Alert(
             type=alert_type,
             message=message,
             obra_id=obra_id,
             task_id=task_id,
+            severity=(severity or DEFAULT_SEVERITY.get(alert_type, AlertSeverity.MEDIA)).value,
             tenant_id=await tenant_for_obra(self.session, obra_id),
         )
         alert = await self.create(alert)

@@ -16,6 +16,32 @@ class SettingsRead(BaseModel):
     notify_task_blocked: bool
     notify_no_response: bool
     notify_rescheduled: bool
+
+    # ── Detección de riesgo (una regla por toggle + su umbral) ────────────────
+    risk_critical_task_delayed: bool
+    risk_critical_delay_lookahead_days: int
+    risk_float_shrinking: bool
+    risk_float_threshold_days: int
+    risk_baseline_deviation: bool
+    risk_baseline_deviation_days: int
+    risk_material_pending: bool
+    risk_material_pending_days: int
+    risk_order_no_confirmation: bool
+    risk_order_confirmation_days: int
+    risk_material_blocking_task: bool
+    risk_material_blocking_days: int
+    risk_progress_stalled: bool
+    risk_progress_stalled_days: int
+    risk_deadline_holiday: bool
+    risk_holiday_lookahead_days: int
+    risk_recurring_blocker: bool
+    risk_recurring_blocker_count: int
+    risk_chronic_no_response: bool
+    risk_chronic_no_response_count: int
+    risk_chronic_no_response_window_days: int
+    risk_milestone_at_risk: bool
+    risk_milestone_lookahead_days: int
+
     company_name: str | None
     main_responsible: str | None
     company_email: str | None
@@ -39,6 +65,32 @@ class SettingsPatch(BaseModel):
     notify_task_blocked: bool | None = None
     notify_no_response: bool | None = None
     notify_rescheduled: bool | None = None
+
+    # ── Detección de riesgo (una regla por toggle + su umbral) ────────────────
+    risk_critical_task_delayed: bool | None = None
+    risk_critical_delay_lookahead_days: int | None = None
+    risk_float_shrinking: bool | None = None
+    risk_float_threshold_days: int | None = None
+    risk_baseline_deviation: bool | None = None
+    risk_baseline_deviation_days: int | None = None
+    risk_material_pending: bool | None = None
+    risk_material_pending_days: int | None = None
+    risk_order_no_confirmation: bool | None = None
+    risk_order_confirmation_days: int | None = None
+    risk_material_blocking_task: bool | None = None
+    risk_material_blocking_days: int | None = None
+    risk_progress_stalled: bool | None = None
+    risk_progress_stalled_days: int | None = None
+    risk_deadline_holiday: bool | None = None
+    risk_holiday_lookahead_days: int | None = None
+    risk_recurring_blocker: bool | None = None
+    risk_recurring_blocker_count: int | None = None
+    risk_chronic_no_response: bool | None = None
+    risk_chronic_no_response_count: int | None = None
+    risk_chronic_no_response_window_days: int | None = None
+    risk_milestone_at_risk: bool | None = None
+    risk_milestone_lookahead_days: int | None = None
+
     company_name: str | None = None
     main_responsible: str | None = None
     company_email: str | None = None

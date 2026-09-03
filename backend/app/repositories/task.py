@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from sqlalchemy import case, cast, DateTime as SADateTime, delete, func, literal, select, Time as SATime, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.obra import Obra
@@ -123,6 +123,21 @@ class TaskRepository(BaseRepository[Task]):
         if completed_date is not None:
             fields["completed_date"] = completed_date
         return await self.update_fields(task_id, **fields)
+
+    async def update_fields(self, id: int, **fields):  # type: ignore[override]
+        """Igual que el genérico, pero sella `last_progress_at` cuando cambia el avance.
+
+        Se hace acá y no en cada call site del service porque `estimated_progress`
+        se toca desde varios lados (edición manual, cambio de estado, pipeline del
+        chatbot) y todos pasan por update_fields(). Solo se sella si el valor
+        realmente cambió: reguardar la tarea con el mismo avance no debería
+        resetear el reloj de la regla `progress_stalled`.
+        """
+        if "estimated_progress" in fields:
+            current = await self.session.get(Task, id)
+            if current is not None and current.estimated_progress != fields["estimated_progress"]:
+                fields["last_progress_at"] = datetime.now(timezone.utc)
+        return await super().update_fields(id, **fields)
 
     async def get_dependency_ids(self, task_id: int) -> list[int]:
         """Return IDs of tasks that task_id depends on."""
