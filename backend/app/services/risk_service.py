@@ -12,7 +12,10 @@ regla nueva es escribir el método y sumar una línea a esa tabla.
 Toda alerta sale por AlertService.emit(), que centraliza dedup e historial.
 """
 import logging
+from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+
+from typing import NamedTuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,9 +23,13 @@ from sqlalchemy.orm import selectinload
 
 from app.models.alert import AlertSeverity, AlertType
 from app.models.baseline import TaskBaseline
+from app.models.alert import Alert
+from app.models.historial import HistorialEvento
 from app.models.obra import Obra, ObraStatus
+from app.models.responsible import Responsible
 from app.models.purchase_order import PurchaseOrder
 from app.models.task_material import TaskMaterial
+from app.models.task_risk_snapshot import TaskRiskSnapshot
 from app.models.settings import SystemSettings
 from app.models.task import Task, TaskStatus
 from app.repositories.calendar import CalendarRepository
@@ -51,6 +58,20 @@ def _as_utc(dt: datetime) -> datetime:
 
 # Un material deja de ser riesgo recién cuando llegó a la obra.
 MATERIAL_NOT_RECEIVED = ("pendiente", "pedido")
+
+# Cada cuánto corre cada regla. No es una preferencia estética: una regla que
+# compara contra el pasado (holgura de ayer, avance de la semana) no cambia de
+# resultado entre las 8 y las 12 del mismo día, y correrla cada 4 h solo gasta
+# CPU. Las de patrón (§6) miran meses de historial: semanal alcanza.
+FREQUENT = "frequent"  # cada 4 h — condiciones que cambian con cada edición
+DAILY = "daily"        # 1 vez por día — comparaciones contra un snapshot diario
+WEEKLY = "weekly"      # 1 vez por semana — patrones acumulados en historial
+
+
+class RiskRule(NamedTuple):
+    setting: str   # campo de SystemSettings que la habilita
+    method: str    # método de RiskService que la evalúa
+    cadence: str
 
 
 class RiskContext:
@@ -159,20 +180,25 @@ class RiskService:
         self.settings_repo = SettingsRepository(session)
 
     # ── Registro de reglas ────────────────────────────────────────────────────
-    # (campo de SystemSettings que la habilita, nombre del método)
-    RULES: list[tuple[str, str]] = [
-        ("risk_critical_task_delayed", "_rule_critical_task_delayed"),
-        ("risk_baseline_deviation", "_rule_baseline_deviation"),
-        ("risk_milestone_at_risk", "_rule_milestone_at_risk"),
-        ("risk_deadline_holiday", "_rule_deadline_conflicts_holiday"),
-        ("risk_material_pending", "_rule_material_pending_too_long"),
-        ("risk_order_no_confirmation", "_rule_order_sent_no_confirmation"),
-        ("risk_material_blocking_task", "_rule_material_blocking_task"),
+    RULES: list[RiskRule] = [
+        RiskRule("risk_critical_task_delayed", "_rule_critical_task_delayed", FREQUENT),
+        RiskRule("risk_baseline_deviation", "_rule_baseline_deviation", FREQUENT),
+        RiskRule("risk_milestone_at_risk", "_rule_milestone_at_risk", FREQUENT),
+        RiskRule("risk_deadline_holiday", "_rule_deadline_conflicts_holiday", FREQUENT),
+        RiskRule("risk_material_pending", "_rule_material_pending_too_long", FREQUENT),
+        RiskRule("risk_order_no_confirmation", "_rule_order_sent_no_confirmation", FREQUENT),
+        RiskRule("risk_material_blocking_task", "_rule_material_blocking_task", FREQUENT),
+        RiskRule("risk_progress_stalled", "_rule_progress_stalled", DAILY),
+        RiskRule("risk_float_shrinking", "_rule_float_shrinking", DAILY),
+        RiskRule("risk_recurring_blocker", "_rule_recurring_blocker", WEEKLY),
+        RiskRule("risk_chronic_no_response", "_rule_chronic_no_response", WEEKLY),
     ]
 
     # ── Orquestación ──────────────────────────────────────────────────────────
 
-    async def evaluate_obra(self, obra_id: int) -> int:
+    async def evaluate_obra(self, obra_id: int, cadence: str | None = None) -> int:
+        """Evalúa las reglas habilitadas de una obra. `cadence` acota a las de esa
+        frecuencia; sin ella corre todas (lo que usan los tests y una corrida manual)."""
         obra = await self.obra_repo.get(obra_id)
         if obra is None or obra.status in INACTIVE_OBRA_STATUSES:
             return 0
@@ -182,26 +208,28 @@ class RiskService:
         await ctx.load()
 
         created = 0
-        for flag, method_name in self.RULES:
-            if not getattr(cfg, flag, False):
+        for rule in self.RULES:
+            if cadence is not None and rule.cadence != cadence:
+                continue
+            if not getattr(cfg, rule.setting, False):
                 continue
             # Una regla que explota no debe tumbar al resto de la corrida.
             try:
-                created += await getattr(self, method_name)(ctx)
+                created += await getattr(self, rule.method)(ctx)
             except Exception:
                 logger.exception(
-                    "Regla de riesgo %s falló para obra_id=%d", method_name, obra_id
+                    "Regla de riesgo %s falló para obra_id=%d", rule.method, obra_id
                 )
         return created
 
-    async def evaluate_all_obras(self) -> int:
+    async def evaluate_all_obras(self, cadence: str | None = None) -> int:
         """Corrida completa del cron. Una obra que falla no frena a las demás."""
         created = 0
         for obra in await self.obra_repo.list_all():
             if obra.status in INACTIVE_OBRA_STATUSES:
                 continue
             try:
-                created += await self.evaluate_obra(obra.id)
+                created += await self.evaluate_obra(obra.id, cadence=cadence)
             except Exception:
                 logger.exception("evaluate_obra falló para obra_id=%d", obra.id)
         return created
@@ -529,5 +557,210 @@ class RiskService:
                     "start_date": task.start_date.isoformat(),
                     "material_ids": [m.id for m in materiales],
                 },
+            )
+        return created
+
+    # ── Bloque 4 — progreso estancado ─────────────────────────────────────────
+
+    async def _rule_progress_stalled(self, ctx: RiskContext) -> int:
+        """§4.1 — tarea en progreso que hace N días no mueve el avance.
+
+        Usa `tasks.last_progress_at` (migración 0064) en vez de escarbar
+        historial_eventos por tarea, que era la alternativa que la propuesta
+        descartaba por costo. Para tareas anteriores a esa columna el backfill puso
+        `updated_at`; si aun así estuviera en NULL se cae a `created_at`, para no
+        alertar a una tarea recién creada por no tener historia.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            days=ctx.cfg.risk_progress_stalled_days
+        )
+        created = 0
+        for task in ctx.active_tasks:
+            if task.status != TaskStatus.EN_PROGRESO:
+                continue
+            ultimo = _as_utc(task.last_progress_at or task.created_at)
+            if ultimo > cutoff:
+                continue
+
+            message = (
+                f"La tarea «{task.title}» está en progreso al {task.estimated_progress}% "
+                f"y no registra avance desde el {_fmt(ultimo.date())}."
+            )
+            created += await self.alerts.emit(
+                obra_id=ctx.obra.id,
+                task_id=task.id,
+                alert_type=AlertType.PROGRESS_STALLED,
+                message=message,
+                reason="progress_stalled",
+                extra={
+                    "last_progress_at": ultimo.isoformat(),
+                    "estimated_progress": task.estimated_progress,
+                },
+            )
+        return created
+
+    # ── Bloque 1 — holgura que se achica ──────────────────────────────────────
+
+    async def _rule_float_shrinking(self, ctx: RiskContext) -> int:
+        """§1.2 — la holgura de una tarea no crítica cayó por debajo del umbral.
+
+        Es la única regla con estado propio: compara contra `task_risk_snapshots`,
+        que se pisa en cada corrida. Por eso el snapshot se actualiza SIEMPRE, haya
+        o no alerta — si solo se guardara al alertar, la corrida siguiente
+        compararía contra un valor viejo y volvería a alertar lo mismo.
+
+        En la primera corrida de una obra no hay contra qué comparar: se guarda el
+        snapshot y no se alerta. Se excluye la holgura 0 (esa tarea ya es crítica y
+        la cubre `critical_task_delayed`) y el centinela 9999 que devuelve el CPM
+        para las tareas sin ninguna restricción.
+        """
+        cpm = await ctx.cpm()
+        floats = {int(tid): value for tid, value in cpm["float_by_task"].items()}
+        if not floats:
+            return 0
+
+        result = await self.session.execute(
+            select(TaskRiskSnapshot).where(TaskRiskSnapshot.task_id.in_(floats.keys()))
+        )
+        previos = {s.task_id: s for s in result.scalars().all()}
+        activas = {t.id: t for t in ctx.active_tasks}
+        umbral = ctx.cfg.risk_float_threshold_days
+
+        created = 0
+        for task_id, actual in floats.items():
+            previo = previos.get(task_id)
+
+            # El snapshot se escribe para todas, incluso las que no alertan.
+            if previo is None:
+                self.session.add(
+                    TaskRiskSnapshot(
+                        task_id=task_id,
+                        tenant_id=ctx.obra.tenant_id,
+                        float_days=actual,
+                    )
+                )
+            else:
+                anterior = previo.float_days
+                previo.float_days = actual
+
+                task = activas.get(task_id)
+                if (
+                    task is not None
+                    and 0 < actual < umbral
+                    and actual < anterior
+                    and anterior != 9999
+                ):
+                    message = (
+                        f"La holgura de la tarea «{task.title}» bajó de {anterior} a "
+                        f"{actual} días. Está por entrar en la ruta crítica."
+                    )
+                    created += await self.alerts.emit(
+                        obra_id=ctx.obra.id,
+                        task_id=task_id,
+                        alert_type=AlertType.FLOAT_SHRINKING,
+                        message=message,
+                        reason="float_shrinking",
+                        extra={"float_before": anterior, "float_now": actual},
+                    )
+        await self.session.flush()
+        return created
+
+    # ── Bloque 6 — patrones sobre el historial ────────────────────────────────
+
+    async def _rule_recurring_blocker(self, ctx: RiskContext) -> int:
+        """§6.1 — la misma tarea se bloqueó N veces o más.
+
+        Un bloqueo es un evento; tres son un síntoma de algo estructural (una
+        dependencia mal definida, un proveedor que nunca cumple, un permiso que no
+        sale). Por eso la alerta apunta a revisar la definición de la tarea y no a
+        destrabarla una vez más.
+
+        El filtro por `to == bloqueada` se hace en Python: `payload` es una columna
+        JSON y consultarla desde SQL obligaría a ramificar entre el operador de
+        Postgres y el de SQLite. El universo ya viene acotado por (obra, tipo de
+        evento), que están indexados.
+        """
+        result = await self.session.execute(
+            select(HistorialEvento).where(
+                HistorialEvento.obra_id == ctx.obra.id,
+                HistorialEvento.event_type == "task_status_changed",
+            )
+        )
+        bloqueos: Counter[int] = Counter(
+            evento.task_id
+            for evento in result.scalars().all()
+            if evento.task_id is not None
+            and (evento.payload or {}).get("to") == TaskStatus.BLOQUEADA.value
+        )
+
+        umbral = ctx.cfg.risk_recurring_blocker_count
+        activas = {t.id: t for t in ctx.active_tasks}
+        created = 0
+        for task_id, veces in bloqueos.items():
+            if veces < umbral or task_id not in activas:
+                continue
+
+            task = activas[task_id]
+            message = (
+                f"La tarea «{task.title}» se bloqueó {veces} veces. No es un bloqueo "
+                "puntual: conviene revisar sus dependencias o su responsable."
+            )
+            created += await self.alerts.emit(
+                obra_id=ctx.obra.id,
+                task_id=task_id,
+                alert_type=AlertType.RECURRING_BLOCKER,
+                message=message,
+                reason="recurring_blocker",
+                extra={"block_count": veces},
+            )
+        return created
+
+    async def _rule_chronic_no_response(self, ctx: RiskContext) -> int:
+        """§6.2 — un responsable acumula N alertas de falta de respuesta.
+
+        Apunta a la persona y no a la tarea, que es donde está el problema
+        accionable: si alguien no contesta en cinco tareas distintas, el tema no se
+        resuelve mirando ninguna de las cinco. Va a nivel obra porque el sujeto es
+        el responsable, no una tarea puntual.
+
+        El mensaje incluye la cuenta a propósito: cuando pasa de 3 a 5 la situación
+        escaló y merece avisar de nuevo. La cadencia semanal acota el ruido.
+        """
+        ventana = datetime.now(timezone.utc) - timedelta(
+            days=ctx.cfg.risk_chronic_no_response_window_days
+        )
+        result = await self.session.execute(
+            select(Alert).where(
+                Alert.obra_id == ctx.obra.id,
+                Alert.type == AlertType.NO_RESPONSE,
+                Alert.created_at >= ventana,
+            )
+        )
+        por_tarea = {t.id: t for t in ctx.tasks}
+        conteo: Counter[int] = Counter()
+        for alerta in result.scalars().all():
+            task = por_tarea.get(alerta.task_id) if alerta.task_id else None
+            if task is not None and task.responsible_id is not None:
+                conteo[task.responsible_id] += 1
+
+        umbral = ctx.cfg.risk_chronic_no_response_count
+        dias = ctx.cfg.risk_chronic_no_response_window_days
+        created = 0
+        for responsible_id, veces in conteo.items():
+            if veces < umbral:
+                continue
+
+            responsible = await self.session.get(Responsible, responsible_id)
+            nombre = responsible.full_name if responsible else f"El responsable #{responsible_id}"
+            message = (
+                f"{nombre} acumula {veces} alertas por falta de respuesta en los "
+                f"últimos {dias} días. Conviene revisar el canal de contacto."
+            )
+            created += await self.alerts.emit(
+                obra_id=ctx.obra.id,
+                alert_type=AlertType.CHRONIC_NO_RESPONSE,
+                message=message,
+                reason="chronic_no_response",
+                extra={"responsible_id": responsible_id, "alert_count": veces},
             )
         return created
