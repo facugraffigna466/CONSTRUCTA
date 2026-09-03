@@ -1195,7 +1195,7 @@ El jefe de obra graba un audio (desde WhatsApp en la obra, o desde la app con el
 En `backend/.env`: `ANTHROPIC_API_KEY=sk-ant-...` (análisis) y `OPENAI_API_KEY=sk-...` (transcripción de audio). Sin la segunda, los audios quedan guardados y el texto se puede cargar a mano.
 
 ### Auditoría UX/UI (agente paralelo)
-Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla tipo Excel que pide el cliente pero está escondida (propuesta "Excel-first" con 13 cambios S/M/L), cero soporte mobile (P0), pérdida de datos al cerrar el wizard, inconsistencia de "duración" entre modal y planilla, datos fake en Portfolio/login, ~25 hallazgos P0-P2, 12 quick wins y roadmap de 5 sprints.
+Informe completo en `docs/auditoria/auditoria-ux.md`: la vista Planilla ya es la grilla tipo Excel que pide el cliente pero está escondida (propuesta "Excel-first" con 13 cambios S/M/L), cero soporte mobile (P0), pérdida de datos al cerrar el wizard, inconsistencia de "duración" entre modal y planilla, datos fake en Portfolio/login, ~25 hallazgos P0-P2, 12 quick wins y roadmap de 5 sprints.
 
 ---
 
@@ -1309,7 +1309,7 @@ El revert a mouse events no alcanzaba: el overlay SVG de flechas de dependencias
 
 ## 2026-06-12 — Alta de empresa self-service + fixes del flujo de creación
 
-Salida de la auditoría del flujo de alta (`docs/auditoria-flujo-alta.md`). Rama `feature/alta-empresa-wizard-fixes`.
+Salida de la auditoría del flujo de alta (`docs/auditoria/auditoria-flujo-alta.md`). Rama `feature/alta-empresa-wizard-fixes`.
 
 - **Registro self-service**: LoginPage modo "Crear cuenta" → `POST /auth/register` con `company_name`, rol `admin` siempre, tenant propio en plan Básico, login automático.
 - **Aislamiento multi-tenant**: obras (list filtra, get 404 cross-tenant), responsables (migration 0026 `tenant_id` + backfill), alertas (join por obra), usuarios. Verificado e2e con usuario nuevo.
@@ -1690,10 +1690,10 @@ Los clics del menú (portal) burbujeaban por el árbol de React hasta el `onClic
 Auditoría técnica módulo por módulo de **todo el sistema**, sin cambios de código de producto: solo relevamiento y documentación de hallazgos.
 
 ### Alcance y método
-Se reconciliaron los ocho análisis por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Resultado: **cobertura 26/26 rutas** (ningún módulo sin auditar).
+Se reconciliaron los ocho análisis por módulo (`docs/analisis/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Resultado: **cobertura 26/26 rutas** (ningún módulo sin auditar).
 
 ### Entregable
-Nuevo documento maestro **`docs/auditoria-sistema-consolidada.md`** que consolida los 8 análisis en uno solo:
+Nuevo documento maestro **`docs/auditoria/auditoria-sistema-consolidada.md`** que consolida los 8 análisis en uno solo:
 - Resumen ejecutivo + conteo por severidad: **15 P0 (seguridad) · ~28 P1 (robustez/negocio) · ~20 P2 (pulido)**.
 - Matriz de cobertura de las 26 rutas (cada ruta → doc → hallazgo de mayor severidad).
 - Los 15 P0 en tabla (módulo, impacto, causa raíz), los P1 agrupados por área, los P2.
@@ -1779,12 +1779,12 @@ Determinar el estado real de CONSTRUCTA frente al Anteproyecto, el documento de 
 ### Changes made
 - Se creó un diagnóstico consolidado con porcentajes separados de implementación, evidencia, documentación y preparación de entrega.
 - Se construyó una matriz de 17 compromisos originales y se contrastó contra el código y las pruebas existentes.
-- Se comparó `docs/IPI-CONSTRUCTA.md` contra la plantilla oficial y contra los objetivos aprobados en el Anteproyecto.
+- Se comparó `docs/ipi/IPI-CONSTRUCTA.md` contra la plantilla oficial y contra los objetivos aprobados en el Anteproyecto.
 - Se documentó la imposibilidad de leer la hoja online por autenticación y se analizó provisionalmente la copia local del Gantt.
 - No se modificó código de producto; los riesgos encontrados quedaron documentados para una remediación posterior explícita.
 
 ### Files modified
-- `docs/estado-proyecto-agosto-2026.md` — informe consolidado, porcentajes, brechas y plan de cierre.
+- `docs/estado/estado-proyecto-agosto-2026.md` — informe consolidado, porcentajes, brechas y plan de cierre.
 - `docs/documentacion.md` — registro de la sesión de auditoría.
 
 ### Problems found
@@ -1803,7 +1803,7 @@ Determinar el estado real de CONSTRUCTA frente al Anteproyecto, el documento de 
 
 ### Validation
 - Lectura completa de los dos DOCX aportados y de las 21 páginas de la plantilla IPI — completada.
-- Revisión de `docs/IPI-CONSTRUCTA.md` — 431 líneas, 8.279 palabras, ocho marcadores `[COMPLETAR]` y siete figuras previstas.
+- Revisión de `docs/ipi/IPI-CONSTRUCTA.md` — 431 líneas, 8.279 palabras, ocho marcadores `[COMPLETAR]` y siete figuras previstas.
 - Revisión de `/Users/agustinllancaman/Downloads/Gantt_Final_Constructa.xlsx` — 48 actividades en 10 fases.
 - Export de la hoja online — HTTP 401; no se pudo validar si existe una versión posterior.
 - `pytest` — 16/16 tests aprobados.
@@ -1833,7 +1833,7 @@ Recalcular el estado de CONSTRUCTA usando el Gantt completo aportado por el equi
 
 ### Files modified
 - `docs/alcance-defensa-2026-08-15.md` — diagnóstico específico de la defensa, alcance incluido/excluido, porcentajes y plan de cierre.
-- `docs/estado-proyecto-agosto-2026.md` — aviso de reemplazo de la estimación preliminar para el corte del 2026-08-15.
+- `docs/estado/estado-proyecto-agosto-2026.md` — aviso de reemplazo de la estimación preliminar para el corte del 2026-08-15.
 - `docs/documentacion.md` — registro de la recalibración.
 
 ### Problems found
@@ -1884,10 +1884,10 @@ Alinear el borrador del IPI con el Anteproyecto aprobado, la implementación y l
 - Se actualizó el generador DOCX con los nombres de estudiantes y directores y con el reconocimiento visual de marcadores `[PENDIENTE]`.
 
 ### Files modified
-- `docs/IPI-CONSTRUCTA.md` — objetivos aprobados, evolución del alcance, estado técnico, pruebas, relevamiento, impactos, conclusión y anexos.
-- `docs/build_ipi_docx.py` — integrantes, directores y tratamiento de marcadores pendientes.
-- `docs/alcance-defensa-2026-08-13.md` — informe renombrado y recalculado para la fecha oficial, con consigna y guion temporal.
-- `docs/estado-proyecto-agosto-2026.md` — referencia al informe vigente y actualización de datos técnicos.
+- `docs/ipi/IPI-CONSTRUCTA.md` — objetivos aprobados, evolución del alcance, estado técnico, pruebas, relevamiento, impactos, conclusión y anexos.
+- `docs/ipi/build_ipi_docx.py` — integrantes, directores y tratamiento de marcadores pendientes.
+- `docs/estado/alcance-defensa-2026-08-13.md` — informe renombrado y recalculado para la fecha oficial, con consigna y guion temporal.
+- `docs/estado/estado-proyecto-agosto-2026.md` — referencia al informe vigente y actualización de datos técnicos.
 - `docs/documentacion.md` — registro de la alineación y de la corrección de fecha.
 
 ### Problems found
@@ -1921,7 +1921,7 @@ Alinear el borrador del IPI con el Anteproyecto aprobado, la implementación y l
 - Corregir y probar los controles multiempresa todavía abiertos antes de presentar el producto como SaaS listo para producción.
 - Ejecutar sobre un único commit los recorridos críticos y registrar fecha, entorno, entrada, resultado real, evidencia e incidencia.
 - Preparar diapositivas, datos de demostración, contingencias y un guion ensayado de ocho minutos.
-- Actualizar el DER, `docs/database.md`, las figuras del IPI y sus referencias.
+- Actualizar el DER, `docs/referencia/database.md`, las figuras del IPI y sus referencias.
 - Completar la matriz retrospectiva del relevamiento, el estudio económico, la reflexión del equipo, el título definitivo y la fecha de portada.
 
 ---
@@ -1942,8 +1942,8 @@ Incorporar al IPI la modalidad real de trabajo del equipo, la variabilidad de su
 - Se incorporó la modalidad organizativa al cierre recomendado de dos minutos de la presentación.
 
 ### Files modified
-- `docs/IPI-CONSTRUCTA.md` — organización, dedicación, reflexión, límites del relevamiento y base del estudio económico.
-- `docs/alcance-defensa-2026-08-13.md` — explicación breve de la organización del equipo para el cierre de la presentación.
+- `docs/ipi/IPI-CONSTRUCTA.md` — organización, dedicación, reflexión, límites del relevamiento y base del estudio económico.
+- `docs/estado/alcance-defensa-2026-08-13.md` — explicación breve de la organización del equipo para el cierre de la presentación.
 - `docs/documentacion.md` — registro de las decisiones documentales y económicas.
 
 ### Problems found
@@ -1992,7 +1992,7 @@ Precisar el gasto mensual informado por el equipo para las suscripciones persona
 - Se mantuvo separada esta inversión de asistencia al desarrollo respecto del consumo de APIs generado por la aplicación.
 
 ### Files modified
-- `docs/IPI-CONSTRUCTA.md` — periodicidad, costo por servicio, total mensual y fórmula de acumulación.
+- `docs/ipi/IPI-CONSTRUCTA.md` — periodicidad, costo por servicio, total mensual y fórmula de acumulación.
 - `docs/documentacion.md` — registro de la confirmación económica.
 
 ### Problems found
@@ -2049,7 +2049,7 @@ El backlog de la auditoría del 2026-07-17 tenía ~28 P1; este barrido cerró el
 Cada PR con su propio test/verificación puntual (no hay una corrida consolidada registrada para todo el barrido); CI en verde en cada merge.
 
 ### Pending / next steps
-Ver `docs/estado-proyecto-agosto-2026.md` y el backlog post-audit para lo que quedó fuera de este barrido.
+Ver `docs/estado/estado-proyecto-agosto-2026.md` y el backlog post-audit para lo que quedó fuera de este barrido.
 
 ---
 
@@ -2060,11 +2060,11 @@ Poner al día los diagramas técnicos y las capturas del IPI de cara a la defens
 
 ### Changes made
 - Diagramas actualizados: DER, casos de uso, diagrama de estados y diagrama de secuencia del chatbot (`docs/diagramas/`).
-- Se cablearon las 4 capturas faltantes (Figuras 2–5) en `docs/IPI-CONSTRUCTA.md` y se avanzó el resto del informe.
+- Se cablearon las 4 capturas faltantes (Figuras 2–5) en `docs/ipi/IPI-CONSTRUCTA.md` y se avanzó el resto del informe.
 
 ### Files modified
 - `docs/diagramas/*.svg`
-- `docs/IPI-CONSTRUCTA.md`
+- `docs/ipi/IPI-CONSTRUCTA.md`
 
 ### Validation
 Regeneración del DOCX con `build_ipi_docx.py` (diagramas rasterizados con `qlmanage`).
@@ -2109,7 +2109,7 @@ Repetir el ejercicio de auditoría del 2026-07-17 sobre el sistema ya con la car
 - También se aprovechó para sincronizar `IPI-CONSTRUCTA.md` con la última versión del DOCX y cerrar objeciones puntuales de la revisión de tesis (Presentación, Diagnóstico, Objetivos, Marco teórico).
 
 ### Files modified
-Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/IPI-CONSTRUCTA.md`.
+Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/ipi/IPI-CONSTRUCTA.md`.
 
 ### Pending / next steps
 Reporte 08 (bitácora): P0 cerrado el 2026-08-26; P1/P2 siguen abiertos. Reporte 06 (alertas) cerrado el 2026-08-26. Reporte 07 (historial) cerrado el 2026-08-27 (ver entradas más abajo).
@@ -2353,10 +2353,69 @@ Quedó sin resolver, por falta de un caso de uso concreto: si Automatizaciones/A
 
 ---
 
+## 2026-09-02 — Gantt: la línea de "hoy" tapaba las flechas de dependencia
+
+### Objective
+El usuario mostró una captura del Gantt donde la barra vertical naranja del día de hoy cae justo encima de un tramo de dependencias: la flecha que baja entre tareas y los badges de tipo (`SS`) quedaban cortados por el naranja y no se entendía qué conectaba con qué.
+
+### Changes made
+El marcador de hoy estaba en `zIndex: 4`, es decir **por encima** de las barras de tarea (`zIndex: 1`) y de la capa SVG de dependencias (`zIndex: 3`). Además no era una línea fina sino una barra sólida de 2px con `boxShadow: "0 0 0 4px rgba(231,106,45,0.06)"`, o sea unos 10px de ancho efectivo de naranja opaco pisando todo lo que cruzara.
+
+Se lo reemplazó por un marcador de fondo: `zIndex: 0` (justo encima del sombreado de fines de semana y debajo de barras y flechas), una banda del ancho de la columna del día con `rgba(231,106,45,0.07)` y un borde izquierdo punteado de 1px al 55% de opacidad como referencia exacta. Se eliminó el `boxShadow`.
+
+No se pierde legibilidad del "hoy" porque el header de fechas ya marca ese día con la celda en naranja sólido (`#E85A26`, texto blanco) y sigue existiendo el botón "Ir a hoy" que hace scroll a la columna. El criterio es el mismo que usa MS Project: la línea de hoy es contexto de fondo, no un elemento que compita con el contenido del diagrama.
+
+### Files modified
+Frontend: `components/GanttTimeline.tsx` (bloque "Today vertical line" → "Today marker").
+
+### Validation
+`npx tsc --noEmit -p tsconfig.app.json` sin errores.
+
+### Pending / next steps
+Queda pendiente un problema distinto que se ve en la misma captura: cuando varias dependencias llegan a tareas consecutivas, los badges de tipo (`SS`/`FF`/`SF`) se dibujan en posiciones muy cercanas y se solapan entre sí. Eso es cálculo de `labelX`/`labelY` en la capa de paths, no un tema de z-index, y no se tocó en este cambio.
+
+---
+
+## 2026-09-02 — Planilla de tareas reconstruida sobre `react-datasheet-grid`
+
+### Objective
+El usuario reportó que la carga de datos en la planilla no funcionaba: al agregar una fila nueva aparecía una fecha ya puesta y, al presionar Enter, no quedaba guardado ni la fecha, ni el responsable, ni nada. Pidió "reveer el funcionamiento de la planilla completa". Después de un primer intento de arreglar la implementación existente, el veredicto fue "no funciona, es incómodo y no funciona bien", acotado a "la interacción en sí (tabs, clics, fechas)". A partir de ahí el usuario preguntó qué alternativas había —incluyendo si se podía embeber una hoja de Google Sheets— y, tras descartarlo, aprobó investigar y usar una biblioteca ya hecha. El norte de diseño que fijó fue "lo hagamos lo más parecido a Excel".
+
+### Changes made
+
+**Se reemplazó la grilla propia por `react-datasheet-grid` (MIT, ~1.900 líneas hechas a mano → ~1.800 con más funcionalidad).** La biblioteca aporta selección de celdas y rangos, navegación con teclado, relleno por arrastre, copiar/pegar de bloques y deshacer, todo probado. El código propio quedó reducido a las celdas del dominio (título, responsable, fechas, duración, estado, predecesoras, hito, costo) y a la integración con la API. Se conservó el handle `SheetViewHandle` (`startNewRow`, `focusTask`) para que el salto desde una alerta a la celda correspondiente siga funcionando.
+
+**Celdas específicas.** Cada celda con editor propio replica el patrón interno de la biblioteca (input no controlado sincronizado por *layout effect*). Tres detalles costaron sesión: (1) escribir no hacía nada porque el `textColumn` de la biblioteca llama a `focus()` **y** `select()`, y solo se estaba haciendo lo segundo; (2) cada tecla se comía la anterior (`5SS+2` quedaba en `SS+2`) porque el texto estaba en las dependencias del efecto de foco, así que cada re-parseo volvía a hacer `select()` — se separó en dos efectos y la resincronización sólo ocurre cuando la celda **no** tiene el foco; (3) las celdas que necesitan la fila entera no pueden usar `keyColumn`, que pisa `columnData` y rompe con `Cannot read properties of undefined (reading 'component')`.
+
+**Fechas.** Cargar Inicio completa Fin con un día de duración, pero si Fin ya tenía valor no se lo pisa (`durationOf` devuelve null si falta alguna de las dos fechas, y `START_DATE.set` distingue tres casos explícitos). Esto corrige el comportamiento que el usuario marcó como incorrecto: antes, cargar Inicio después de Fin movía Fin.
+
+**Predecesoras con notación de MS Project.** Columna que acepta `5`, `5FS+2`, `3SS-1`, etc., por número de fila, y persiste en la tabla `task_dependencies` con su tipo y desfase. Como la nomenclatura no es evidente, el encabezado lleva un botón "?" que despliega la referencia (elegido por el usuario sobre un selector de opciones en la celda).
+
+**Costo de materiales.** La columna muestra el total de materiales de la tarea; al abrirla despliega la tabla de materiales en un *popover*. El botón "Abrir tarea" llevaba al modal de creación de tareas, que el usuario rechazó por confuso: ahora navega a la pestaña **Presupuesto** con esa tarea desplegada y centrada en pantalla, y el resto de las tareas colapsadas (`ComprasTab` acepta `focusTaskId`; `collapsed` pasó a ser `Set<number> | null`, donde `null` significa "todavía no tocaste ningún chevron, derivá la apertura del foco").
+
+**Sólo se envían al backend los campos que cambiaron.** Antes se mandaba siempre `estimated_progress`, y como el backend usa `exclude_unset=True`, editar cualquier campo de una tarea completada devolvía 422. Ahora se hace un diff contra `tasksById`.
+
+**Inserción de filas en el medio.** Cuando la fila creada no es la última, se llama a `reorderTasks`; sin eso quedaban `order_index` duplicados y el orden salía mal.
+
+**Detalles de hoja de cálculo:** columna "Tarea" fija al scroll horizontal, barra de estado tipo Excel (resumen de la obra a la izquierda; recuento, suma y promedio de la selección a la derecha, resolviendo las columnas por `colId` y no por índice), lienzo con filas fantasma hasta un mínimo de 14, mostrar/ocultar columnas y ancho de columna ajustable por arrastre. Se descartó el zoom por pedido explícito del usuario.
+
+### Files modified
+Frontend: `components/TaskSheetView.tsx` (reescrito), `components/ComprasTab.tsx` (`focusTaskId`, colapso derivado del foco, `scrollIntoView`), `pages/ObraDetailPage.tsx` (`budgetFocusTaskId`, nuevas props de la planilla), `index.css` (columna fija, manija de resize, botón de ayuda), `package.json` / `package-lock.json` (`react-datasheet-grid@4.11.6`). Documentación: `IPI-CONSTRUCTA.md` (§Módulo de planilla de tareas y §Decisiones tecnológicas del frontend).
+
+### Validation
+`npx tsc --noEmit -p tsconfig.app.json`, `npx eslint` y `npm run build` sin errores. **Advertencia sobre el chequeo de tipos:** `tsconfig.json` tiene `"files": []`, así que `npx tsc --noEmit -p .` no chequea nada — hay que usar `-p tsconfig.app.json` o `npm run build`.
+
+Verificado contra la API y la base real, no sólo en pantalla: relleno por arrastre y copiar/pegar (confirmado por el usuario), predecesoras (139→136 FS/0 y 142→139 SS/2 en `task_dependencies`), hito (reflejado en el formulario y en el Gantt), Ctrl+Z (45→8→deshacer→45 en la base), *popover* de materiales, mostrar/ocultar columnas, columna fija y barra de estado.
+
+### Pending / next steps
+**La biblioteca ignora los cambios de `columns` mientras está montada.** Se comprobó inspeccionando el *fiber* de React: el componente re-renderiza y la prop nueva llega al envoltorio `memo`, pero el render interno y el DOM siguen con las columnas viejas. Afecta tanto al ancho de columna como a mostrar/ocultar. La solución es remontar la grilla con una `key` derivada de las columnas y sus anchos; para que no se sienta una recarga, el scroll se guarda antes de remontar y se restaura después (con un reintento un *frame* después, porque recién montada la grilla todavía no midió su alto útil y el scroll se clampea a 0). Queda un redibujado de un *frame* al soltar el mouse. Si molestara, la alternativa sería escribir los anchos directamente en el DOM y remontar recién al cambiar de pestaña.
+
+No se restauró el modal de vista previa al pegar que tenía la planilla anterior: Excel pega directo y el usuario no lo pidió de vuelta. Queda anotado por si se lo extraña.
+
 ## 2026-09-03 — Detección de riesgo: las 11 reglas propuestas, implementadas
 
 ### Objective
-La propuesta de reglas de riesgo (`docs/propuesta-reglas-riesgo.md`, PR #104) había quedado escrita y sin implementar. Su punto de partida era un desperdicio concreto: el sistema **ya calculaba o guardaba** ruta crítica con holgura por tarea, línea base, estado de materiales y órdenes de compra, calendario laboral con feriados e historial append-only, pero ninguno de esos datos se usaba para generar alertas. Las seis reglas existentes miraban solamente fechas de vencimiento y respuestas del chatbot. El objetivo fue llevar las once reglas a código, sin recortar alcance.
+La propuesta de reglas de riesgo (`docs/estado/propuesta-reglas-riesgo.md`, PR #104) había quedado escrita y sin implementar. Su punto de partida era un desperdicio concreto: el sistema **ya calculaba o guardaba** ruta crítica con holgura por tarea, línea base, estado de materiales y órdenes de compra, calendario laboral con feriados e historial append-only, pero ninguno de esos datos se usaba para generar alertas. Las seis reglas existentes miraban solamente fechas de vencimiento y respuestas del chatbot. El objetivo fue llevar las once reglas a código, sin recortar alcance.
 
 ### Changes made
 
@@ -2379,12 +2438,16 @@ La propuesta de reglas de riesgo (`docs/propuesta-reglas-riesgo.md`, PR #104) ha
 **Una restricción que atraviesa todas las reglas:** los mensajes no llevan contadores volátiles. La dedup es por mensaje exacto contra alertas no leídas, así que un texto tipo "vence en 3 días" cambiaría a diario y cada corrida crearía una alerta nueva en vez de deduplicar. Está documentado en `emit()` para quien agregue reglas después. La única excepción es deliberada: `chronic_no_response` sí incluye la cuenta, porque pasar de 3 a 5 es un escalamiento que merece volver a avisar.
 
 ### Files modified
-Backend: `services/risk_service.py` (**nuevo**), `services/alert_service.py` (`emit()` genérico; `_task_alert`/`_obra_alert` delegan ahí), `services/task_service.py` (`compute_critical_path_unchecked()`), `models/alert.py`, `models/settings.py`, `models/task.py`, `models/task_risk_snapshot.py` (**nuevo**), `repositories/alert.py`, `repositories/settings.py`, `repositories/task.py`, `core/scheduler.py`, `core/socket_manager.py`, `schemas/alert.py`, `schemas/settings.py`. Migraciones `0062`–`0064`. Frontend: `lib/alertMeta.ts` (**nuevo**), `types/index.ts`, `api/settings.ts`, `components/AlertasTab.tsx`, `components/AlertBell.tsx`, `components/CriticalAlertToast.tsx`, `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ConfiguracionPage.tsx`, `App.tsx`. Tests: `tests/test_risk_rules.py` (**nuevo**, 39 casos). Documentación: `docs/implementacion-reglas-riesgo.md` (**nuevo**, reporte de la implementación) e `IPI-CONSTRUCTA.md`.
+Backend: `services/risk_service.py` (**nuevo**), `services/alert_service.py` (`emit()` genérico; `_task_alert`/`_obra_alert` delegan ahí), `services/task_service.py` (`compute_critical_path_unchecked()`), `models/alert.py`, `models/settings.py`, `models/task.py`, `models/task_risk_snapshot.py` (**nuevo**), `repositories/alert.py`, `repositories/settings.py`, `repositories/task.py`, `core/scheduler.py`, `core/socket_manager.py`, `schemas/alert.py`, `schemas/settings.py`. Migraciones `0068`–`0070`. Frontend: `lib/alertMeta.ts` (**nuevo**), `types/index.ts`, `api/settings.ts`, `components/AlertasTab.tsx`, `components/AlertBell.tsx`, `components/CriticalAlertToast.tsx`, `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ConfiguracionPage.tsx`, `App.tsx`. Tests: `tests/test_risk_rules.py` (**nuevo**, 39 casos). Documentación: `docs/features/deteccion-riesgos.md` (**nuevo**, reporte de la implementación) e `IPI-CONSTRUCTA.md`.
 
 ### Validation
-Suite completa: **356 passed** (desde 317). Los 39 tests nuevos cubren, además del disparo de cada regla, lo que la propuesta pedía sostener: dedup entre corridas, re-disparo de una alerta leída si la condición persiste, un evento de historial por alerta, el toggle que apaga una regla sin tocar las demás, y una regla que explota sin frenar al resto. `npx tsc -b` y `npm run build` sin errores; ESLint sin errores nuevos respecto de `main`.
+Suite de la rama: **356 passed** (desde 317); **503** después de integrar `main`, que en el ínterin sumó los módulos de insights y digest semanal. Los 39 tests nuevos cubren, además del disparo de cada regla, lo que la propuesta pedía sostener: dedup entre corridas, re-disparo de una alerta leída si la condición persiste, un evento de historial por alerta, el toggle que apaga una regla sin tocar las demás, y una regla que explota sin frenar al resto. `npx tsc -b` y `npm run build` sin errores; ESLint sin errores nuevos respecto de `main`.
 
-**Verificación contra PostgreSQL real, no solo contra el SQLite de los tests.** Se creó una base aparte, se corrieron las migraciones y se sembró una obra con condiciones de riesgo: salieron 8 alertas de 7 reglas distintas, con 8 eventos de historial (la invariante se sostiene) y snapshots de holgura para las 7 tareas. **Eso destapó un bug que los tests no podían ver:** el backfill de la migración `0062` comparaba la columna enum `alert_type` contra parámetros varchar, y PostgreSQL no define ese operador — `alembic upgrade head` fallaba con `UndefinedFunctionError`. En SQLite el enum es un VARCHAR y la suite pasaba igual. Corregido con `type::text`. Es el mismo aprendizaje que ya había dejado la integración con Twilio, en otro plano: hay defectos que solo aparecen ejecutando contra el motor real.
+**Verificación contra PostgreSQL real, no solo contra el SQLite de los tests.** Se creó una base aparte, se corrieron las migraciones y se sembró una obra con condiciones de riesgo: salieron 8 alertas de 7 reglas distintas, con 8 eventos de historial (la invariante se sostiene) y snapshots de holgura para las 7 tareas. **Eso destapó un bug que los tests no podían ver:** el backfill de la migración `0068` comparaba la columna enum `alert_type` contra parámetros varchar, y PostgreSQL no define ese operador — `alembic upgrade head` fallaba con `UndefinedFunctionError`. En SQLite el enum es un VARCHAR y la suite pasaba igual. Corregido con `type::text`. Es el mismo aprendizaje que ya había dejado la integración con Twilio, en otro plano: hay defectos que solo aparecen ejecutando contra el motor real.
+
+### Integración con `main`
+
+Al momento de abrir el PR, `main` había avanzado con los módulos de insights y digest semanal, y con una reorganización de `docs/` en subcarpetas. El merge trajo tres cosas que resolver además de los conflictos de texto: las migraciones de esta rama chocaban de número con las de `main` (ambas arrancaban en `0062`), así que se renumeraron a `0068`–`0070` encadenando sobre `0067` — un conflicto que git **no marca**, porque son archivos distintos, y que habría dejado el `alembic upgrade head` roto; el reporte de implementación se movió a `docs/features/deteccion-riesgos.md` siguiendo la estructura nueva; y `TaskRepository.update_fields()` se rebasó sobre la versión de `main`, que había simplificado los imports del módulo.
 
 ### Pending / next steps
 Queda la pasada visual en el navegador de la sección de Configuración y del listado de alertas con severidad. Tres pendientes de alcance, ninguno una regresión: (1) cuando una obra no tiene calendario configurado el repositorio devuelve uno de lunes a sábado, así que `deadline_conflicts_holiday` marca cualquier vencimiento en domingo — se dejó así por ser severidad baja y señal legítima, pero se acota fácil a que dispare solo con excepciones cargadas; (2) las once reglas notifican dentro de la aplicación, mandar las críticas por WhatsApp al jefe de obra es el paso natural siguiente y no estaba en la propuesta; (3) las reglas nuevas no se auto-resuelven cuando la condición desaparece, como sí hacen las seis anteriores vía `TaskService.update()` — el ciclo funciona igual por la dedup, pero cerrarlo mejoraría la señal.

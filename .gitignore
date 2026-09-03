@@ -14,3 +14,7 @@ constructa.db
 # Videos (demasiado grandes para GitHub)
 *.mp4
 *.mov
+
+# Salida de herramientas y entornos viejos (no van al repo)
+.playwright-mcp/
+backend/.venv.old/

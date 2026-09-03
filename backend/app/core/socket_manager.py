@@ -5,15 +5,19 @@ Rooms:
   "obra_{id}"  — all users join all obra rooms on connect (shared org)
 
 Client → Server events:
-  join_obra(obra_id)              user opened an obra page
+  join_obra(obra_id, tab)         user opened an obra page / switched module (tab)
   leave_obra(obra_id)             user left an obra page
   start_editing_task(task_id, obra_id)
   stop_editing_task(task_id, obra_id)
+  cursor_move(obra_id, x, y)      mouse moved over the Gantt bars area
+  cursor_leave(obra_id)           mouse left the Gantt bars area
 
 Server → Client events:
   online_users    {users: [...]}                     who is connected globally
   presence_update {obra_id, viewers: [...], editing: {task_id: editor}}
   task_updated    {taskId, obraId, ...}              task changed by chatbot
+  cursor_update   {obra_id, user, x, y}               relayed live cursor position (Gantt)
+  cursor_leave    {obra_id, user_id}                  a live cursor should be removed
 """
 import logging
 
@@ -39,8 +43,8 @@ _AVATAR_COLORS = ["#FF6B35", "#2A6FDB", "#1F8A5B", "#9A4DC9", "#C97D0E", "#D03A3
 # sid → {id, name, initials, color}
 _sessions: dict[str, dict] = {}
 
-# obra_id → set[sid]   — users actively viewing this obra
-_viewers: dict[int, set[str]] = {}
+# obra_id → {sid: tab}   — users actively viewing this obra, and which module (tab) they're on
+_viewers: dict[int, dict[str, str]] = {}
 
 # task_id → {sid, obra_id}
 _editing: dict[int, dict] = {}
@@ -69,8 +73,11 @@ async def _broadcast_online() -> None:
 
 
 async def _broadcast_presence(obra_id: int) -> None:
-    sids = _viewers.get(obra_id, set())
-    viewers = _dedup([_sessions[s] for s in sids if s in _sessions])
+    viewer_tabs = _viewers.get(obra_id, {})
+    viewers = _dedup([
+        {**_sessions[s], "tab": tab}
+        for s, tab in viewer_tabs.items() if s in _sessions
+    ])
     editing = {
         str(tid): _sessions[info["sid"]]
         for tid, info in _editing.items()
@@ -141,11 +148,11 @@ async def connect(sid: str, environ: dict, auth: dict | None) -> None:
 
 @sio.event
 async def disconnect(sid: str) -> None:
-    _sessions.pop(sid, None)
+    user = _sessions.pop(sid, None)
 
     affected = [oid for oid, sids in _viewers.items() if sid in sids]
     for oid in affected:
-        _viewers[oid].discard(sid)
+        _viewers[oid].pop(sid, None)
 
     stale = [tid for tid, info in _editing.items() if info["sid"] == sid]
     for tid in stale:
@@ -154,6 +161,10 @@ async def disconnect(sid: str) -> None:
     await _broadcast_online()
     for oid in affected:
         await _broadcast_presence(oid)
+        if user:
+            # El cursor en vivo del Gantt no tiene su propio estado server-side (solo
+            # se relay-ea); avisamos acá para que no quede "pegado" tras la desconexión.
+            await sio.emit("cursor_leave", {"obra_id": oid, "user_id": user["id"]}, room=f"obra_{oid}")
     logger.info("disconnect sid=%s sessions=%d", sid, len(_sessions))
 
 
@@ -173,8 +184,12 @@ async def join_obra(sid: str, data: dict) -> None:
         obra_id_raw = data.get("obra_id")
         logger.warning("join_obra got non-int obra_id=%r type=%s sid=%s", obra_id_raw, type(obra_id_raw).__name__, sid)
         return
-    _viewers.setdefault(obra_id, set()).add(sid)
-    logger.info("join_obra obra_id=%d sid=%s viewers=%d", obra_id, sid, len(_viewers[obra_id]))
+    tab = data.get("tab")
+    tab = tab if isinstance(tab, str) else "resumen"
+    # Idempotente: también se llama para actualizar el tab sin salir/reentrar
+    # cuando el usuario cambia de módulo dentro de la misma obra.
+    _viewers.setdefault(obra_id, {})[sid] = tab
+    logger.info("join_obra obra_id=%d sid=%s tab=%s viewers=%d", obra_id, sid, tab, len(_viewers[obra_id]))
     await _broadcast_presence(obra_id)
 
 
@@ -183,7 +198,7 @@ async def leave_obra(sid: str, data: dict) -> None:
     obra_id = data.get("obra_id")
     if not isinstance(obra_id, int):
         return
-    _viewers.get(obra_id, set()).discard(sid)
+    _viewers.get(obra_id, {}).pop(sid, None)
     await _broadcast_presence(obra_id)
 
 
@@ -206,6 +221,41 @@ async def stop_editing_task(sid: str, data: dict) -> None:
     if _editing.get(task_id, {}).get("sid") == sid:
         del _editing[task_id]
     await _broadcast_presence(obra_id)
+
+
+@sio.event
+async def cursor_move(sid: str, data: dict) -> None:
+    """Relay puro (sin estado server-side) de la posición del mouse en el Gantt.
+    Alto volumen por diseño — el cliente ya throttlea antes de emitir."""
+    obra_id = data.get("obra_id")
+    x, y = data.get("x"), data.get("y")
+    if not isinstance(obra_id, int) or not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+        return
+    user = _sessions.get(sid)
+    if not user:
+        return
+    await sio.emit(
+        "cursor_update",
+        {"obra_id": obra_id, "user": user, "x": x, "y": y},
+        room=f"obra_{obra_id}",
+        skip_sid=sid,
+    )
+
+
+@sio.event
+async def cursor_leave(sid: str, data: dict) -> None:
+    obra_id = data.get("obra_id")
+    if not isinstance(obra_id, int):
+        return
+    user = _sessions.get(sid)
+    if not user:
+        return
+    await sio.emit(
+        "cursor_leave",
+        {"obra_id": obra_id, "user_id": user["id"]},
+        room=f"obra_{obra_id}",
+        skip_sid=sid,
+    )
 
 
 # ── Task events (called from task_service & chatbot service) ─────────────────

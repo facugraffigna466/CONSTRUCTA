@@ -26,7 +26,7 @@ frontend/src/api/<relevant>.ts                 — existing API functions for th
 frontend/src/pages/ObraDetailPage.tsx          — data ownership, loadData(), tab structure
 frontend/src/components/ResumenTab.tsx         — how tabs receive props
 frontend/src/<component to modify>.tsx         — current implementation before changing
-docs/skills.md                                 — FS-01 through FS-07 and UX/DC rules
+docs/referencia/skills.md                                 — FS-01 through FS-07 and UX/DC rules
 ```
 
 ---

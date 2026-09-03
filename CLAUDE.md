@@ -1,6 +1,6 @@
 # CONSTRUCTA — Contexto completo para agentes
 
-> ⚠️ **REGLA PERMANENTE — Mantener el IPI actualizado.** Este proyecto tiene un entregable académico: el **Informe de Proyecto Integrador** en [`docs/IPI-CONSTRUCTA.md`](docs/IPI-CONSTRUCTA.md) (sigue la plantilla IPI v2.1 de la UCC). **Después de cada feature, módulo o cambio significativo, además de actualizar `docs/documentacion.md` (bitácora), hay que reflejar el trabajo en la sección correspondiente del IPI** (típicamente: Propuesta de solución → Implementación/Módulos, Objetivos/trazabilidad, Pruebas, y si aplica Beneficios/Impactos). No tocar lo que el alumno debe completar (marcado con `[COMPLETAR]` y `«…»`: portada, cifras de costos, etc.). El IPI también se mantiene exportado a `.docx`: tras editar el `.md`, regenerar con `backend/.venv/bin/python docs/build_ipi_docx.py` (produce `docs/IPI-CONSTRUCTA.docx` con los diagramas de `docs/diagramas/` embebidos en las Figuras 1, 6 y 7). Los diagramas son SVG en `docs/diagramas/` rasterizados a PNG con `qlmanage -t -s 1600 -o docs/diagramas docs/diagramas/<f>.svg`.
+> ⚠️ **REGLA PERMANENTE — Mantener el IPI actualizado.** Este proyecto tiene un entregable académico: el **Informe de Proyecto Integrador** en [`docs/ipi/IPI-CONSTRUCTA.md`](docs/ipi/IPI-CONSTRUCTA.md) (sigue la plantilla IPI v2.1 de la UCC). **Después de cada feature, módulo o cambio significativo, además de actualizar `docs/documentacion.md` (bitácora), hay que reflejar el trabajo en la sección correspondiente del IPI** (típicamente: Propuesta de solución → Implementación/Módulos, Objetivos/trazabilidad, Pruebas, y si aplica Beneficios/Impactos). No tocar lo que el alumno debe completar (marcado con `[COMPLETAR]` y `«…»`: portada, cifras de costos, etc.). El IPI también se mantiene exportado a `.docx`: tras editar el `.md`, regenerar con `backend/.venv/bin/python docs/ipi/build_ipi_docx.py` (produce `docs/ipi/IPI-CONSTRUCTA.docx` con los diagramas de `docs/diagramas/` embebidos en las Figuras 1, 6 y 7). Los diagramas son SVG en `docs/diagramas/` rasterizados a PNG con `qlmanage -t -s 1600 -o docs/diagramas docs/diagramas/<f>.svg`.
 
 ## Qué es el proyecto
 
@@ -381,7 +381,7 @@ Los siguientes del plan de paridad MS Project YA ESTÁN IMPLEMENTADOS:
 - ✅ Tipos de dependencia SS/FF/SF + lag (migration 0018, M2M table)
 - ✅ WBS parent_task_id (migration 0017, dropdown en TaskFormModal)
 
-Del plan MS Project NO falta nada (actualizado 2026-06-12): subtareas colapsables, sticky date header en Gantt, cascade automático con preview, % avance/hito en TaskTable y duración calculada en TaskFormModal están todos implementados y mergeados. También está completa la auditoría UX (`docs/auditoria-ux.md`, P0+P1+P2) y el módulo Bitácora de obra con IA (audio → transcripción `gpt-4o-mini-transcribe` → análisis `claude-haiku-4-5` → sugerencias aplicables).
+Del plan MS Project NO falta nada (actualizado 2026-06-12): subtareas colapsables, sticky date header en Gantt, cascade automático con preview, % avance/hito en TaskTable y duración calculada en TaskFormModal están todos implementados y mergeados. También está completa la auditoría UX (`docs/auditoria/auditoria-ux.md`, P0+P1+P2) y el módulo Bitácora de obra con IA (audio → transcripción `gpt-4o-mini-transcribe` → análisis `claude-haiku-4-5` → sugerencias aplicables).
 
 ---
 
@@ -414,7 +414,7 @@ Del plan MS Project NO falta nada (actualizado 2026-06-12): subtareas colapsable
 ## Documentación adicional
 
 - `docs/documentacion.md` — bitácora completa de desarrollo (actualizar después de cada sesión)
-- `docs/database.md` — schema completo de todas las tablas
-- `docs/casos_de_prueba.md` — casos de prueba manuales
+- `docs/referencia/database.md` — schema completo de todas las tablas
+- `docs/referencia/casos_de_prueba.md` — casos de prueba manuales
 - `GUIA_EJECUCION_LOCAL.md` — instrucciones detalladas para levantar el proyecto
 - `/Users/agustinllancaman/.claude/plans/tenemos-estas-ideas-y-proud-curry.md` — plan completo con todos los detalles técnicos

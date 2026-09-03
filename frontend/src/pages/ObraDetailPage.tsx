@@ -70,7 +70,7 @@ interface ObraDetailPageProps {
 
 export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAlert }: ObraDetailPageProps) {
   const can = useCan();
-  const viewingUsers = useViewingUsers(obra.id);
+  const viewingUsers = useViewingUsers(obra.id, activeTab);
   const [tasks, setTasks] = useState<Task[]>([]);
   const editingMap   = useEditingSimulation(obra.id);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -95,6 +95,8 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
   const [showImport, setShowImport] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
   const sheetViewRef = useRef<SheetViewHandle>(null);
+  // Tarea a enfocar al saltar a Presupuesto desde la columna Costo de la planilla.
+  const [budgetFocusTaskId, setBudgetFocusTaskId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!focusAlert || loading) return;
@@ -550,7 +552,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
               {taskView === "tabla" ? (
                 <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create", obra.id) ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create", obra.id) ? () => setShowImport(true) : undefined} />
               ) : (
-                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} onTaskSaved={handleTaskSaved} onTaskDeleted={(id: number) => setTasks(prev => prev.filter(t => t.id !== id))} onBulkImported={() => loadData(true)} onOpenTask={(t: Task) => setTaskToEdit(t)} />
+                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} onTasksChanged={() => loadData(true)} onOpenBudget={(taskId: number) => { setBudgetFocusTaskId(taskId); onTabChange("presupuesto"); }} />
               )}
             </div>
 
@@ -575,7 +577,15 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
         );
 
       case "presupuesto":
-        return <ComprasTab obraId={obra.id} obraName={obra.name} tasks={tasks} />;
+        return (
+          <ComprasTab
+            key={budgetFocusTaskId ?? "todas"}
+            obraId={obra.id}
+            obraName={obra.name}
+            tasks={tasks}
+            focusTaskId={budgetFocusTaskId}
+          />
+        );
 
       case "planos":
         return <PlanosTab obraId={obra.id} onChanged={() => loadData(true)} />;

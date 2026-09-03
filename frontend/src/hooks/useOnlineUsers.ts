@@ -10,9 +10,13 @@ export interface OnlineUser {
   color: string;
 }
 
+interface PresenceViewer extends OnlineUser {
+  tab?: string;
+}
+
 interface PresencePayload {
   obra_id: number;
-  viewers: OnlineUser[];
+  viewers: PresenceViewer[];
   editing: Record<string, OnlineUser>;
 }
 
@@ -72,20 +76,26 @@ export function useOnlineUsers(): OnlineUser[] {
   return online;
 }
 
-/** Usuarios viendo activamente una obra específica (excluye al usuario actual). */
-export function useViewingUsers(obraId: number): OnlineUser[] {
+/**
+ * Usuarios viendo activamente el mismo módulo (tab) de una obra específica
+ * (excluye al usuario actual). Si el otro usuario está en la misma obra pero
+ * en otro tab (ej. vos en Tareas, él en Alertas), no aparece.
+ */
+export function useViewingUsers(obraId: number, tab: string): OnlineUser[] {
   const { user } = useUser();
-  const [viewers, setViewers] = useState<OnlineUser[]>([]);
+  const [viewers, setViewers] = useState<PresenceViewer[]>([]);
   const obraIdRef = useRef(obraId);
+  const tabRef = useRef(tab);
   const userIdRef = useRef(user.id);
   obraIdRef.current = obraId;
+  tabRef.current = tab;
   userIdRef.current = user.id;
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
 
     function emitJoin() {
-      socket.emit("join_obra", { obra_id: obraIdRef.current });
+      socket.emit("join_obra", { obra_id: obraIdRef.current, tab: tabRef.current });
     }
 
     function handlePresence({ obra_id, viewers: v }: PresencePayload) {
@@ -106,5 +116,11 @@ export function useViewingUsers(obraId: number): OnlineUser[] {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraId]);
 
-  return viewers;
+  // Al cambiar de módulo dentro de la misma obra, actualizamos el tab sin
+  // salir/reentrar (evita que el indicador parpadee al navegar entre tabs).
+  useEffect(() => {
+    if (socket.connected) socket.emit("join_obra", { obra_id: obraId, tab });
+  }, [obraId, tab]);
+
+  return viewers.filter(v => v.tab === tab);
 }

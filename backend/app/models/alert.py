@@ -98,6 +98,13 @@ class Alert(Base):
     )
     message: Mapped[str] = mapped_column(Text, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Momento en que la alerta pasó a leída/resuelta. `is_read` solo dice SI se
+    # resolvió, no CUÁNDO — sin esto no se puede medir la velocidad de reacción
+    # (métrica 5 del motor de insights). Las alertas resueltas antes de la
+    # migración 0062 quedan en NULL y se excluyen del promedio.
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

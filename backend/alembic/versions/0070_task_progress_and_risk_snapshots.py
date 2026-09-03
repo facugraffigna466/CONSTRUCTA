@@ -16,15 +16,15 @@ Insumos de las dos reglas de la propuesta que comparan estado contra el pasado
   se persiste, así que no hay contra qué comparar para detectar que una holgura
   se está achicando.
 
-Revision ID: 0064
-Revises: 0063
+Revision ID: 0070
+Revises: 0069
 Create Date: 2026-09-03
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0064"
-down_revision = "0063"
+revision = "0070"
+down_revision = "0069"
 branch_labels = None
 depends_on = None
 

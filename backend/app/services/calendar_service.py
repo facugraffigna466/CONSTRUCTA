@@ -1,3 +1,4 @@
+from zoneinfo import ZoneInfo
 from datetime import date, datetime, timedelta, timezone
 
 from app.models.calendar import CalendarException, WorkingCalendar
@@ -9,6 +10,9 @@ _AR_OFFSET = timedelta(hours=-3)
 def _day_bit(d: date) -> int:
     """Return the bitmask bit for the weekday of d (bit0=Mon, bit6=Sun)."""
     return 1 << d.weekday()  # weekday(): Mon=0, Sun=6
+
+
+_AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
 
 def is_working_day(calendar: WorkingCalendar, d: date) -> bool:
@@ -25,10 +29,21 @@ def is_working_day(calendar: WorkingCalendar, d: date) -> bool:
 
 
 def is_within_working_hours(calendar: WorkingCalendar, dt: datetime) -> bool:
-    """Return True if dt falls on a working day AND within [hour_from, hour_to)."""
-    if not is_working_day(calendar, dt.date()):
+    """¿`dt` cae en día laboral y dentro de [hour_from, hour_to)?
+
+    `hour_from`/`hour_to` del calendario son **hora local argentina** (es lo que
+    el admin configura en la pantalla). Si `dt` viene con zona horaria se
+    convierte antes de comparar; si viene naive se asume que ya es local.
+
+    La conversión va acá adentro a propósito: los dos call sites de
+    notification_service pasaban `datetime.now(timezone.utc)` directo, y comparar
+    una hora UTC contra una franja local corría la ventana 3 horas. Con la
+    conversión en la función el error no se puede repetir desde un call site nuevo.
+    """
+    local = dt.astimezone(_AR_TZ) if dt.tzinfo is not None else dt
+    if not is_working_day(calendar, local.date()):
         return False
-    return calendar.hour_from <= dt.hour < calendar.hour_to
+    return calendar.hour_from <= local.hour < calendar.hour_to
 
 
 def next_working_day(calendar: WorkingCalendar, d: date) -> date:

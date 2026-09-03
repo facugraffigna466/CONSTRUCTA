@@ -13,15 +13,15 @@ Implementa las dos piezas transversales de docs/propuesta-reglas-riesgo.md:
 El backfill mapea los 6 tipos preexistentes a su severidad por defecto (la misma
 tabla DEFAULT_SEVERITY de app/models/alert.py); todo lo demás queda en 'media'.
 
-Revision ID: 0062
-Revises: 0061
+Revision ID: 0068
+Revises: 0067
 Create Date: 2026-09-03
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0062"
-down_revision = "0061"
+revision = "0068"
+down_revision = "0067"
 branch_labels = None
 depends_on = None
 

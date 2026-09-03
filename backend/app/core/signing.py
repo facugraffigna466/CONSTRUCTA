@@ -87,3 +87,29 @@ def verify_download(
     if requester_tenant_id is not None and str(requester_tenant_id) != str(tenant_id):
         return False
     return True
+
+
+# ── Informe mensual de insights ───────────────────────────────────────────────
+# El link viaja en un email y puede reenviarse al comitente, así que la ventana
+# es larga comparada con la de un archivo: el informe es de un mes y alguien
+# puede abrirlo semanas después. Sigue siendo un "bearer" para quien tenga el
+# link — mismo trade-off que un presigned de S3 — pero acotado en el tiempo y
+# atado al tenant.
+REPORT_TTL = 60 * 24 * 3600  # 60 días
+
+
+def report_resource_name(obra_id: int, period: str) -> str:
+    """Nombre canónico que se firma para un informe (obra + período)."""
+    return f"insights:{obra_id}:{period}"
+
+
+def sign_report_query(obra_id: int, period: str, tenant_id: int | str | None,
+                      ttl: int = REPORT_TTL) -> str:
+    """Query string firmada para el informe de una obra en un período."""
+    return sign_query(report_resource_name(obra_id, period), tenant_id, ttl)
+
+
+def verify_report(obra_id: int, period: str, tenant_id: str | None,
+                  exp: str | None, sig: str | None) -> bool:
+    """Valida la firma de un link de informe (sin exigir sesión iniciada)."""
+    return verify_download(report_resource_name(obra_id, period), tenant_id, exp, sig)

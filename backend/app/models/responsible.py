@@ -23,6 +23,12 @@ class Responsible(Base):
     # directorio de equipo aislado por empresa (migration 0026)
     tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Último resumen semanal enviado. El job corre cada hora los lunes (para
+    # poder esperar a que abra la ventana horaria del tenant), así que hace
+    # falta saber si ya salió el de esta semana.
+    last_weekly_digest_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

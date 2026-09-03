@@ -10,6 +10,7 @@ All operations respect the per-tenant SystemSettings configured in the UI.
 """
 import logging
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +19,8 @@ from app.integrations.twilio.client import send_whatsapp_message
 from app.models.alert import AlertType
 from app.models.message import Message, MessageDirection, MessageProcessingStatus, MessageType
 from app.models.responsible import Responsible
-from app.models.task import Task
+from app.models.user import User
+from app.models.task import Task, TaskStatus
 from app.repositories.alert import AlertRepository
 from app.repositories.calendar import CalendarRepository
 from app.repositories.historial import HistorialRepository
@@ -27,11 +29,20 @@ from app.repositories.obra import ObraRepository
 from app.repositories.responsible import ResponsibleRepository
 from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
-from app.services.calendar_service import is_within_working_hours
+from app.services.calendar_service import is_within_send_window, is_within_working_hours
 from app.services.conversation_service import ConversationService
-from app.services.message_templates import fmt_date
+from app.services.message_templates import build_weekly_digest_message, fmt_date
 
 logger = logging.getLogger(__name__)
+
+_AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+
+
+def _ar_today(now: datetime | None = None) -> date:
+    """Hoy en hora argentina. Cerca de medianoche UTC la fecha local es la de
+    ayer, y los vencimientos se cargan en fecha local — compararlos contra la
+    fecha UTC corría el recordatorio un día."""
+    return (now or datetime.now(timezone.utc)).astimezone(_AR_TZ).date()
 
 
 class NotificationService:
@@ -50,19 +61,23 @@ class NotificationService:
     # ── public methods ─────────────────────────────────────────────────────────
 
     async def send_reminders(self, hours_ahead: int = 24) -> int:
-        """Send proactive WhatsApp reminders for tasks due in approximately hours_ahead hours.
+        """Recordatorio de WhatsApp a los responsables de las tareas que vencen
+        en `hours_ahead` horas, redondeado a días (24h → 1 día, 72h → 3 días).
 
-        Uses a ±30-minute window around (now + hours_ahead) so the scheduler can
-        run hourly and each task is hit exactly once per reminder window.
-        Skips tasks whose tenant has disabled auto_reminders or the specific
-        reminder flag for this hour window (reminder_1day=24h, reminder_3days=72h).
+        **Por día, no por hora exacta.** El job corre cada hora y manda el
+        recordatorio en la primera corrida del día que caiga dentro del horario
+        laboral de la obra; la deduplicación evita que se repita. La versión
+        anterior buscaba tareas cuyo vencimiento cayera en una ventana de ±30 min
+        alrededor de `ahora + N horas`: como las tareas sin `due_time` se toman
+        como que vencen 23:59, ese instante caía siempre fuera del horario
+        laboral y el recordatorio no se enviaba nunca (ver
+        docs/features/recordatorio-vencimiento.md).
         """
+        days_ahead = max(1, round(hours_ahead / 24))
         now = datetime.now(timezone.utc)
-        target = now + timedelta(hours=hours_ahead)
-        window_start = target - timedelta(minutes=30)
-        window_end   = target + timedelta(minutes=30)
+        target_date = _ar_today(now) + timedelta(days=days_ahead)
 
-        tasks = await self.task_repo.list_due_in_window(window_start, window_end)
+        tasks = await self.task_repo.list_due_on_date(target_date)
 
         count = 0
         for task in tasks:
@@ -77,29 +92,28 @@ class NotificationService:
             if not cfg.chatbot_enabled:
                 logger.debug("chatbot disabled for obra %d — skipping task %d", task.obra_id, task.id)
                 continue
-
             if not cfg.auto_reminders:
                 logger.debug("auto_reminders disabled for obra %d — skipping task %d", task.obra_id, task.id)
                 continue
-
-            if hours_ahead <= 24 and not cfg.reminder_1day:
+            if days_ahead <= 1 and not cfg.reminder_1day:
                 logger.debug("reminder_1day disabled — skipping task %d", task.id)
                 continue
-            if hours_ahead > 24 and not cfg.reminder_3days:
+            if days_ahead > 1 and not cfg.reminder_3days:
                 logger.debug("reminder_3days disabled — skipping task %d", task.id)
                 continue
 
             cal = await self.calendar_repo.get_for_obra(task.obra_id)
             if not is_within_working_hours(cal, now):
-                logger.debug("outside working hours/day for obra %d — skipping task %d", task.obra_id, task.id)
+                # Todavía no es horario laboral: la próxima corrida horaria del
+                # mismo día lo vuelve a intentar, así que no se pierde.
+                logger.debug("fuera de horario laboral para obra %d — task %d espera", task.obra_id, task.id)
                 continue
 
-            # Avoid duplicate if a reminder was already sent in the last hours_ahead*0.9 hours
-            dedup_since = now - timedelta(hours=hours_ahead * 0.9)
-            already_sent = await self.msg_repo.has_recent_reminder_for_task(
+            # Un solo recordatorio por tarea y por ventana: si ya salió hoy, no repite.
+            dedup_since = now - timedelta(hours=max(12, hours_ahead * 0.9))
+            if await self.msg_repo.has_recent_reminder_for_task(
                 task.id, task.responsible_id, dedup_since
-            )
-            if already_sent:
+            ):
                 logger.debug("Reminder already sent recently for task %d — skipping", task.id)
                 continue
 
@@ -108,26 +122,210 @@ class NotificationService:
 
             try:
                 msg_text = await self.conv_service.seed_for_task(responsible, task, obra_name)
-                outbound_sid = await send_whatsapp_message(
-                    responsible.whatsapp_number, msg_text
-                )
-                await self._save_outbound(
-                    responsible=responsible,
-                    task=task,
-                    body=msg_text,
-                    external_sid=outbound_sid,
-                    awaits_response=True,
+                await self.notify_responsible(
+                    responsible, msg_text, task=task, awaits_response=True,
                 )
                 count += 1
-                logger.info("Reminder sent to %s for task %d", responsible.whatsapp_number, task.id)
+                logger.info(
+                    "Recordatorio de %d día/s enviado a %s por la tarea %d",
+                    days_ahead, responsible.whatsapp_number, task.id,
+                )
             except Exception:
                 logger.exception(
                     "Failed to send reminder for task %d to %s",
-                    task.id,
-                    responsible.whatsapp_number,
+                    task.id, responsible.whatsapp_number,
                 )
 
         return count
+
+    async def send_weekly_digest(self) -> int:
+        """Resumen del lunes para cada responsable activo con algo que mirar.
+
+        Qué entra en el mensaje de cada persona:
+          · vencidas o bloqueadas — sin importar la fecha, primero de todo;
+          · las que vencen en la semana en curso (lunes a domingo);
+          · las que están en progreso aunque venzan más adelante, para que no se
+            le escape algo que ya arrancó.
+
+        Quien no tenga nada de eso **no recibe mensaje**: un "no tenés nada"
+        semanal entrena a ignorar al bot.
+
+        Se apoya en `notify_responsible()` y `can_notify_*`, los mismos que usa
+        el recordatorio de vencimiento — acá no se arma ni se manda nada a mano.
+        """
+        now = datetime.now(timezone.utc)
+        hoy = _ar_today(now)
+        lunes = hoy - timedelta(days=hoy.weekday())
+        domingo = lunes + timedelta(days=6)
+
+        responsables = await self.resp_repo.list_active()
+        enviados = 0
+
+        for resp in responsables:
+            if not resp.whatsapp_number:
+                continue
+
+            # Ya salió el de esta semana (el job corre cada hora los lunes).
+            ultimo = resp.last_weekly_digest_at
+            if ultimo is not None:
+                ultimo_utc = ultimo if ultimo.tzinfo else ultimo.replace(tzinfo=timezone.utc)
+                if ultimo_utc.astimezone(_AR_TZ).date() >= lunes:
+                    continue
+
+            cfg = await self.settings_repo.get_for_responsible(resp.id)
+            if not cfg.chatbot_enabled or not cfg.auto_reminders:
+                logger.debug("digest: %s tiene el chatbot/recordatorios apagados", resp.id)
+                continue
+            if not is_within_send_window(cfg.send_hour_from, cfg.send_hour_to, now):
+                # Todavía no abrió la ventana: la corrida de la hora siguiente reintenta.
+                continue
+
+            buckets = await self._weekly_buckets(resp.id, hoy, domingo)
+            if not any(buckets.values()):
+                continue
+
+            body = build_weekly_digest_message(
+                resp.full_name,
+                urgentes=buckets["urgentes"],
+                semana=buckets["semana"],
+                en_curso=buckets["en_curso"],
+            )
+            try:
+                await self.notify_responsible(
+                    resp, body, notification_type="weekly_digest",
+                )
+                resp.last_weekly_digest_at = now
+                enviados += 1
+                logger.info(
+                    "Resumen semanal enviado a %s (%d urgentes, %d de la semana, %d en curso)",
+                    resp.whatsapp_number, len(buckets["urgentes"]),
+                    len(buckets["semana"]), len(buckets["en_curso"]),
+                )
+            except Exception:
+                logger.exception("Falló el resumen semanal de %s", resp.whatsapp_number)
+
+        await self.db.flush()
+        return enviados
+
+    async def _weekly_buckets(
+        self, responsible_id: int, hoy: date, domingo: date
+    ) -> dict[str, list[dict]]:
+        """Agrupa las tareas de un responsable por urgencia, para el resumen.
+
+        Una tarea cae en un solo grupo: lo urgente gana sobre lo de la semana, y
+        lo de la semana sobre lo que solo está en curso. Sin esto, una tarea
+        bloqueada que además vence el jueves aparecería dos veces.
+        """
+        tareas = await self.task_repo.list_by_responsible(responsible_id)
+        urgentes: list[dict] = []
+        semana: list[dict] = []
+        en_curso: list[dict] = []
+
+        for t in tareas:
+            fila = {
+                "task_id": t.id,
+                "title": t.title,
+                "due_date": t.due_date.isoformat() if t.due_date else None,
+                "status": t.status.value,
+            }
+            vencida = t.due_date is not None and t.due_date < hoy
+            if t.status == TaskStatus.BLOQUEADA:
+                urgentes.append({**fila, "motivo": "bloqueada"})
+            elif vencida:
+                urgentes.append({**fila, "motivo": "vencida"})
+            elif t.due_date is not None and t.due_date <= domingo:
+                semana.append(fila)
+            elif t.status == TaskStatus.EN_PROGRESO:
+                en_curso.append(fila)
+
+        # Dentro de cada grupo, lo que vence antes va primero; sin fecha, al final.
+        def por_fecha(f: dict):
+            return (f["due_date"] is None, f["due_date"] or "")
+
+        return {
+            "urgentes": sorted(urgentes, key=por_fecha),
+            "semana": sorted(semana, key=por_fecha),
+            "en_curso": sorted(en_curso, key=por_fecha),
+        }
+
+    async def notify_responsible(
+        self,
+        responsible: Responsible,
+        body: str,
+        *,
+        task: Task | None = None,
+        notification_type: str = "reminder",
+        awaits_response: bool = False,
+    ) -> str | None:
+        """Manda un WhatsApp a un responsable y lo deja registrado en `messages`.
+
+        Punto único de salida para las notificaciones proactivas: envía por
+        Twilio y persiste el saliente con su SID. **No** chequea configuración
+        ni horario — eso lo decide quien llama, que es el que sabe qué flag de
+        `SystemSettings` le corresponde. Devuelve el SID de Twilio (o None si el
+        envío quedó deshabilitado por falta de credenciales).
+        """
+        sid = await send_whatsapp_message(responsible.whatsapp_number, body)
+        await self._save_outbound(
+            responsible=responsible,
+            task=task,
+            body=body,
+            external_sid=sid,
+            awaits_response=awaits_response,
+            notification_type=notification_type,
+        )
+        return sid
+
+    async def notify_staff(
+        self, user: "User", body: str, *, notification_type: str = "staff_notice"
+    ) -> str | None:
+        """Manda un WhatsApp a un miembro del staff (arquitecto/admin) y lo registra.
+
+        Gemelo de `notify_responsible`, pero para `User`. Va aparte porque
+        `messages.responsible_id` no puede apuntar a un usuario: el saliente se
+        guarda con `responsible_id=None` y el `user_id` queda en el JSON de
+        `ai_interpretation` para poder rastrearlo.
+        """
+        from app.core.config import settings as _settings
+
+        sid = await send_whatsapp_message(user.whatsapp_number, body)
+        msg = Message(
+            direction=MessageDirection.OUTBOUND,
+            message_type=MessageType.TEXT,
+            from_number=_settings.TWILIO_WHATSAPP_NUMBER,
+            to_number=user.whatsapp_number,
+            body=body,
+            responsible_id=None,
+            task_id=None,
+            external_message_id=sid,
+            processing_status=MessageProcessingStatus.PROCESSED,
+            ai_interpretation={
+                "notification_type": notification_type,
+                "user_id": user.id,
+                "awaits_response": False,
+            },
+        )
+        await self.msg_repo.create(msg)
+        return sid
+
+    async def can_notify_obra(self, obra_id: int) -> tuple[bool, str]:
+        """¿Se le puede mandar un WhatsApp automático a esta obra ahora mismo?
+
+        Reúne los tres chequeos que comparten todas las notificaciones
+        proactivas (chatbot prendido, envíos automáticos prendidos, y estar
+        dentro del horario laboral de la obra) para que un flujo nuevo no tenga
+        que redescubrirlos ni olvidarse de alguno. Devuelve el motivo cuando da
+        que no, para poder loguearlo.
+        """
+        cfg = await self.settings_repo.get_for_obra(obra_id)
+        if not cfg.chatbot_enabled:
+            return False, "chatbot_enabled=False"
+        if not cfg.auto_reminders:
+            return False, "auto_reminders=False"
+        cal = await self.calendar_repo.get_for_obra(obra_id)
+        if not is_within_working_hours(cal, datetime.now(timezone.utc)):
+            return False, "fuera del horario laboral de la obra"
+        return True, ""
 
     async def mark_overdue_tasks(self, tenant_id: int | None = None) -> int:
         """Create TASK_OVERDUE alerts for tasks past their due_date.
@@ -284,7 +482,7 @@ class NotificationService:
     async def _save_outbound(
         self,
         responsible: Responsible,
-        task: Task,
+        task: Task | None,
         body: str,
         external_sid: str | None,
         awaits_response: bool = False,
@@ -299,7 +497,7 @@ class NotificationService:
             to_number=responsible.whatsapp_number,
             body=body,
             responsible_id=responsible.id,
-            task_id=task.id,
+            task_id=task.id if task else None,
             external_message_id=external_sid,
             processing_status=MessageProcessingStatus.PROCESSED,
             ai_interpretation={"notification_type": notification_type, "awaits_response": awaits_response},

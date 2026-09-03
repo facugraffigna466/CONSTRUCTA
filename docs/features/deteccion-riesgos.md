@@ -3,8 +3,8 @@
 **Fecha:** 2026-09-03
 **Rama:** `feature/deteccion-riesgos`
 **Base:** `main` (`94640f0`)
-**Insumo:** [`docs/propuesta-reglas-riesgo.md`](propuesta-reglas-riesgo.md) — definición de reglas (Martina, 2026-08-31, PR #104)
-**Migraciones:** `0062` → `0064`
+**Insumo:** [`docs/estado/propuesta-reglas-riesgo.md`](../estado/propuesta-reglas-riesgo.md) — definición de reglas (Martina, 2026-08-31, PR #104)
+**Migraciones:** `0068` → `0070`
 
 ---
 
@@ -18,7 +18,7 @@ El aporte no es solo la cantidad de reglas. Es que **el sistema pasa de avisar q
 
 Se agregaron dos piezas transversales que la propuesta marcaba como bloqueantes: **severidad** por alerta (`critica`/`alta`/`media`/`baja`) y **configuración por empresa** (un interruptor por regla más su umbral). Ninguna regla requirió fuentes de información nuevas; solo dos necesitaron persistir estado propio, y por el mismo motivo: comparan el presente contra el pasado.
 
-**Estado:** implementado y verificado. 39 pruebas automatizadas nuevas; la suite completa pasa de 317 a 356.
+**Estado:** implementado y verificado. 39 pruebas automatizadas nuevas; la suite de la rama pasó de 317 a 356, y a 503 tras integrar `main`.
 
 ---
 
@@ -92,11 +92,11 @@ No es una preferencia estética: una regla que compara contra el snapshot de aye
 
 | Migración | Cambio | Motivo |
 |---|---|---|
-| `0062` | 11 valores nuevos en el enum `alert_type` | Un tipo por regla |
-| `0062` | `alerts.severity` (VARCHAR + índice) con relleno de los tipos previos | Pieza transversal que la propuesta marcaba como bloqueante |
-| `0063` | 23 columnas en `system_settings` (11 interruptores + 12 umbrales) | Configuración por empresa |
-| `0064` | `tasks.last_progress_at` | Insumo de `progress_stalled` |
-| `0064` | Tabla `task_risk_snapshots` | Insumo de `float_shrinking` |
+| `0068` | 11 valores nuevos en el enum `alert_type` | Un tipo por regla |
+| `0068` | `alerts.severity` (VARCHAR + índice) con relleno de los tipos previos | Pieza transversal que la propuesta marcaba como bloqueante |
+| `0069` | 23 columnas en `system_settings` (11 interruptores + 12 umbrales) | Configuración por empresa |
+| `0070` | `tasks.last_progress_at` | Insumo de `progress_stalled` |
+| `0070` | Tabla `task_risk_snapshots` | Insumo de `float_shrinking` |
 
 **`severity` es VARCHAR y no un enum de PostgreSQL.** La propuesta anticipa más reglas; un VARCHAR evita pagar un `ALTER TYPE` por cada nivel nuevo. La severidad por defecto de cada tipo vive en `DEFAULT_SEVERITY` (`models/alert.py`); solo las reglas que la calculan dinámicamente la pasan explícitamente.
 
@@ -158,7 +158,7 @@ Consecuencia directa: **el aviso emergente dispara por severidad** (crítica o a
 
 ### 6.3 Compatibilidad con alertas anteriores
 
-`severityOf()` trata como `media` toda alerta sin severidad o con un valor desconocido, en lugar de romper el renderizado. Cubre las alertas anteriores a la migración `0062`.
+`severityOf()` trata como `media` toda alerta sin severidad o con un valor desconocido, en lugar de romper el renderizado. Cubre las alertas anteriores a la migración `0068`.
 
 ### 6.4 Configuración
 
@@ -170,7 +170,7 @@ Sección **Detección de riesgo** en Configuración: las once reglas con su inte
 
 ### 7.1 Pruebas automatizadas
 
-39 pruebas nuevas en `tests/test_risk_rules.py`. Suite completa: **356 pasando** (desde 317).
+39 pruebas nuevas en `tests/test_risk_rules.py`. Suite de la rama: **356 pasando** (desde 317); **503** tras integrar `main`.
 
 Además del disparo de cada regla, se verifica explícitamente lo que la propuesta pedía sostener:
 
@@ -186,7 +186,7 @@ Además del disparo de cada regla, se verifica explícitamente lo que la propues
 
 Las pruebas corren sobre SQLite. Se creó una base PostgreSQL aparte, se aplicaron las migraciones y se sembró una obra con condiciones de riesgo reales. Resultado: **8 alertas de 7 reglas distintas**, 8 eventos de historial (la invariante se sostiene) y snapshots de holgura para las 7 tareas.
 
-**Esa verificación destapó un defecto que las pruebas no podían ver.** El relleno de la migración `0062` comparaba la columna enum `alert_type` contra parámetros de tipo varchar; PostgreSQL no define ese operador y `alembic upgrade head` fallaba con `UndefinedFunctionError`. En SQLite el enum es un VARCHAR, así que la suite pasaba igual. Corregido con un `type::text` explícito.
+**Esa verificación destapó un defecto que las pruebas no podían ver.** El relleno de la migración `0068` comparaba la columna enum `alert_type` contra parámetros de tipo varchar; PostgreSQL no define ese operador y `alembic upgrade head` fallaba con `UndefinedFunctionError`. En SQLite el enum es un VARCHAR, así que la suite pasaba igual. Corregido con un `type::text` explícito.
 
 Es el mismo aprendizaje metodológico que ya había dejado la integración con la mensajería, en otro plano: **hay defectos que solo aparecen ejecutando contra el motor real**.
 
@@ -204,7 +204,7 @@ Verificación de tipos y compilación de producción sin errores. El análisis e
 `models/alert.py` (11 tipos + `AlertSeverity` + `DEFAULT_SEVERITY`), `models/settings.py` (+23 campos), `models/task.py` (`last_progress_at`), `models/task_risk_snapshot.py` (nuevo), `repositories/alert.py` (`severity` en la creación), `repositories/settings.py` (defaults por introspección), `repositories/task.py` (sellado del avance), `services/risk_service.py` (**nuevo**, el motor y las 11 reglas), `services/alert_service.py` (`emit()`), `services/task_service.py` (CPM sin validación), `core/scheduler.py` (3 trabajos), `core/socket_manager.py` (severidad en el payload), `schemas/alert.py`, `schemas/settings.py`.
 
 **Migraciones**
-`0062_alert_severity_and_risk_types.py`, `0063_settings_risk_rules.py`, `0064_task_progress_and_risk_snapshots.py`.
+`0068_alert_severity_and_risk_types.py`, `0069_settings_risk_rules.py`, `0070_task_progress_and_risk_snapshots.py`.
 
 **Frontend**
 `lib/alertMeta.ts` (**nuevo**), `types/index.ts`, `api/settings.ts`, `components/AlertasTab.tsx`, `components/AlertBell.tsx`, `components/CriticalAlertToast.tsx`, `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ConfiguracionPage.tsx`, `App.tsx`.

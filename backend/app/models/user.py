@@ -40,6 +40,12 @@ class User(Base):
     avatar_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # E.164 — habilita al staff (arquitecto/jefe/admin) a usar el chatbot de WhatsApp
     whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    # Último resumen semanal de staff enviado. El job corre cada hora los lunes
+    # (para esperar a que abra la ventana horaria), así que hace falta saber si
+    # el de esta semana ya salió.
+    last_weekly_digest_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

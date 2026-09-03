@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     # Observabilidad
     SENTRY_DSN: str = ""  # Si está vacío, Sentry no se inicializa.
 
+    # Motor de insights: el job mensual manda emails REALES y hace una llamada a
+    # Claude por obra activa (ambos se pagan). Arranca apagado a propósito: en
+    # local no tiene sentido que se dispare solo — el link del informe apunta a
+    # FRONTEND_URL, que sin desplegar es localhost y no le sirve a nadie más.
+    # Se enciende explícitamente en el .env del servidor al desplegar.
+    # El disparo manual (run_monthly_insights / run_obra_pipeline) NO depende de
+    # este flag: sirve para probar cuando uno quiere, no cuando manda el cron.
+    INSIGHTS_ENABLED: bool = False
+
     # IA — bitácora de obra (análisis con Claude + transcripción Whisper)
     ANTHROPIC_API_KEY: str = ""
     CLAUDE_MODEL: str = "claude-haiku-4-5-20251001"  # barato y suficiente para extraer acciones

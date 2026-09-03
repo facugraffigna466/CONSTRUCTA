@@ -9,15 +9,15 @@ Configuración.
 Se agregan con server_default para no romper las filas existentes; el default de
 la aplicación vive en el modelo (app/models/settings.py).
 
-Revision ID: 0063
-Revises: 0062
+Revision ID: 0069
+Revises: 0068
 Create Date: 2026-09-03
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0063"
-down_revision = "0062"
+revision = "0069"
+down_revision = "0068"
 branch_labels = None
 depends_on = None
 
