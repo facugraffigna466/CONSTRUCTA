@@ -19,6 +19,7 @@ from app.integrations.twilio.client import send_whatsapp_message
 from app.models.alert import AlertType
 from app.models.message import Message, MessageDirection, MessageProcessingStatus, MessageType
 from app.models.responsible import Responsible
+from app.models.user import User
 from app.models.task import Task, TaskStatus
 from app.repositories.alert import AlertRepository
 from app.repositories.calendar import CalendarRepository
@@ -273,6 +274,38 @@ class NotificationService:
             awaits_response=awaits_response,
             notification_type=notification_type,
         )
+        return sid
+
+    async def notify_staff(
+        self, user: "User", body: str, *, notification_type: str = "staff_notice"
+    ) -> str | None:
+        """Manda un WhatsApp a un miembro del staff (arquitecto/admin) y lo registra.
+
+        Gemelo de `notify_responsible`, pero para `User`. Va aparte porque
+        `messages.responsible_id` no puede apuntar a un usuario: el saliente se
+        guarda con `responsible_id=None` y el `user_id` queda en el JSON de
+        `ai_interpretation` para poder rastrearlo.
+        """
+        from app.core.config import settings as _settings
+
+        sid = await send_whatsapp_message(user.whatsapp_number, body)
+        msg = Message(
+            direction=MessageDirection.OUTBOUND,
+            message_type=MessageType.TEXT,
+            from_number=_settings.TWILIO_WHATSAPP_NUMBER,
+            to_number=user.whatsapp_number,
+            body=body,
+            responsible_id=None,
+            task_id=None,
+            external_message_id=sid,
+            processing_status=MessageProcessingStatus.PROCESSED,
+            ai_interpretation={
+                "notification_type": notification_type,
+                "user_id": user.id,
+                "awaits_response": False,
+            },
+        )
+        await self.msg_repo.create(msg)
         return sid
 
     async def can_notify_obra(self, obra_id: int) -> tuple[bool, str]:
