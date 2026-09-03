@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Genera docs/IPI-CONSTRUCTA.docx a partir de docs/IPI-CONSTRUCTA.md.
+"""Genera docs/ipi/IPI-CONSTRUCTA.docx a partir de docs/ipi/IPI-CONSTRUCTA.md.
 
 Conversor Markdown -> docx a medida para el IPI: respeta el tono académico
 (texto justificado, encabezados, tablas, blockquotes resaltados para los
 bloques [COMPLETAR]) e inserta los diagramas en las Figuras 1, 6 y 7.
 
-Uso:  backend/.venv/bin/python docs/build_ipi_docx.py
+Uso:  backend/.venv/bin/python docs/ipi/build_ipi_docx.py
 """
 import os
 import re
@@ -17,9 +17,12 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.shared import Pt, RGBColor, Inches
 
-DOCS = os.path.dirname(os.path.abspath(__file__))
-MD = os.path.join(DOCS, "IPI-CONSTRUCTA.md")
-OUT = os.path.join(DOCS, "IPI-CONSTRUCTA.docx")
+# El script vive en docs/ipi/ junto al .md y el .docx; los diagramas quedaron
+# en docs/diagramas/ porque los usan también otros documentos.
+HERE = os.path.dirname(os.path.abspath(__file__))
+DOCS = os.path.dirname(HERE)
+MD = os.path.join(HERE, "IPI-CONSTRUCTA.md")
+OUT = os.path.join(HERE, "IPI-CONSTRUCTA.docx")
 DIAG = os.path.join(DOCS, "diagramas")
 
 # Paleta CONSTRUCTA

@@ -27,7 +27,7 @@ frontend/src/components/ResumenTab.tsx           — how GanttTimeline is called
 frontend/src/pages/ObraDetailPage.tsx            — how ResumenTab is called, loadData() flow
 frontend/src/types/index.ts                      — Task, Responsible, TaskStatus types
 frontend/src/api/tasks.ts                        — TaskUpdatePayload, updateTask()
-docs/skills.md                                   — DR-05, FS-02, FS-03, FS-07
+docs/referencia/skills.md                                   — DR-05, FS-02, FS-03, FS-07
 ```
 
 ---

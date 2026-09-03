@@ -37,8 +37,8 @@ La prioridad no debería ser agregar módulos. El mayor retorno está en:
 - `Anteproyecto.docx`, aportado por el equipo.
 - `Modulos y sus funcionalidades.docx`, aportado por el equipo.
 - `[Plantilla IPI] - Informe de Proyecto Integrador - Guia de Ejemplo - v2.1 - 2026.pdf`, 21 páginas.
-- `docs/IPI-CONSTRUCTA.md` y `docs/IPI-CONSTRUCTA.docx`.
-- `docs/documentacion.md`, `docs/casos_de_prueba.md` y `docs/auditoria-sistema-consolidada.md`.
+- `docs/ipi/IPI-CONSTRUCTA.md` y `docs/ipi/IPI-CONSTRUCTA.docx`.
+- `docs/documentacion.md`, `docs/referencia/casos_de_prueba.md` y `docs/auditoria/auditoria-sistema-consolidada.md`.
 - Código actual de `backend/`, `frontend/`, migraciones, tests y CI.
 - Copia local `/Users/agustinllancaman/Downloads/Gantt_Final_Constructa.xlsx`, creada el 2026-04-14.
 
@@ -163,7 +163,7 @@ Ese flujo debe poder ejecutarse de principio a fin, con datos de demostración c
 - No existen tests de frontend.
 - No existen pruebas E2E automatizadas.
 - No hay medición de cobertura.
-- `docs/casos_de_prueba.md` describe 20 casos y resultados esperados, pero no registra fecha, ejecutor, resultado real ni evidencia.
+- `docs/referencia/casos_de_prueba.md` describe 20 casos y resultados esperados, pero no registra fecha, ejecutor, resultado real ni evidencia.
 - Las integraciones externas —WhatsApp, correo e IA— no forman parte de una suite reproducible.
 - El bundle principal mide aproximadamente 1,12 MB minificado y Vite advierte que supera 500 kB.
 
@@ -177,7 +177,7 @@ Antes de entregar debe existir una rama o etiqueta única que represente exactam
 
 ## 6. Riesgo de seguridad no reflejado correctamente en la auditoría previa
 
-`docs/auditoria-sistema-consolidada.md` afirma que el cluster P0 multiempresa está cerrado. La revisión del código actual encontró rutas que todavía no validan correctamente el tenant:
+`docs/auditoria/auditoria-sistema-consolidada.md` afirma que el cluster P0 multiempresa está cerrado. La revisión del código actual encontró rutas que todavía no validan correctamente el tenant:
 
 - cambio de rol y eliminación de usuarios;
 - listados, modificación y baja de proveedores;
@@ -199,7 +199,7 @@ Los tests actuales no cubren esos flujos. Por lo tanto:
 
 ### Lo que está bien
 
-El borrador `docs/IPI-CONSTRUCTA.md` es sustancial:
+El borrador `docs/ipi/IPI-CONSTRUCTA.md` es sustancial:
 
 - 431 líneas y 8.279 palabras;
 - portada;

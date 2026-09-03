@@ -483,7 +483,7 @@ El modelo de datos, versionado en cuarenta y cuatro migraciones (`0001` a `0044`
 
 El aislamiento entre empresas se materializa con la columna `tenant_id` en las entidades de cabecera. Las relaciones clave son: una empresa tiene muchos usuarios y muchas obras; una obra tiene muchas tareas, alertas, entradas de bitácora, presupuestos y planos; una tarea pertenece a una obra, puede tener una tarea padre, se relaciona con otras por dependencias y se asigna a un responsable.
 
-> **[FIGURA 8: Diagrama entidad-relación (DER) del modelo de datos. Referencia: `docs/database.md`. Fuente: elaboración propia.]**
+> **[FIGURA 8: Diagrama entidad-relación (DER) del modelo de datos. Referencia: `docs/referencia/database.md`. Fuente: elaboración propia.]**
 
 **Máquina de estados de Tarea y de Obra**
 
@@ -529,14 +529,14 @@ A continuación se describen los módulos que componen la solución:
 
 La estrategia de verificación combinó distintos niveles:
 
-- **Plan de pruebas:** se mantiene un conjunto de casos de prueba manuales documentados en `docs/casos_de_prueba.md`.
+- **Plan de pruebas:** se mantiene un conjunto de casos de prueba manuales documentados en `docs/referencia/casos_de_prueba.md`.
 - **Pruebas funcionales y de aceptación:** cada módulo se verificó ejecutando la aplicación en el navegador contra el backend real, comprobando el comportamiento esperado de las interacciones (por ejemplo, el relleno por arrastre con encadenado de fechas persistiendo en la base, o el flujo completo de la bitácora por voz).
 - **Pruebas de integración:** se verificaron de extremo a extremo los flujos que atraviesan varias capas e integraciones, como el envío de una nota de voz por WhatsApp → transcripción → análisis con IA → registro en la bitácora, y la lectura y comparación de presupuestos con el modelo de lenguaje.
-- **Verificación de regresiones:** ante cada cambio se ejecutó la verificación de tipos (`tsc`) y la compilación de producción del frontend, y se realizó una auditoría general de la aplicación documentada en `docs/auditoria-general.md`.
-- **Auditoría técnica sistemática:** se auditó el sistema módulo por módulo —las 25 rutas del backend, los servicios y el modelo de datos— con ocho análisis (`docs/analisis-modulo-*.md`) consolidados en un informe maestro (`docs/auditoria-sistema-consolidada.md`) que clasifica los hallazgos por severidad (seguridad / robustez / pulido) e identifica como tema transversal principal el aislamiento entre empresas (*tenants*). Tras la defensa se realizó una segunda ronda sistemática, módulo por módulo, documentada en once informes (`docs/auditoria/01` a `11`), cuya remediación se completó entre el 21 y el 28 de agosto de 2026. La suite automatizada creció a 315 tests distribuidos en 37 archivos, ejecutados en integración continua ante cada cambio: aislamiento por tenant (`test_tenant_isolation.py`, que verifica que un usuario de una empresa no accede a los recursos de otra), permisos por obra, autenticación, *rate limiting*, importaciones, robustez de infraestructura y un archivo por módulo auditado. Los tests de frontend y la automatización end-to-end quedan pendientes; se declaran explícitamente en las secciones de Implementación y de Objetivos no cumplidos.
+- **Verificación de regresiones:** ante cada cambio se ejecutó la verificación de tipos (`tsc`) y la compilación de producción del frontend, y se realizó una auditoría general de la aplicación documentada en `docs/auditoria/auditoria-general.md`.
+- **Auditoría técnica sistemática:** se auditó el sistema módulo por módulo —las 25 rutas del backend, los servicios y el modelo de datos— con ocho análisis (`docs/analisis/analisis-modulo-*.md`) consolidados en un informe maestro (`docs/auditoria/auditoria-sistema-consolidada.md`) que clasifica los hallazgos por severidad (seguridad / robustez / pulido) e identifica como tema transversal principal el aislamiento entre empresas (*tenants*). Tras la defensa se realizó una segunda ronda sistemática, módulo por módulo, documentada en once informes (`docs/auditoria/01` a `11`), cuya remediación se completó entre el 21 y el 28 de agosto de 2026. La suite automatizada creció a 315 tests distribuidos en 37 archivos, ejecutados en integración continua ante cada cambio: aislamiento por tenant (`test_tenant_isolation.py`, que verifica que un usuario de una empresa no accede a los recursos de otra), permisos por obra, autenticación, *rate limiting*, importaciones, robustez de infraestructura y un archivo por módulo auditado. Los tests de frontend y la automatización end-to-end quedan pendientes; se declaran explícitamente en las secciones de Implementación y de Objetivos no cumplidos.
 - **Prueba en entorno real como fuente de hallazgos:** la verificación contra la integración real de mensajería (Twilio/WhatsApp), y no solamente la lectura de código o la suite automatizada, expuso defectos que ninguna de las otras técnicas había detectado: un menú de desambiguación que no aceptaba el nombre de la obra como respuesta y dejaba al usuario en un ciclo sin salida; un valor por defecto invertido en la asignación de permisos, latente porque ninguna interfaz ejercitaba ese camino; y un límite de tamaño de la plataforma de mensajería que el sistema no comunicaba. Se documenta como aprendizaje metodológico: en un sistema cuya interfaz principal es un canal de terceros, la prueba de integración real resulta una técnica de verificación no sustituible.
 
-A modo ilustrativo, se presentan algunos casos de prueba representativos (el conjunto completo se detalla en `docs/casos_de_prueba.md`):
+A modo ilustrativo, se presentan algunos casos de prueba representativos (el conjunto completo se detalla en `docs/referencia/casos_de_prueba.md`):
 
 | Caso | Acción | Resultado esperado |
 |---|---|---|
@@ -665,7 +665,7 @@ Quedan pendientes dos tipos de aspectos, de naturaleza distinta. Por un lado, do
 Información suplementaria, no necesaria para el entendimiento mínimo del proyecto:
 
 - **Anexo A — Bitácora de desarrollo completa:** `docs/documentacion.md` (registro cronológico de avances, decisiones y validaciones).
-- **Anexo B — Esquema de base de datos:** `docs/database.md`.
-- **Anexo C — Casos de prueba manuales:** `docs/casos_de_prueba.md`.
-- **Anexo D — Auditorías de la aplicación:** `docs/auditoria-general.md`, `docs/auditoria-ux.md`, `docs/auditoria-flujo-alta.md`.
+- **Anexo B — Esquema de base de datos:** `docs/referencia/database.md`.
+- **Anexo C — Casos de prueba manuales:** `docs/referencia/casos_de_prueba.md`.
+- **Anexo D — Auditorías de la aplicación:** `docs/auditoria/auditoria-general.md`, `docs/auditoria/auditoria-ux.md`, `docs/auditoria/auditoria-flujo-alta.md`.
 - **Anexo E — Repositorio de código:** https://github.com/facugraffigna466/CONSTRUCTA

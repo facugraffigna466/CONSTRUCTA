@@ -698,7 +698,7 @@ The `.agents/skills/` directory contains focused, self-contained skill files for
 
 ### Relationship to this file
 
-`docs/skills.md` (this file) defines the **rules** — what is allowed, what is forbidden, what patterns to follow.
+`docs/referencia/skills.md` (this file) defines the **rules** — what is allowed, what is forbidden, what patterns to follow.
 
 `.agents/skills/*/SKILL.md` defines the **process** — step-by-step how to execute a specific category of task while respecting these rules.
 

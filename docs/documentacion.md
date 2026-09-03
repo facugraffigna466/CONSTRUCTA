@@ -1195,7 +1195,7 @@ El jefe de obra graba un audio (desde WhatsApp en la obra, o desde la app con el
 En `backend/.env`: `ANTHROPIC_API_KEY=sk-ant-...` (análisis) y `OPENAI_API_KEY=sk-...` (transcripción de audio). Sin la segunda, los audios quedan guardados y el texto se puede cargar a mano.
 
 ### Auditoría UX/UI (agente paralelo)
-Informe completo en `docs/auditoria-ux.md`: la vista Planilla ya es la grilla tipo Excel que pide el cliente pero está escondida (propuesta "Excel-first" con 13 cambios S/M/L), cero soporte mobile (P0), pérdida de datos al cerrar el wizard, inconsistencia de "duración" entre modal y planilla, datos fake en Portfolio/login, ~25 hallazgos P0-P2, 12 quick wins y roadmap de 5 sprints.
+Informe completo en `docs/auditoria/auditoria-ux.md`: la vista Planilla ya es la grilla tipo Excel que pide el cliente pero está escondida (propuesta "Excel-first" con 13 cambios S/M/L), cero soporte mobile (P0), pérdida de datos al cerrar el wizard, inconsistencia de "duración" entre modal y planilla, datos fake en Portfolio/login, ~25 hallazgos P0-P2, 12 quick wins y roadmap de 5 sprints.
 
 ---
 
@@ -1309,7 +1309,7 @@ El revert a mouse events no alcanzaba: el overlay SVG de flechas de dependencias
 
 ## 2026-06-12 — Alta de empresa self-service + fixes del flujo de creación
 
-Salida de la auditoría del flujo de alta (`docs/auditoria-flujo-alta.md`). Rama `feature/alta-empresa-wizard-fixes`.
+Salida de la auditoría del flujo de alta (`docs/auditoria/auditoria-flujo-alta.md`). Rama `feature/alta-empresa-wizard-fixes`.
 
 - **Registro self-service**: LoginPage modo "Crear cuenta" → `POST /auth/register` con `company_name`, rol `admin` siempre, tenant propio en plan Básico, login automático.
 - **Aislamiento multi-tenant**: obras (list filtra, get 404 cross-tenant), responsables (migration 0026 `tenant_id` + backfill), alertas (join por obra), usuarios. Verificado e2e con usuario nuevo.
@@ -1690,10 +1690,10 @@ Los clics del menú (portal) burbujeaban por el árbol de React hasta el `onClic
 Auditoría técnica módulo por módulo de **todo el sistema**, sin cambios de código de producto: solo relevamiento y documentación de hallazgos.
 
 ### Alcance y método
-Se reconciliaron los ocho análisis por módulo (`docs/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Resultado: **cobertura 26/26 rutas** (ningún módulo sin auditar).
+Se reconciliaron los ocho análisis por módulo (`docs/analisis/analisis-modulo-*.md`) contra las **26 rutas** del backend, los 18 servicios y los 22 modelos, con verificación puntual del código real de cada hallazgo crítico. Resultado: **cobertura 26/26 rutas** (ningún módulo sin auditar).
 
 ### Entregable
-Nuevo documento maestro **`docs/auditoria-sistema-consolidada.md`** que consolida los 8 análisis en uno solo:
+Nuevo documento maestro **`docs/auditoria/auditoria-sistema-consolidada.md`** que consolida los 8 análisis en uno solo:
 - Resumen ejecutivo + conteo por severidad: **15 P0 (seguridad) · ~28 P1 (robustez/negocio) · ~20 P2 (pulido)**.
 - Matriz de cobertura de las 26 rutas (cada ruta → doc → hallazgo de mayor severidad).
 - Los 15 P0 en tabla (módulo, impacto, causa raíz), los P1 agrupados por área, los P2.
@@ -1779,12 +1779,12 @@ Determinar el estado real de CONSTRUCTA frente al Anteproyecto, el documento de 
 ### Changes made
 - Se creó un diagnóstico consolidado con porcentajes separados de implementación, evidencia, documentación y preparación de entrega.
 - Se construyó una matriz de 17 compromisos originales y se contrastó contra el código y las pruebas existentes.
-- Se comparó `docs/IPI-CONSTRUCTA.md` contra la plantilla oficial y contra los objetivos aprobados en el Anteproyecto.
+- Se comparó `docs/ipi/IPI-CONSTRUCTA.md` contra la plantilla oficial y contra los objetivos aprobados en el Anteproyecto.
 - Se documentó la imposibilidad de leer la hoja online por autenticación y se analizó provisionalmente la copia local del Gantt.
 - No se modificó código de producto; los riesgos encontrados quedaron documentados para una remediación posterior explícita.
 
 ### Files modified
-- `docs/estado-proyecto-agosto-2026.md` — informe consolidado, porcentajes, brechas y plan de cierre.
+- `docs/estado/estado-proyecto-agosto-2026.md` — informe consolidado, porcentajes, brechas y plan de cierre.
 - `docs/documentacion.md` — registro de la sesión de auditoría.
 
 ### Problems found
@@ -1803,7 +1803,7 @@ Determinar el estado real de CONSTRUCTA frente al Anteproyecto, el documento de 
 
 ### Validation
 - Lectura completa de los dos DOCX aportados y de las 21 páginas de la plantilla IPI — completada.
-- Revisión de `docs/IPI-CONSTRUCTA.md` — 431 líneas, 8.279 palabras, ocho marcadores `[COMPLETAR]` y siete figuras previstas.
+- Revisión de `docs/ipi/IPI-CONSTRUCTA.md` — 431 líneas, 8.279 palabras, ocho marcadores `[COMPLETAR]` y siete figuras previstas.
 - Revisión de `/Users/agustinllancaman/Downloads/Gantt_Final_Constructa.xlsx` — 48 actividades en 10 fases.
 - Export de la hoja online — HTTP 401; no se pudo validar si existe una versión posterior.
 - `pytest` — 16/16 tests aprobados.
@@ -1833,7 +1833,7 @@ Recalcular el estado de CONSTRUCTA usando el Gantt completo aportado por el equi
 
 ### Files modified
 - `docs/alcance-defensa-2026-08-15.md` — diagnóstico específico de la defensa, alcance incluido/excluido, porcentajes y plan de cierre.
-- `docs/estado-proyecto-agosto-2026.md` — aviso de reemplazo de la estimación preliminar para el corte del 2026-08-15.
+- `docs/estado/estado-proyecto-agosto-2026.md` — aviso de reemplazo de la estimación preliminar para el corte del 2026-08-15.
 - `docs/documentacion.md` — registro de la recalibración.
 
 ### Problems found
@@ -1884,10 +1884,10 @@ Alinear el borrador del IPI con el Anteproyecto aprobado, la implementación y l
 - Se actualizó el generador DOCX con los nombres de estudiantes y directores y con el reconocimiento visual de marcadores `[PENDIENTE]`.
 
 ### Files modified
-- `docs/IPI-CONSTRUCTA.md` — objetivos aprobados, evolución del alcance, estado técnico, pruebas, relevamiento, impactos, conclusión y anexos.
-- `docs/build_ipi_docx.py` — integrantes, directores y tratamiento de marcadores pendientes.
-- `docs/alcance-defensa-2026-08-13.md` — informe renombrado y recalculado para la fecha oficial, con consigna y guion temporal.
-- `docs/estado-proyecto-agosto-2026.md` — referencia al informe vigente y actualización de datos técnicos.
+- `docs/ipi/IPI-CONSTRUCTA.md` — objetivos aprobados, evolución del alcance, estado técnico, pruebas, relevamiento, impactos, conclusión y anexos.
+- `docs/ipi/build_ipi_docx.py` — integrantes, directores y tratamiento de marcadores pendientes.
+- `docs/estado/alcance-defensa-2026-08-13.md` — informe renombrado y recalculado para la fecha oficial, con consigna y guion temporal.
+- `docs/estado/estado-proyecto-agosto-2026.md` — referencia al informe vigente y actualización de datos técnicos.
 - `docs/documentacion.md` — registro de la alineación y de la corrección de fecha.
 
 ### Problems found
@@ -1921,7 +1921,7 @@ Alinear el borrador del IPI con el Anteproyecto aprobado, la implementación y l
 - Corregir y probar los controles multiempresa todavía abiertos antes de presentar el producto como SaaS listo para producción.
 - Ejecutar sobre un único commit los recorridos críticos y registrar fecha, entorno, entrada, resultado real, evidencia e incidencia.
 - Preparar diapositivas, datos de demostración, contingencias y un guion ensayado de ocho minutos.
-- Actualizar el DER, `docs/database.md`, las figuras del IPI y sus referencias.
+- Actualizar el DER, `docs/referencia/database.md`, las figuras del IPI y sus referencias.
 - Completar la matriz retrospectiva del relevamiento, el estudio económico, la reflexión del equipo, el título definitivo y la fecha de portada.
 
 ---
@@ -1942,8 +1942,8 @@ Incorporar al IPI la modalidad real de trabajo del equipo, la variabilidad de su
 - Se incorporó la modalidad organizativa al cierre recomendado de dos minutos de la presentación.
 
 ### Files modified
-- `docs/IPI-CONSTRUCTA.md` — organización, dedicación, reflexión, límites del relevamiento y base del estudio económico.
-- `docs/alcance-defensa-2026-08-13.md` — explicación breve de la organización del equipo para el cierre de la presentación.
+- `docs/ipi/IPI-CONSTRUCTA.md` — organización, dedicación, reflexión, límites del relevamiento y base del estudio económico.
+- `docs/estado/alcance-defensa-2026-08-13.md` — explicación breve de la organización del equipo para el cierre de la presentación.
 - `docs/documentacion.md` — registro de las decisiones documentales y económicas.
 
 ### Problems found
@@ -1992,7 +1992,7 @@ Precisar el gasto mensual informado por el equipo para las suscripciones persona
 - Se mantuvo separada esta inversión de asistencia al desarrollo respecto del consumo de APIs generado por la aplicación.
 
 ### Files modified
-- `docs/IPI-CONSTRUCTA.md` — periodicidad, costo por servicio, total mensual y fórmula de acumulación.
+- `docs/ipi/IPI-CONSTRUCTA.md` — periodicidad, costo por servicio, total mensual y fórmula de acumulación.
 - `docs/documentacion.md` — registro de la confirmación económica.
 
 ### Problems found
@@ -2049,7 +2049,7 @@ El backlog de la auditoría del 2026-07-17 tenía ~28 P1; este barrido cerró el
 Cada PR con su propio test/verificación puntual (no hay una corrida consolidada registrada para todo el barrido); CI en verde en cada merge.
 
 ### Pending / next steps
-Ver `docs/estado-proyecto-agosto-2026.md` y el backlog post-audit para lo que quedó fuera de este barrido.
+Ver `docs/estado/estado-proyecto-agosto-2026.md` y el backlog post-audit para lo que quedó fuera de este barrido.
 
 ---
 
@@ -2060,11 +2060,11 @@ Poner al día los diagramas técnicos y las capturas del IPI de cara a la defens
 
 ### Changes made
 - Diagramas actualizados: DER, casos de uso, diagrama de estados y diagrama de secuencia del chatbot (`docs/diagramas/`).
-- Se cablearon las 4 capturas faltantes (Figuras 2–5) en `docs/IPI-CONSTRUCTA.md` y se avanzó el resto del informe.
+- Se cablearon las 4 capturas faltantes (Figuras 2–5) en `docs/ipi/IPI-CONSTRUCTA.md` y se avanzó el resto del informe.
 
 ### Files modified
 - `docs/diagramas/*.svg`
-- `docs/IPI-CONSTRUCTA.md`
+- `docs/ipi/IPI-CONSTRUCTA.md`
 
 ### Validation
 Regeneración del DOCX con `build_ipi_docx.py` (diagramas rasterizados con `qlmanage`).
@@ -2109,7 +2109,7 @@ Repetir el ejercicio de auditoría del 2026-07-17 sobre el sistema ya con la car
 - También se aprovechó para sincronizar `IPI-CONSTRUCTA.md` con la última versión del DOCX y cerrar objeciones puntuales de la revisión de tesis (Presentación, Diagnóstico, Objetivos, Marco teórico).
 
 ### Files modified
-Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/IPI-CONSTRUCTA.md`.
+Repositorios/servicios de responsables, planos, admin, configuración, alertas; `TaskFormModal`/`TaskTable` (auditoría 03); `ResumenTab` (auditoría 02); `docs/auditoria/*.md`; `docs/ipi/IPI-CONSTRUCTA.md`.
 
 ### Pending / next steps
 Reporte 08 (bitácora): P0 cerrado el 2026-08-26; P1/P2 siguen abiertos. Reporte 06 (alertas) cerrado el 2026-08-26. Reporte 07 (historial) cerrado el 2026-08-27 (ver entradas más abajo).
