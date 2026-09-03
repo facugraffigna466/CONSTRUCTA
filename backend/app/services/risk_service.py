@@ -12,14 +12,17 @@ regla nueva es escribir el método y sumar una línea a esa tabla.
 Toda alerta sale por AlertService.emit(), que centraliza dedup e historial.
 """
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.alert import AlertSeverity, AlertType
 from app.models.baseline import TaskBaseline
 from app.models.obra import Obra, ObraStatus
+from app.models.purchase_order import PurchaseOrder
+from app.models.task_material import TaskMaterial
 from app.models.settings import SystemSettings
 from app.models.task import Task, TaskStatus
 from app.repositories.calendar import CalendarRepository
@@ -40,6 +43,16 @@ def _fmt(d: date) -> str:
     return d.strftime("%d/%m/%Y")
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """Normaliza a UTC. Postgres devuelve datetimes con tz y SQLite (tests) sin
+    ella; comparar los dos mundos sin normalizar tira TypeError."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+# Un material deja de ser riesgo recién cuando llegó a la obra.
+MATERIAL_NOT_RECEIVED = ("pendiente", "pedido")
+
+
 class RiskContext:
     """Datos de una obra compartidos por todas las reglas de una corrida.
 
@@ -58,6 +71,8 @@ class RiskContext:
         self._baselines: dict[int, TaskBaseline] | None = None
         self._calendar = None
         self._dependencies: dict[int, list[dict]] | None = None
+        self._materials: list[TaskMaterial] | None = None
+        self._orders: list[PurchaseOrder] | None = None
 
     async def load(self) -> None:
         repo = TaskRepository(self.session)
@@ -90,6 +105,28 @@ class RiskContext:
                 self.obra.id
             )
         return self._calendar
+
+    async def materials(self) -> list[TaskMaterial]:
+        """Materiales de todas las tareas de la obra (task_materials cuelga de la
+        tarea, no de la obra, así que hace falta el join)."""
+        if self._materials is None:
+            result = await self.session.execute(
+                select(TaskMaterial)
+                .join(Task, Task.id == TaskMaterial.task_id)
+                .where(Task.obra_id == self.obra.id)
+            )
+            self._materials = list(result.scalars().all())
+        return self._materials
+
+    async def purchase_orders(self) -> list[PurchaseOrder]:
+        if self._orders is None:
+            result = await self.session.execute(
+                select(PurchaseOrder)
+                .where(PurchaseOrder.obra_id == self.obra.id)
+                .options(selectinload(PurchaseOrder.supplier))
+            )
+            self._orders = list(result.scalars().all())
+        return self._orders
 
     async def dependencies(self) -> dict[int, list[dict]]:
         """{task_id: [links]}. Incluye el `depends_on_id` legacy de la tarea, que
@@ -128,6 +165,9 @@ class RiskService:
         ("risk_baseline_deviation", "_rule_baseline_deviation"),
         ("risk_milestone_at_risk", "_rule_milestone_at_risk"),
         ("risk_deadline_holiday", "_rule_deadline_conflicts_holiday"),
+        ("risk_material_pending", "_rule_material_pending_too_long"),
+        ("risk_order_no_confirmation", "_rule_order_sent_no_confirmation"),
+        ("risk_material_blocking_task", "_rule_material_blocking_task"),
     ]
 
     # ── Orquestación ──────────────────────────────────────────────────────────
@@ -360,5 +400,134 @@ class RiskService:
                 reason="deadline_conflicts_holiday",
                 severity=AlertSeverity.BAJA,
                 extra={"due_date": task.due_date.isoformat(), "label": label},
+            )
+        return created
+
+    # ── Bloque 3 — materiales y compras ───────────────────────────────────────
+
+    async def _rule_material_pending_too_long(self, ctx: RiskContext) -> int:
+        """§3.1 — materiales que quedaron en 'pendiente' sin pasar a 'pedido'.
+
+        Se agrupa por tarea en vez de emitir una alerta por material: una tarea con
+        veinte materiales cargados el mismo día produciría veinte alertas idénticas
+        en intención, y el destinatario tiene una sola acción para todas (armar el
+        pedido). El mensaje lista los materiales, así que si la lista cambia es otra
+        situación y corresponde una alerta nueva.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            days=ctx.cfg.risk_material_pending_days
+        )
+        activas = {t.id: t for t in ctx.active_tasks}
+
+        atrasados: dict[int, list[TaskMaterial]] = {}
+        for material in await ctx.materials():
+            if material.status != "pendiente" or material.task_id not in activas:
+                continue
+            if _as_utc(material.created_at) > cutoff:
+                continue
+            atrasados.setdefault(material.task_id, []).append(material)
+
+        created = 0
+        for task_id, materiales in atrasados.items():
+            task = activas[task_id]
+            nombres = ", ".join(f"«{m.name}»" for m in materiales[:3])
+            resto = f" y {len(materiales) - 3} más" if len(materiales) > 3 else ""
+            plural = "es" if len(materiales) != 1 else ""
+            message = (
+                f"La tarea «{task.title}» tiene {len(materiales)} material{plural} "
+                f"sin pedir hace más de {ctx.cfg.risk_material_pending_days} días: "
+                f"{nombres}{resto}."
+            )
+            created += await self.alerts.emit(
+                obra_id=ctx.obra.id,
+                task_id=task_id,
+                alert_type=AlertType.MATERIAL_PENDING_TOO_LONG,
+                message=message,
+                reason="material_pending_too_long",
+                extra={"material_ids": [m.id for m in materiales]},
+            )
+        return created
+
+    async def _rule_order_sent_no_confirmation(self, ctx: RiskContext) -> int:
+        """§3.2 — pedido enviado que el proveedor nunca confirmó.
+
+        Es alerta a nivel obra (task_id NULL): un pedido agrupa materiales de varias
+        tareas, así que colgarla de una sola sería arbitrario.
+        """
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            days=ctx.cfg.risk_order_confirmation_days
+        )
+        created = 0
+        for order in await ctx.purchase_orders():
+            if order.status != "enviado" or order.sent_at is None:
+                continue
+            if _as_utc(order.sent_at) > cutoff:
+                continue
+
+            proveedor = order.supplier.name if order.supplier else "el proveedor"
+            message = (
+                f"El pedido #{order.id} a {proveedor} se envió el "
+                f"{_fmt(_as_utc(order.sent_at).date())} y todavía no se confirmó la recepción."
+            )
+            created += await self.alerts.emit(
+                obra_id=ctx.obra.id,
+                alert_type=AlertType.ORDER_SENT_NO_CONFIRMATION,
+                message=message,
+                reason="order_sent_no_confirmation",
+                extra={
+                    "order_id": order.id,
+                    "sent_at": _as_utc(order.sent_at).isoformat(),
+                },
+            )
+        return created
+
+    async def _rule_material_blocking_task(self, ctx: RiskContext) -> int:
+        """§3.3 — tarea por arrancar con materiales que todavía no llegaron.
+
+        Es la regla más valiosa del bloque: anticipa el bloqueo ANTES de que la
+        tarea figure como BLOQUEADA en la práctica. Incluye las tareas cuyo inicio
+        ya pasó y siguen sin material —ahí el problema es peor, no menor— y por eso
+        el mensaje distingue "arranca el" de "tenía que arrancar el".
+        """
+        limit = ctx.today + timedelta(days=ctx.cfg.risk_material_blocking_days)
+        candidatas = {
+            t.id: t
+            for t in ctx.active_tasks
+            if t.start_date is not None and t.start_date <= limit
+        }
+        if not candidatas:
+            return 0
+
+        faltantes: dict[int, list[TaskMaterial]] = {}
+        for material in await ctx.materials():
+            if material.task_id in candidatas and material.status in MATERIAL_NOT_RECEIVED:
+                faltantes.setdefault(material.task_id, []).append(material)
+
+        created = 0
+        for task_id, materiales in faltantes.items():
+            task = candidatas[task_id]
+            cuando = (
+                f"tenía que arrancar el {_fmt(task.start_date)}"
+                if task.start_date < ctx.today
+                else f"arranca el {_fmt(task.start_date)}"
+            )
+            nombres = ", ".join(f"«{m.name}»" for m in materiales[:3])
+            resto = f" y {len(materiales) - 3} más" if len(materiales) > 3 else ""
+            plural = "es" if len(materiales) != 1 else ""
+            message = (
+                f"La tarea «{task.title}» {cuando} y todavía tiene "
+                f"{len(materiales)} material{plural} sin recibir: {nombres}{resto}."
+            )
+            created += await self.alerts.emit(
+                obra_id=ctx.obra.id,
+                task_id=task_id,
+                alert_type=AlertType.MATERIAL_BLOCKING_TASK,
+                message=message,
+                reason="material_blocking_task",
+                severity=AlertSeverity.ALTA,
+                extra={
+                    "start_date": task.start_date.isoformat(),
+                    "material_ids": [m.id for m in materiales],
+                },
             )
         return created

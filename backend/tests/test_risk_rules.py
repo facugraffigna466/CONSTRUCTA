@@ -16,6 +16,9 @@ from app.models.baseline import TaskBaseline
 from app.models.calendar import CalendarException, WorkingCalendar
 from app.models.historial import HistorialEvento
 from app.models.obra import Obra
+from app.models.purchase_order import PurchaseOrder
+from app.models.supplier import Supplier
+from app.models.task_material import TaskMaterial
 from app.models.settings import SystemSettings
 from app.models.task import Task, TaskStatus, task_dependencies_table
 from app.models.tenant import Tenant
@@ -336,3 +339,145 @@ async def test_una_regla_rota_no_frena_las_demas(db, obra_ctx, cadena_critica, m
     # Se cuenta por tipo y no por total: la regla de calendario puede sumar una
     # alerta o ninguna según en qué día de la semana caiga la corrida.
     assert len(await _alerts(db, AlertType.CRITICAL_TASK_DELAYED)) == 2
+
+
+# ── Bloque 3 — materiales y compras ───────────────────────────────────────────
+
+async def _mk_material(db, task: Task, name: str, status: str, dias_atras: int = 0):
+    from datetime import datetime, timezone
+
+    material = TaskMaterial(
+        task_id=task.id, tenant_id=task.tenant_id, name=name, status=status,
+        created_at=datetime.now(timezone.utc) - timedelta(days=dias_atras),
+    )
+    db.add(material)
+    await db.flush()
+    return material
+
+
+async def test_materiales_pendientes_se_agrupan_por_tarea(db, obra_ctx):
+    """Tres materiales sin pedir en la misma tarea dan UNA alerta que los lista,
+    no tres: la acción del destinatario (armar el pedido) es una sola."""
+    task = await _mk_task(db, obra_ctx, "Instalación sanitaria",
+                          start_date=TODAY + timedelta(days=30),
+                          due_date=TODAY + timedelta(days=40),
+                          status=TaskStatus.PENDIENTE)
+    for nombre in ("Caños PVC", "Codos", "Pegamento"):
+        await _mk_material(db, task, nombre, "pendiente", dias_atras=10)
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    alerts = await _alerts(db, AlertType.MATERIAL_PENDING_TOO_LONG)
+    assert len(alerts) == 1
+    assert "3 materiales sin pedir" in alerts[0].message
+    assert "«Caños PVC»" in alerts[0].message
+
+
+async def test_material_pendiente_reciente_no_alerta(db, obra_ctx):
+    """Recién cargado no es riesgo: el umbral por defecto son 7 días."""
+    task = await _mk_task(db, obra_ctx, "Carpintería",
+                          start_date=TODAY + timedelta(days=30),
+                          due_date=TODAY + timedelta(days=40),
+                          status=TaskStatus.PENDIENTE)
+    await _mk_material(db, task, "Puertas", "pendiente", dias_atras=1)
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+    assert await _alerts(db, AlertType.MATERIAL_PENDING_TOO_LONG) == []
+
+
+async def test_material_ya_pedido_no_alerta_como_pendiente(db, obra_ctx):
+    """Pasar a 'pedido' cierra esta regla — de ahí en más el riesgo lo cubre
+    order_sent_no_confirmation."""
+    task = await _mk_task(db, obra_ctx, "Techos",
+                          start_date=TODAY + timedelta(days=30),
+                          due_date=TODAY + timedelta(days=40),
+                          status=TaskStatus.PENDIENTE)
+    await _mk_material(db, task, "Chapas", "pedido", dias_atras=20)
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+    assert await _alerts(db, AlertType.MATERIAL_PENDING_TOO_LONG) == []
+
+
+async def test_pedido_enviado_sin_confirmar_es_alerta_de_obra(db, obra_ctx):
+    """Un pedido agrupa materiales de varias tareas: la alerta va a nivel obra."""
+    from datetime import datetime, timezone
+
+    supplier = Supplier(tenant_id=obra_ctx["tenant"].id, name="Corralón del Centro")
+    db.add(supplier)
+    await db.flush()
+    db.add(PurchaseOrder(
+        obra_id=obra_ctx["obra"].id, supplier_id=supplier.id, status="enviado",
+        sent_at=datetime.now(timezone.utc) - timedelta(days=12),
+    ))
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    alerts = await _alerts(db, AlertType.ORDER_SENT_NO_CONFIRMATION)
+    assert len(alerts) == 1
+    assert alerts[0].task_id is None
+    assert "Corralón del Centro" in alerts[0].message
+
+
+async def test_pedido_recibido_no_alerta(db, obra_ctx):
+    """Solo los que quedaron en 'enviado' son riesgo."""
+    from datetime import datetime, timezone
+
+    db.add(PurchaseOrder(
+        obra_id=obra_ctx["obra"].id, status="recibido",
+        sent_at=datetime.now(timezone.utc) - timedelta(days=30),
+        received_at=datetime.now(timezone.utc) - timedelta(days=25),
+    ))
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+    assert await _alerts(db, AlertType.ORDER_SENT_NO_CONFIRMATION) == []
+
+
+async def test_material_bloquea_tarea_por_arrancar(db, obra_ctx):
+    """Anticipa el bloqueo antes de que la tarea figure como BLOQUEADA."""
+    task = await _mk_task(db, obra_ctx, "Mampostería",
+                          start_date=TODAY + timedelta(days=2),
+                          due_date=TODAY + timedelta(days=20),
+                          status=TaskStatus.PENDIENTE)
+    await _mk_material(db, task, "Ladrillos", "pedido")
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    alerts = await _alerts(db, AlertType.MATERIAL_BLOCKING_TASK)
+    assert len(alerts) == 1
+    assert alerts[0].severity == AlertSeverity.ALTA.value
+    assert f"arranca el {(TODAY + timedelta(days=2)).strftime('%d/%m/%Y')}" in alerts[0].message
+
+
+async def test_material_bloquea_tarea_que_ya_debia_arrancar(db, obra_ctx):
+    """Si el inicio ya pasó el problema es peor, no menor: el mensaje lo dice."""
+    task = await _mk_task(db, obra_ctx, "Revoque",
+                          start_date=TODAY - timedelta(days=4),
+                          due_date=TODAY + timedelta(days=20),
+                          status=TaskStatus.PENDIENTE)
+    await _mk_material(db, task, "Cal", "pendiente")
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    alerts = await _alerts(db, AlertType.MATERIAL_BLOCKING_TASK)
+    assert len(alerts) == 1
+    assert "tenía que arrancar el" in alerts[0].message
+
+
+async def test_material_recibido_no_bloquea(db, obra_ctx):
+    """El material que ya llegó a la obra deja de ser riesgo."""
+    task = await _mk_task(db, obra_ctx, "Contrapiso",
+                          start_date=TODAY + timedelta(days=1),
+                          due_date=TODAY + timedelta(days=20),
+                          status=TaskStatus.PENDIENTE)
+    await _mk_material(db, task, "Arena", "recibido")
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+    assert await _alerts(db, AlertType.MATERIAL_BLOCKING_TASK) == []
