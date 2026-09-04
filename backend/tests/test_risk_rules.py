@@ -963,3 +963,179 @@ async def test_el_evento_de_resolucion_lleva_los_ids_exactos(db, obra_ctx, monke
     assert task_id is None
     assert obra_id == obra_ctx["obra"].id
     assert pendiente.id in alert_ids
+
+
+# ── Aviso por WhatsApp de las alertas críticas ────────────────────────────────
+
+@pytest_asyncio.fixture
+def whatsapp(monkeypatch):
+    """Intercepta los envíos y abre la ventana de envío.
+
+    La ventana se fuerza a propósito en vez de depender del reloj: `can_notify_obra`
+    mira el horario laboral de la obra, así que sin esto los tests pasarían o
+    fallarían según la hora y el día en que se corran. Las reglas de la ventana se
+    verifican aparte, en el test que la cierra.
+    """
+    import app.services.notification_service as notif
+    from app.services.notification_service import NotificationService
+
+    enviados: list[tuple[str, str]] = []
+
+    async def fake_send(numero, cuerpo, *a, **kw):
+        enviados.append((numero, cuerpo))
+        return "SM_fake"
+
+    async def siempre_puede(self, obra_id):
+        return True, ""
+
+    monkeypatch.setattr(notif, "send_whatsapp_message", fake_send)
+    monkeypatch.setattr(NotificationService, "can_notify_obra", siempre_puede)
+    return enviados
+
+
+async def _con_whatsapp(db, obra_ctx, numero="+5493511234567"):
+    obra_ctx["user"].whatsapp_number = numero
+    await db.commit()
+
+
+async def test_manda_las_criticas_por_whatsapp(db, obra_ctx, whatsapp):
+    """Un hito en riesgo es crítico: sale el aviso al manager de la obra."""
+    await _con_whatsapp(db, obra_ctx)
+    previa = await _mk_task(db, obra_ctx, "Losa planta alta",
+                            start_date=TODAY - timedelta(days=5),
+                            due_date=TODAY + timedelta(days=1),
+                            status=TaskStatus.EN_PROGRESO)
+    hito = await _mk_task(db, obra_ctx, "Entrega de obra gruesa",
+                          start_date=TODAY + timedelta(days=3),
+                          due_date=TODAY + timedelta(days=3),
+                          is_milestone=True, status=TaskStatus.PENDIENTE)
+    await _link(db, hito, previa)
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert len(whatsapp) == 1
+    numero, cuerpo = whatsapp[0]
+    assert numero == "+5493511234567"
+    assert "Obra Riesgo" in cuerpo
+    assert "Entrega de obra gruesa" in cuerpo
+    assert all(a.notified_at is not None
+               for a in await _alerts(db, AlertType.MILESTONE_AT_RISK))
+
+
+async def test_no_repite_el_aviso_en_la_corrida_siguiente(db, obra_ctx, whatsapp, cadena_critica):
+    """notified_at hace idempotente el envío: el job corre cada 4 horas."""
+    await _con_whatsapp(db, obra_ctx)
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    assert len(whatsapp) == 1
+
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    assert len(whatsapp) == 1
+
+
+async def test_fuera_del_horario_no_manda_ni_marca(db, obra_ctx, cadena_critica, monkeypatch):
+    """Y sobre todo NO sella: la corrida siguiente tiene que reintentar."""
+    import app.services.notification_service as notif
+    from app.services.notification_service import NotificationService
+
+    enviados = []
+
+    async def fake_send(numero, cuerpo, *a, **kw):
+        enviados.append(numero)
+        return "SM"
+
+    async def cerrado(self, obra_id):
+        return False, "fuera del horario laboral de la obra"
+
+    monkeypatch.setattr(notif, "send_whatsapp_message", fake_send)
+    monkeypatch.setattr(NotificationService, "can_notify_obra", cerrado)
+    await _con_whatsapp(db, obra_ctx)
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert enviados == []
+    criticas = [a for a in await _alerts(db, AlertType.CRITICAL_TASK_DELAYED)
+                if a.severity == AlertSeverity.CRITICA.value]
+    assert criticas and all(a.notified_at is None for a in criticas)
+
+
+async def test_el_interruptor_apagado_no_manda(db, obra_ctx, whatsapp, cadena_critica):
+    await _con_whatsapp(db, obra_ctx)
+    obra_ctx["settings"].risk_whatsapp_critical = False
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+    assert whatsapp == []
+
+
+async def test_las_no_criticas_no_van_por_whatsapp(db, obra_ctx, whatsapp):
+    """Mandar cada aviso de riesgo convertiría el canal en ruido."""
+    await _con_whatsapp(db, obra_ctx)
+    task = await _mk_task(db, obra_ctx, "Mampostería",
+                          start_date=TODAY + timedelta(days=2),
+                          due_date=TODAY + timedelta(days=25),
+                          status=TaskStatus.PENDIENTE)
+    await _mk_material(db, task, "Ladrillos", "pedido")
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert len(await _alerts(db, AlertType.MATERIAL_BLOCKING_TASK)) == 1   # severidad alta
+    assert whatsapp == []
+
+
+async def test_sin_destinatario_con_whatsapp_no_explota(db, obra_ctx, whatsapp, cadena_critica):
+    """El manager puede no tener número cargado; la corrida sigue igual."""
+    assert obra_ctx["user"].whatsapp_number is None
+
+    creadas = await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert creadas >= 1
+    assert whatsapp == []
+
+
+async def test_el_mensaje_corta_en_cinco_y_cuenta_el_resto(db, obra_ctx, whatsapp):
+    """Siete hitos en riesgo entran en un solo mensaje legible, no en siete."""
+    await _con_whatsapp(db, obra_ctx)
+    for i in range(7):
+        previa = await _mk_task(db, obra_ctx, f"Previa {i}",
+                                start_date=TODAY - timedelta(days=5),
+                                due_date=TODAY + timedelta(days=1),
+                                status=TaskStatus.EN_PROGRESO)
+        hito = await _mk_task(db, obra_ctx, f"Hito {i}",
+                              start_date=TODAY + timedelta(days=3),
+                              due_date=TODAY + timedelta(days=3),
+                              is_milestone=True, status=TaskStatus.PENDIENTE)
+        await _link(db, hito, previa)
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert len(whatsapp) == 1
+    cuerpo = whatsapp[0][1]
+    assert cuerpo.count("• ") == 6          # 5 alertas + la línea del resto
+    assert "y 2 más" in cuerpo
+
+
+async def test_si_el_envio_falla_no_marca_como_avisada(db, obra_ctx, cadena_critica, monkeypatch):
+    """Sin marcar, la corrida siguiente reintenta."""
+    import app.services.notification_service as notif
+    from app.services.notification_service import NotificationService
+
+    async def explota(numero, cuerpo, *a, **kw):
+        raise RuntimeError("Twilio caído")
+
+    async def siempre_puede(self, obra_id):
+        return True, ""
+
+    monkeypatch.setattr(notif, "send_whatsapp_message", explota)
+    monkeypatch.setattr(NotificationService, "can_notify_obra", siempre_puede)
+    await _con_whatsapp(db, obra_ctx)
+
+    creadas = await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert creadas >= 1   # la corrida no se cae
+    criticas = [a for a in await _alerts(db, AlertType.CRITICAL_TASK_DELAYED)
+                if a.severity == AlertSeverity.CRITICA.value]
+    assert criticas and all(a.notified_at is None for a in criticas)

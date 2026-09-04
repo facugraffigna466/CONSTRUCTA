@@ -39,6 +39,7 @@ class SettingsRead(BaseModel):
     risk_chronic_no_response: bool
     risk_chronic_no_response_count: int
     risk_chronic_no_response_window_days: int
+    risk_whatsapp_critical: bool
     risk_milestone_at_risk: bool
     risk_milestone_lookahead_days: int
 
@@ -88,6 +89,7 @@ class SettingsPatch(BaseModel):
     risk_chronic_no_response: bool | None = None
     risk_chronic_no_response_count: int | None = None
     risk_chronic_no_response_window_days: int | None = None
+    risk_whatsapp_critical: bool | None = None
     risk_milestone_at_risk: bool | None = None
     risk_milestone_lookahead_days: int | None = None
 

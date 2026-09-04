@@ -81,6 +81,10 @@ class SystemSettings(Base):
     risk_chronic_no_response_count: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     risk_chronic_no_response_window_days: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
 
+    # Aviso por WhatsApp de las alertas de severidad crítica. El envío queda
+    # además sujeto a chatbot_enabled, auto_reminders y al horario laboral.
+    risk_whatsapp_critical: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     risk_milestone_at_risk: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     risk_milestone_lookahead_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
 

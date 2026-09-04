@@ -30,6 +30,7 @@ from app.models.responsible import Responsible
 from app.models.purchase_order import PurchaseOrder
 from app.models.task_material import TaskMaterial
 from app.models.task_risk_snapshot import TaskRiskSnapshot
+from app.models.user import User
 from app.models.settings import SystemSettings
 from app.models.task import Task, TaskStatus
 from app.repositories.calendar import CalendarRepository
@@ -59,6 +60,10 @@ def _as_utc(dt: datetime) -> datetime:
 
 # Un material deja de ser riesgo recién cuando llegó a la obra.
 MATERIAL_NOT_RECEIVED = ("pendiente", "pedido")
+
+# Tope de alertas listadas en el WhatsApp de críticas: más que esto deja de
+# leerse en el celular y pasa a ser un muro de texto.
+MAX_CRITICAS_EN_MENSAJE = 5
 
 # Cada cuánto corre cada regla. No es una preferencia estética: una regla que
 # compara contra el pasado (holgura de ayer, avance de la semana) no cambia de
@@ -232,6 +237,7 @@ class RiskService:
                 )
 
         await self._resolve_stale(ctx, evaluados)
+        await self._notify_critical(ctx)
         return created
 
     async def evaluate_all_obras(self, cadence: str | None = None) -> int:
@@ -318,6 +324,93 @@ class RiskService:
             None, ctx.obra.id, alert_ids=[a.id for a in obsoletas]
         )
         return len(obsoletas)
+
+    async def _notify_critical(self, ctx: RiskContext) -> int:
+        """Avisa por WhatsApp las alertas críticas todavía no notificadas.
+
+        Solo las de severidad crítica: son las que mueven la fecha de fin de obra
+        o comprometen un hito ante el comitente. Mandar por WhatsApp cada aviso de
+        riesgo convertiría el canal en ruido y la gente lo silenciaría, que es
+        exactamente el problema que el sistema viene a resolver.
+
+        Un mensaje por obra y por corrida, no uno por alerta: si tres tareas de la
+        ruta crítica se vencen el mismo día, son tres líneas de un mismo aviso.
+
+        `notified_at` hace el envío idempotente. Si estamos fuera del horario
+        laboral o el canal está apagado, NO se marca nada: la corrida siguiente
+        vuelve a intentar, que es justo lo que se busca a las 6 de la mañana.
+        """
+        if not ctx.cfg.risk_whatsapp_critical:
+            return 0
+
+        result = await self.session.execute(
+            select(Alert).where(
+                Alert.obra_id == ctx.obra.id,
+                Alert.severity == AlertSeverity.CRITICA.value,
+                Alert.is_read == False,  # noqa: E712
+                Alert.notified_at.is_(None),
+            ).order_by(Alert.created_at)
+        )
+        criticas = list(result.scalars().all())
+        if not criticas:
+            return 0
+
+        from app.services.notification_service import NotificationService
+
+        notifier = NotificationService(self.session)
+        puede, motivo = await notifier.can_notify_obra(ctx.obra.id)
+        if not puede:
+            logger.debug(
+                "Aviso de críticas pospuesto para obra %d: %s", ctx.obra.id, motivo
+            )
+            return 0
+
+        destinatario = (
+            await self.session.get(User, ctx.obra.manager_id)
+            if ctx.obra.manager_id else None
+        )
+        if destinatario is None or not destinatario.whatsapp_number or not destinatario.is_active:
+            logger.debug(
+                "Obra %d sin destinatario con WhatsApp para las críticas", ctx.obra.id
+            )
+            return 0
+
+        try:
+            await notifier.notify_staff(
+                destinatario,
+                self._texto_criticas(ctx, criticas),
+                notification_type="risk_critical_alert",
+            )
+        except Exception:
+            # Sin marcar: que lo reintente la corrida siguiente.
+            logger.exception("Falló el aviso de críticas de la obra %d", ctx.obra.id)
+            return 0
+
+        ahora = datetime.now(timezone.utc)
+        for alerta in criticas:
+            alerta.notified_at = ahora
+        await self.session.flush()
+        logger.info(
+            "Aviso de %d alerta(s) crítica(s) enviado para la obra %d",
+            len(criticas), ctx.obra.id,
+        )
+        return len(criticas)
+
+    def _texto_criticas(self, ctx: RiskContext, criticas: list[Alert]) -> str:
+        """Cuerpo del WhatsApp. Sin links: quien lo recibe puede estar en obra."""
+        plural = "s" if len(criticas) != 1 else ""
+        lineas = [
+            f"🚨 {ctx.obra.name}: {len(criticas)} alerta{plural} crítica{plural}.",
+            "",
+        ]
+        # Un tope para no mandar un muro de texto por WhatsApp; el resto se cuenta.
+        for alerta in criticas[:MAX_CRITICAS_EN_MENSAJE]:
+            lineas.append(f"• {alerta.message}")
+        resto = len(criticas) - MAX_CRITICAS_EN_MENSAJE
+        if resto > 0:
+            lineas.append(f"• …y {resto} más.")
+        lineas += ["", "Miralas en CONSTRUCTA para reprogramar."]
+        return "\n".join(lineas)
 
     # ── Bloque 1 — ruta crítica (CPM) ─────────────────────────────────────────
 
