@@ -106,8 +106,14 @@ export function labelOf(alert: Pick<Alert, "type" | "message">): string {
   // no necesitan esto — cada una tiene su propio tipo.
   if (alert.type === "delay_risk") {
     const msg = alert.message.toLowerCase();
-    if (msg.includes("responsable")) return "Sin responsable";
-    if (msg.includes("vencida")) return "Tarea vencida";
+    // Las sub-condiciones de tarea empiezan con "La tarea «…»". El prefijo hace
+    // falta: la alerta de obra "El N% de las tareas activas están vencidas"
+    // contiene "vencida" y se etiquetaba "Tarea vencida" aunque no hable de
+    // ninguna tarea en particular.
+    if (msg.startsWith("la tarea")) {
+      if (msg.includes("responsable")) return "Sin responsable";
+      if (msg.includes("vencida")) return "Tarea vencida";
+    }
     return "Riesgo de demora";
   }
   return ALERT_LABEL[alert.type] ?? "Alerta";

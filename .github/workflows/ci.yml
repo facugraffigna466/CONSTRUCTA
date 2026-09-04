@@ -44,7 +44,7 @@ jobs:
         run: python -m pytest -q
 
   frontend:
-    name: Frontend — type-check + build
+    name: Frontend — type-check + build + tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -65,3 +65,10 @@ jobs:
       - name: Type-check + build
         # `npm run build` = tsc -b && vite build (chequeo de tipos + build de prod).
         run: npm run build
+
+      - name: Tests
+        # Vitest sobre los hooks de alertas y el catálogo de tipos. Cubre lo que
+        # ni el chequeo de tipos ni el build pueden ver: que el toast dispare por
+        # severidad, que la resolución marque los ids exactos y que el tab de la
+        # obra se entere. Los tres bugs de alertas de esta semana vivían ahí.
+        run: npm test
