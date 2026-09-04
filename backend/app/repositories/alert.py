@@ -164,6 +164,46 @@ class AlertRepository(BaseRepository[Alert]):
             stmt = stmt.where(Alert.tenant_id == tenant_id)
         await self.session.execute(stmt.values(**_resolved_now()))
 
+    async def list_unread_for_obra_by_types(
+        self, obra_id: int, alert_types: "set[AlertType] | list[AlertType]"
+    ) -> list[Alert]:
+        """Alertas sin leer de una obra, acotadas a ciertos tipos.
+
+        La usa la reconciliación de RiskService para saber qué avisos siguen
+        pendientes y contrastarlos contra las condiciones detectadas hoy.
+        """
+        if not alert_types:
+            return []
+        result = await self.session.execute(
+            select(Alert).where(
+                Alert.obra_id == obra_id,
+                Alert.type.in_(list(alert_types)),
+                Alert.is_read == False,  # noqa: E712
+            )
+        )
+        return list(result.scalars().all())
+
+    async def mark_read_by_ids(
+        self, alert_ids: "list[int]", tenant_id: int | None = None
+    ) -> int:
+        """Resuelve un conjunto puntual de alertas. Devuelve cuántas tocó.
+
+        Existe además de mark_read_by_task_and_type() porque la reconciliación
+        decide alerta por alerta —dos avisos del mismo tipo y la misma tarea
+        pueden tener distinta suerte si uno sigue vigente y el otro no—, así que
+        no alcanza con filtrar por (tarea, tipo).
+        """
+        if not alert_ids:
+            return 0
+        stmt = update(Alert).where(
+            Alert.id.in_(alert_ids),
+            Alert.is_read == False,  # noqa: E712
+        )
+        if tenant_id is not None:
+            stmt = stmt.where(Alert.tenant_id == tenant_id)
+        result = await self.session.execute(stmt.values(**_resolved_now()))
+        return result.rowcount or 0
+
     async def mark_all_read(self, obra_id: int | None = None, tenant_id: int | None = None) -> list[Alert]:
         """Mark every unread alert as read (optionally scoped to an obra). Returns the updated rows."""
         stmt = select(Alert).where(Alert.is_read == False)  # noqa: E712

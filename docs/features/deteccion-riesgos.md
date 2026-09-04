@@ -18,7 +18,7 @@ El aporte no es solo la cantidad de reglas. Es que **el sistema pasa de avisar q
 
 Se agregaron dos piezas transversales que la propuesta marcaba como bloqueantes: **severidad** por alerta (`critica`/`alta`/`media`/`baja`) y **configuración por empresa** (un interruptor por regla más su umbral). Ninguna regla requirió fuentes de información nuevas; solo dos necesitaron persistir estado propio, y por el mismo motivo: comparan el presente contra el pasado.
 
-**Estado:** implementado y verificado. 39 pruebas automatizadas nuevas; la suite de la rama pasó de 317 a 356, y a 503 tras integrar `main`.
+**Estado:** implementado y verificado. 48 pruebas automatizadas nuevas; la suite completa queda en 512.
 
 ---
 
@@ -142,6 +142,20 @@ Contar entradas a `bloqueada` exige leer `payload`, una columna JSON. Consultarl
 
 `compute_critical_path()` exigía un `manager_id` y validaba permisos, lo que lo hacía inusable desde un trabajo programado que corre sin usuario. Se extrajo `compute_critical_path_unchecked()`; el método original quedó como envoltorio que valida y delega. El punto de entrada HTTP sigue pasando por la versión que valida.
 
+### 5.9 La auto-resolución se reconcilia en la corrida, no por evento
+
+Las seis reglas anteriores resuelven por evento: `TaskService.update()` sabe qué campo cambió y marca leídas las alertas de ese campo. Sirve porque sus condiciones son simples —fecha, responsable, estado—.
+
+Las once nuevas dependen de datos derivados: holgura del CPM, desvío contra línea base, estado de aprovisionamiento, conteos sobre historial, calendario. Cablear cada una en cada punto de mutación sería frágil y desparramaría el conocimiento de las reglas por todos los servicios, que es justamente lo que `RiskService` centraliza.
+
+Se resuelve **dentro de la propia corrida**: el motor ya calcula qué condiciones están vigentes, así que al terminar marca resuelta toda alerta pendiente cuya condición ya no aparece. Tres recaudos:
+
+- **Solo se barren los tipos cuya regla efectivamente corrió** —habilitada, de la cadencia en curso y sin excepción—. Si una regla no corrió, no sabemos qué sigue vigente para su tipo y darlo por resuelto sería inventar. Por eso el trabajo semanal no toca las alertas de las reglas frecuentes, ni apagar una regla resuelve lo que ya había avisado.
+- **Un cambio de mensaje también resuelve.** Si el desvío pasó de 6 a 12 días, el texto anterior quedó obsoleto y el nuevo ya se emitió en la misma corrida; queda un aviso, no dos.
+- **La clave se registra aunque la deduplicación no cree nada.** Lo que importa es que la condición sigue dándose, no que se haya emitido una alerta nueva.
+
+Esto es lo que cierra el ciclo que la deduplicación necesita: condición → aviso → condición corregida → aviso resuelto → **la condición vuelve → aviso nuevo**. Sin esta pieza, la alerta quedaba pendiente para siempre y la deduplicación, al ver una idéntica sin leer, silenciaba la reaparición del problema.
+
 ---
 
 ## 6. Interfaz
@@ -170,11 +184,13 @@ Sección **Detección de riesgo** en Configuración: las once reglas con su inte
 
 ### 7.1 Pruebas automatizadas
 
-39 pruebas nuevas en `tests/test_risk_rules.py`. Suite de la rama: **356 pasando** (desde 317); **503** tras integrar `main`.
+48 pruebas nuevas en `tests/test_risk_rules.py`. Suite completa: **512 pasando**.
 
 Además del disparo de cada regla, se verifica explícitamente lo que la propuesta pedía sostener:
 
 - La deduplicación no duplica entre corridas consecutivas.
+- La condición desaparece → el aviso se resuelve (con su `resolved_at`); vuelve a aparecer → avisa de nuevo.
+- Una regla que no corrió —otra cadencia, apagada o con excepción— no resuelve nada suyo.
 - Una alerta marcada como leída **vuelve** a dispararse si la condición persiste (detección de recurrencia).
 - Cada alerta deja exactamente un evento de historial.
 - El interruptor de una regla la apaga sin afectar a las demás.
@@ -210,7 +226,7 @@ Verificación de tipos y compilación de producción sin errores. El análisis e
 `lib/alertMeta.ts` (**nuevo**), `types/index.ts`, `api/settings.ts`, `components/AlertasTab.tsx`, `components/AlertBell.tsx`, `components/CriticalAlertToast.tsx`, `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ConfiguracionPage.tsx`, `App.tsx`.
 
 **Pruebas**
-`tests/test_risk_rules.py` (**nuevo**, 39 casos).
+`tests/test_risk_rules.py` (**nuevo**, 48 casos).
 
 ---
 
@@ -219,4 +235,3 @@ Verificación de tipos y compilación de producción sin errores. El análisis e
 - **Verificación visual en navegador** de la sección de Configuración y del listado de alertas con severidad.
 - **Calendario por defecto.** Cuando una obra no tiene calendario configurado, el repositorio devuelve uno de lunes a sábado. Eso hace que `deadline_conflicts_holiday` marque cualquier vencimiento en domingo, aun en obras que nunca tocaron el calendario. Se dejó así —es severidad baja y un vencimiento en domingo es una señal legítima—, pero si resulta ruidoso, se acota a que dispare solo con excepciones cargadas explícitamente.
 - **Notificación por WhatsApp.** Las once reglas notifican dentro de la aplicación. Enviar las de severidad crítica por WhatsApp al jefe de obra es el paso natural siguiente y no estaba en el alcance de la propuesta.
-- **Auto-resolución.** Las seis reglas anteriores marcan sus alertas como leídas cuando la condición desaparece (`TaskService.update()`). Las nuevas todavía no: dependen de la lectura manual o de que la deduplicación evite el duplicado. No es una regresión —el ciclo funciona—, pero cerrarlo mejoraría la señal.

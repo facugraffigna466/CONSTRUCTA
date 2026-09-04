@@ -2468,3 +2468,29 @@ El análisis es cualitativo y así queda dicho: no se cuantificaron la penetraci
 
 ### Files modified
 `docs/ipi/IPI-CONSTRUCTA.md` (nueva §5 del marco teórico; dos entradas de bibliografía: Aguilar, 1967 y Ley 25.326), `docs/ipi/IPI-CONSTRUCTA.docx` regenerado con `backend/.venv/bin/python docs/ipi/build_ipi_docx.py`.
+
+---
+
+## 2026-09-04 — Auto-resolución de las alertas de riesgo
+
+### Objective
+Cerrar el pendiente que había quedado declarado al implementar las 11 reglas: sus alertas no se marcaban resueltas cuando la condición desaparecía, como sí hacen las 6 anteriores. No era cosmético. La deduplicación es **contra alertas no leídas**, así que el ciclo se rompía: la condición se corregía, la alerta quedaba pendiente para siempre y, cuando el problema reaparecía, la dedup veía una idéntica sin leer y se callaba. El segundo aviso se perdía. Con `resolved_at` —que main sumó para medir velocidad de reacción en insights— el efecto era peor: una alerta que nunca se resuelve nunca aporta el dato.
+
+### Changes made
+
+**Reconciliar en la corrida, no por evento.** Las 6 reglas viejas resuelven por evento: `TaskService.update()` sabe qué campo cambió y marca leídas las alertas de ese campo. Sirve porque sus condiciones son simples (fecha, responsable, estado). Las 11 nuevas dependen de datos derivados —holgura del CPM, desvío contra línea base, estado de aprovisionamiento, conteos sobre historial, calendario—, y cablear cada una en cada punto de mutación habría sido frágil y habría desparramado el conocimiento de las reglas por todos los servicios, que es justo lo que `RiskService` centraliza.
+
+En cambio, el motor ya calcula en cada pasada qué condiciones están vigentes. Ahora las registra: las reglas emiten por un envoltorio `_emit()` que guarda la clave `(task_id, tipo, mensaje)` en el contexto de la corrida **aunque la dedup no cree nada** —lo que importa es que la condición sigue dándose, no que se haya emitido algo nuevo—. Al terminar, `_resolve_stale()` marca resueltas las alertas pendientes cuya clave no aparece.
+
+**Tres recaudos, cada uno con su test.** Solo se barren los tipos cuya regla efectivamente corrió (habilitada, de la cadencia en curso y sin excepción): si no corrió, no sabemos qué sigue vigente y darlo por resuelto sería inventar — por eso el job semanal no toca lo de las reglas frecuentes, ni apagar una regla resuelve lo ya avisado, ni una regla que explota barre lo suyo. Un cambio de mensaje también resuelve: si el desvío pasó de 6 a 12 días el texto viejo quedó obsoleto y el nuevo ya se emitió, así que queda un aviso y no dos. Y la reconciliación está acotada a los tipos de las reglas nuevas: `delay_risk` y compañía siguen con su mecanismo por evento.
+
+Para que fuera preciso, `RiskRule` pasa a declarar el `AlertType` que emite cada regla — antes la relación regla↔tipo estaba solo implícita en el cuerpo del método.
+
+### Files modified
+Backend: `services/risk_service.py` (`_emit()`, `_resolve_stale()`, `alert_type` en `RiskRule`, `active_keys` en el contexto), `repositories/alert.py` (`list_unread_for_obra_by_types()`, `mark_read_by_ids()`). Tests: 9 casos nuevos en `test_risk_rules.py` (48 en total). Documentación: `docs/features/deteccion-riesgos.md` (§5.9 nueva, pendiente eliminado), `IPI-CONSTRUCTA.md` (fila 6 de trazabilidad).
+
+### Validation
+Suite completa: **512 passed**. El archivo de reglas se corrió además simulando los siete días de la semana (48 passed en cada uno), por la fragilidad de almanaque que ya había mordido una vez.
+
+### Pending / next steps
+Las alertas a nivel obra (`order_sent_no_confirmation`, `chronic_no_response`) se resuelven en la base pero no emiten evento de tiempo real: el `alerts_resolved` de Socket.IO viaja por `task_id` y ellas no tienen. Se ven recién en la próxima carga. Cerrarlo requiere un evento nuevo y tocar el frontend; no se hizo para no ampliar el alcance.
