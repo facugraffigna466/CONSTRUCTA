@@ -2451,3 +2451,20 @@ Al momento de abrir el PR, `main` había avanzado con los módulos de insights y
 
 ### Pending / next steps
 Queda la pasada visual en el navegador de la sección de Configuración y del listado de alertas con severidad. Tres pendientes de alcance, ninguno una regresión: (1) cuando una obra no tiene calendario configurado el repositorio devuelve uno de lunes a sábado, así que `deadline_conflicts_holiday` marca cualquier vencimiento en domingo — se dejó así por ser severidad baja y señal legítima, pero se acota fácil a que dispare solo con excepciones cargadas; (2) las once reglas notifican dentro de la aplicación, mandar las críticas por WhatsApp al jefe de obra es el paso natural siguiente y no estaba en la propuesta; (3) las reglas nuevas no se auto-resuelven cuando la condición desaparece, como sí hacen las seis anteriores vía `TaskService.update()` — el ciclo funciona igual por la dedup, pero cerrarlo mejoraría la señal.
+
+---
+
+## 2026-09-03 — IPI: análisis del entorno de negocios (macroentorno)
+
+### Context
+El material de cátedra plantea el esquema de entorno de negocios —empresa, microentorno sectorial y macroentorno con sus dimensiones tecnológica, económica, político-legal y social—. El IPI trataba el problema, el análisis de campo y las alternativas del mercado, pero no situaba explícitamente la propuesta dentro de ese marco.
+
+### Changes
+Nueva sección **§ Marco teórico → 5. Análisis del entorno de negocios** en `docs/ipi/IPI-CONSTRUCTA.md`, con un apartado por dimensión y dos cierres: una tabla de **variables no controlables** (variable → cómo influye → respuesta posible, distinguiendo mitigación de control) y una síntesis con la evidencia que queda pendiente.
+
+Lectura de fondo: lo tecnológico y lo social juegan a favor (mensajería ubicua + cultura de comunicación informal que ninguna app reemplaza), lo económico en contra (sector procíclico, volatilidad de precios, costos dolarizados contra ingresos en pesos), y lo político-legal es neutro pero concentra los dos riesgos que hay que tratar antes de un despliegue con datos reales: Ley 25.326 y las condiciones de servicio de la plataforma de mensajería. Este último punto se enlaza con la limitación ya declarada sobre políticas de retención y acuerdos de tratamiento de datos con los proveedores de IA.
+
+El análisis es cualitativo y así queda dicho: no se cuantificaron la penetración efectiva de la mensajería en el personal de obra, la elasticidad del gasto en software del segmento ni la incidencia real de los costos en dólares sobre el margen.
+
+### Files modified
+`docs/ipi/IPI-CONSTRUCTA.md` (nueva §5 del marco teórico; dos entradas de bibliografía: Aguilar, 1967 y Ley 25.326), `docs/ipi/IPI-CONSTRUCTA.docx` regenerado con `backend/.venv/bin/python docs/ipi/build_ipi_docx.py`.
