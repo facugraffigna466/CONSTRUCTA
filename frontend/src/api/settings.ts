@@ -15,6 +15,32 @@ export interface SystemSettings {
   notify_task_blocked: boolean;
   notify_no_response: boolean;
   notify_rescheduled: boolean;
+
+  // Detección de riesgo — un toggle por regla + su umbral.
+  risk_critical_task_delayed: boolean;
+  risk_critical_delay_lookahead_days: number;
+  risk_float_shrinking: boolean;
+  risk_float_threshold_days: number;
+  risk_baseline_deviation: boolean;
+  risk_baseline_deviation_days: number;
+  risk_material_pending: boolean;
+  risk_material_pending_days: number;
+  risk_order_no_confirmation: boolean;
+  risk_order_confirmation_days: number;
+  risk_material_blocking_task: boolean;
+  risk_material_blocking_days: number;
+  risk_progress_stalled: boolean;
+  risk_progress_stalled_days: number;
+  risk_deadline_holiday: boolean;
+  risk_holiday_lookahead_days: number;
+  risk_recurring_blocker: boolean;
+  risk_recurring_blocker_count: number;
+  risk_chronic_no_response: boolean;
+  risk_chronic_no_response_count: number;
+  risk_chronic_no_response_window_days: number;
+  risk_milestone_at_risk: boolean;
+  risk_milestone_lookahead_days: number;
+
   company_name: string | null;
   main_responsible: string | null;
   company_email: string | null;

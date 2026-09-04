@@ -1,30 +1,12 @@
-import { useEffect, useState, type JSX } from "react";
+import { useEffect, useState } from "react";
+import { iconOf, labelOf, paletteOf } from "../lib/alertMeta";
 import type { Alert } from "../types";
 
 const DISMISS_MS = 8000;
 
-const TYPE_META: Record<string, { label: string; bg: string; border: string; icon: JSX.Element }> = {
-  task_blocked: {
-    label: "Tarea bloqueada",
-    bg: "#FCE5E5", border: "#F0B0B0",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="6.5" stroke="#D03A3A" strokeWidth="1.4"/>
-        <path d="M8 5v3.5M8 10.5v.5" stroke="#D03A3A" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-    ),
-  },
-  task_overdue: {
-    label: "Tarea vencida",
-    bg: "#FCE5E5", border: "#F0B0B0",
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="6.5" stroke="#D03A3A" strokeWidth="1.4"/>
-        <path d="M8 4v4.5l2.5 1.5" stroke="#D03A3A" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    ),
-  },
-};
+// El toast dejó de tener su propio mapa de tipos con SVGs a mano: ahora dispara
+// para cualquier alerta de severidad alta o crítica (ver useGlobalAlerts), así
+// que necesita servir a los 17 tipos y los toma de lib/alertMeta.
 
 interface Props {
   alert: Alert | null;
@@ -41,9 +23,12 @@ export function CriticalAlertToast({ alert, onDismiss }: Props) {
     return () => clearTimeout(t);
   }, [alert, onDismiss]);
 
-  const meta = alert ? (TYPE_META[alert.type] ?? TYPE_META["task_blocked"]) : null;
+  if (!alert) return null;
 
-  if (!alert || !meta) return null;
+  const palette = paletteOf(alert);
+  // Se accede como propiedad y no como binding local (`const Icon = …`) porque
+  // esto último la regla react-hooks lo lee como "componente creado en render".
+  const meta = { Icon: iconOf(alert) };
 
   return (
     <div
@@ -57,21 +42,23 @@ export function CriticalAlertToast({ alert, onDismiss }: Props) {
     >
       <div style={{
         display: "flex", alignItems: "flex-start", gap: 12,
-        background: "#fff", border: `1px solid ${meta.border}`,
-        borderLeft: `4px solid #D03A3A`,
+        background: "#fff", border: `1px solid ${palette.border}`,
+        borderLeft: `4px solid ${palette.bar}`,
         borderRadius: 14, padding: "12px 14px",
-        boxShadow: "0 8px 32px -8px rgba(208,58,58,0.25), 0 2px 8px -2px rgba(0,0,0,0.08)",
+        boxShadow: "0 8px 32px -8px rgba(0,0,0,0.22), 0 2px 8px -2px rgba(0,0,0,0.08)",
         minWidth: 300, maxWidth: 380,
       }}>
-        <div style={{ marginTop: 1, flexShrink: 0 }}>{meta.icon}</div>
+        <div style={{ marginTop: 1, flexShrink: 0, color: palette.color, display: "flex" }}>
+          <meta.Icon size={14} />
+        </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
-            margin: 0, fontSize: 11.5, fontWeight: 700, color: "#D03A3A",
+            margin: 0, fontSize: 11.5, fontWeight: 700, color: palette.color,
             fontFamily: "'Plus Jakarta Sans', sans-serif",
             textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 3,
           }}>
-            {meta.label}
+            {labelOf(alert)}
           </p>
           <p style={{
             margin: 0, fontSize: 13, color: "#1A2329", lineHeight: 1.4,

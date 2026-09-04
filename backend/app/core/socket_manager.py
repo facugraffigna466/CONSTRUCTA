@@ -303,6 +303,7 @@ async def emit_alert_created(alert) -> None:
         "obraId":     alert.obra_id,
         "taskId":     alert.task_id,
         "type":       alert.type.value,
+        "severity":   alert.severity,
         "message":    alert.message,
         "is_read":    alert.is_read,
         "created_at": alert.created_at.isoformat(),

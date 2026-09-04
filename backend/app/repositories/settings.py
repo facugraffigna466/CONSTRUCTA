@@ -6,24 +6,25 @@ from app.models.settings import SystemSettings
 
 def _defaults() -> SystemSettings:
     """Return an unsaved SystemSettings instance with all default values.
-    Used as fallback when no settings row exists for a tenant yet."""
-    return SystemSettings(
-        tenant_id=0,
-        chatbot_enabled=True,
-        send_hour_from=8,
-        send_hour_to=20,
-        max_response_hours=24,
-        auto_reminders=True,
-        reminder_3days=True,
-        reminder_1day=True,
-        alert_overdue=True,
-        alert_no_response=True,
-        retry_failed=True,
-        notify_task_overdue=True,
-        notify_task_blocked=True,
-        notify_no_response=True,
-        notify_rescheduled=True,
-    )
+    Used as fallback when no settings row exists for a tenant yet.
+
+    Los `default=` de SQLAlchemy se aplican recién en el flush, así que en una
+    instancia no persistida todos los campos quedarían en None. Antes se copiaban
+    a mano uno por uno, lo que obligaba a tocar esta función por cada columna
+    nueva (y a que un olvido devolviera None silenciosamente, rompiendo cualquier
+    comparación numérica). Se resuelve por introspección del modelo.
+    """
+    obj = SystemSettings(tenant_id=0)
+    for column in SystemSettings.__table__.columns:
+        if column.default is None or getattr(obj, column.key, None) is not None:
+            continue
+        default = column.default
+        setattr(
+            obj,
+            column.key,
+            default.arg(None) if default.is_callable else default.arg,
+        )
+    return obj
 
 
 class SettingsRepository:

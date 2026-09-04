@@ -76,6 +76,12 @@ class Task(Base):
     due_date: Mapped[date | None] = mapped_column(Date)
     due_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     completed_date: Mapped[date | None] = mapped_column(Date)
+    # Última vez que se movió estimated_progress. Insumo de la regla
+    # `progress_stalled` (docs/propuesta-reglas-riesgo.md §4.1): derivarlo de
+    # historial_eventos en cada corrida del cron obligaba a un scan por tarea.
+    last_progress_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Display order for Gantt (Phase 3)
     order_index: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

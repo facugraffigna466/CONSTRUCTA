@@ -156,12 +156,26 @@ function App() {
 
   async function handleAlertClick(alert: Alert) {
     if (!alert.obra_id) return;
+    // Qué campo de la tarea resaltar al abrirla desde la alerta: el que el
+    // usuario probablemente venga a corregir.
     const fieldMap: Record<string, AlertFocusField> = {
-      task_blocked:         "taskStatus",
-      task_overdue:         "due",
-      delay_risk:           "responsible",
-      no_response:          "responsible",
-      reschedule_requested: "due",
+      task_blocked:               "taskStatus",
+      task_overdue:               "due",
+      delay_risk:                 "responsible",
+      no_response:                "responsible",
+      reschedule_requested:       "due",
+      // Detección de riesgo: las de fecha llevan a la fecha, las de material y
+      // bloqueo al estado, y las de personas al responsable.
+      critical_task_delayed:      "due",
+      float_shrinking:            "due",
+      baseline_deviation:         "due",
+      deadline_conflicts_holiday: "due",
+      milestone_at_risk:          "due",
+      material_pending_too_long:  "taskStatus",
+      material_blocking_task:     "taskStatus",
+      recurring_blocker:          "taskStatus",
+      progress_stalled:           "taskStatus",
+      chronic_no_response:        "responsible",
     };
     try {
       const obra = await fetchObra(alert.obra_id);

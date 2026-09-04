@@ -21,6 +21,16 @@ from app.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
 
+
+class RiskCadence:
+    """Espejo de las constantes de risk_service. Se duplican acá a propósito: el
+    resto de los jobs importa su servicio dentro de la función para no encadenar
+    imports pesados al arranque, y esto mantiene esa regla."""
+
+    FREQUENT = "frequent"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+
 scheduler = AsyncIOScheduler(timezone="America/Argentina/Buenos_Aires")
 
 
@@ -65,6 +75,24 @@ async def _job_evaluate_delay_risk() -> None:
     async with _db() as db:
         count = await AlertService(db).evaluate_task_risks_for_all_obras()
     logger.info("Scheduler: evaluate_delay_risk → %d alerts", count)
+
+
+async def _job_evaluate_risk_rules(cadence: str) -> None:
+    """Reglas de detección de riesgo (docs/propuesta-reglas-riesgo.md).
+
+    Separado de _job_evaluate_delay_risk a propósito: aquel corre además en cada
+    carga del dashboard y tiene que ser barato, mientras que estas reglas
+    recalculan el CPM y leen línea base, materiales, calendario e historial.
+
+    Un job por cadencia (ver RiskService.RULES): las reglas que comparan contra un
+    snapshot del día anterior no cambian de resultado entre corridas de la misma
+    jornada, y las de patrón miran meses de historial.
+    """
+    logger.info("Scheduler: evaluate_risk_rules(%s)", cadence)
+    from app.services.risk_service import RiskService
+    async with _db() as db:
+        count = await RiskService(db).evaluate_all_obras(cadence=cadence)
+    logger.info("Scheduler: evaluate_risk_rules(%s) → %d alerts", cadence, count)
 
 
 async def _job_remind_bitacora_obra() -> None:
@@ -204,6 +232,35 @@ def start_scheduler() -> None:
         id="evaluate_delay_risk",
         replace_existing=True,
         misfire_grace_time=600,
+    )
+
+    # Reglas de detección de riesgo, una corrida por cadencia.
+    # Frecuentes: cada 4 h, desfasadas de delay_risk (:30) para no solaparse.
+    scheduler.add_job(
+        _job_evaluate_risk_rules,
+        CronTrigger(hour="*/4", minute=45),
+        args=[RiskCadence.FREQUENT],
+        id="evaluate_risk_rules_frequent",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    # Diarias: temprano, antes de que el equipo entre a la app.
+    scheduler.add_job(
+        _job_evaluate_risk_rules,
+        CronTrigger(hour=6, minute=15),
+        args=[RiskCadence.DAILY],
+        id="evaluate_risk_rules_daily",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    # Semanales: lunes a la mañana, para que el patrón llegue al arrancar la semana.
+    scheduler.add_job(
+        _job_evaluate_risk_rules,
+        CronTrigger(day_of_week="mon", hour=6, minute=45),
+        args=[RiskCadence.WEEKLY],
+        id="evaluate_risk_rules_weekly",
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     # Recordatorio de notas de voz pendientes de asignar obra — cada 15 min

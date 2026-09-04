@@ -13,7 +13,11 @@ export interface GlobalAlertsState {
   clearToast: () => void;
 }
 
-const CRITICAL_TYPES: Alert["type"][] = ["task_blocked", "task_overdue"];
+// Qué amerita un toast. Antes era una lista de tipos, que había que ampliar a
+// mano por cada regla nueva; ahora lo decide la severidad, que es justamente el
+// dato que dice cuánto pesa la alerta. Para los dos tipos que estaban en la
+// lista el resultado no cambia: task_blocked y task_overdue son 'alta'.
+const TOAST_SEVERITIES: Alert["severity"][] = ["critica", "alta"];
 
 export function useGlobalAlerts(): GlobalAlertsState {
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -38,19 +42,21 @@ export function useGlobalAlerts(): GlobalAlertsState {
   useEffect(() => {
     function handleAlertCreated(payload: {
       id: number; obraId: number | null; taskId: number | null;
-      type: Alert["type"]; message: string; is_read: boolean; created_at: string;
+      type: Alert["type"]; severity?: Alert["severity"];
+      message: string; is_read: boolean; created_at: string;
     }) {
       const alert: Alert = {
         id: payload.id,
         obra_id: payload.obraId,
         task_id: payload.taskId,
         type: payload.type,
+        severity: payload.severity ?? "media",
         message: payload.message,
         is_read: payload.is_read,
         created_at: payload.created_at,
       };
       setAlerts(prev => [alert, ...prev]);
-      if (CRITICAL_TYPES.includes(alert.type)) {
+      if (TOAST_SEVERITIES.includes(alert.severity)) {
         // Hallazgo 8.5: cola en vez de un único slot — dos alertas críticas
         // seguidas ya no se pisan, la segunda espera a que la primera se cierre.
         setToastQueue(prev => [...prev, alert]);

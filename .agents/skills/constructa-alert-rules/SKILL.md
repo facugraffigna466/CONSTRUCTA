@@ -22,10 +22,13 @@ Do NOT use this skill for general frontend or backend tasks. Use `constructa-bac
 ```
 backend/app/models/alert.py                          — AlertType enum, Alert model
 backend/app/repositories/alert.py                   — create_alert(), exists_unread_for_task(), exists_unread_for_obra()
-backend/app/services/alert_service.py               — evaluate_task_risks_for_obra(), mark_read()
+backend/app/services/alert_service.py               — evaluate_task_risks_for_obra(), mark_read(), emit() (ÚNICO punto de emisión)
+backend/app/services/risk_service.py                — motor de detección de riesgo: RULES + las 11 reglas
+backend/app/models/settings.py                      — toggles y umbrales por regla (campos risk_*)
 backend/app/services/task_service.py                — apply_status_update() — where TASK_BLOCKED is created
 backend/app/api/routes/tasks.py                     — GET /tasks/obra/{obra_id} triggers risk evaluation
-frontend/src/components/AlertasTab.tsx              — full alert view with filter/type badges (ÚNICA fuente del TYPE_STYLE por tipo)
+frontend/src/lib/alertMeta.ts                       — ÚNICA fuente de etiqueta, ícono y paleta por alerta
+frontend/src/components/AlertasTab.tsx              — vista completa (lee de alertMeta, no define colores)
 frontend/src/components/ResumenTab.tsx              — KPI "Alertas activas" (solo el conteo de no leídas; no renderiza por tipo)
 frontend/src/types/index.ts                         — AlertType type
 frontend/src/api/alerts.ts                          — fetchAlerts(), markAlertRead()
@@ -36,12 +39,16 @@ docs/referencia/skills.md                                      — AR-01 through
 
 ## Alert system architecture
 
-### Two alert types currently
+### 17 tipos de alerta, en dos familias
 
-| Type | Trigger | Level |
+| Familia | Tipos | Dónde se evalúan |
 |---|---|---|
-| `task_blocked` | Task transitions to BLOQUEADA status | Task-level |
-| `delay_risk` | Risk conditions detected at obra level (5 conditions) | Task-level or Obra-level |
+| Estado inmediato | `task_blocked`, `delay_risk`, `task_overdue`, `no_response`, `reschedule_requested`, `order_received` | `AlertService` + `NotificationService` |
+| Detección de riesgo | 11 reglas: ruta crítica, holgura, línea base, materiales/compras, avance, calendario, historial, hitos | `RiskService` |
+
+Cada alerta tiene además una **severidad** (`critica`/`alta`/`media`/`baja`). El valor por
+defecto de cada tipo está en `DEFAULT_SEVERITY` (`models/alert.py`); solo las reglas que la
+calculan dinámicamente la pasan explícita. Detalle completo en `docs/features/deteccion-riesgos.md`.
 
 ### When alerts are generated
 
@@ -57,14 +64,23 @@ The 5 current risk conditions:
 4. Many blocked tasks: `>= 3` tasks with `status=BLOQUEADA`
 5. High overdue rate: `>= 30%` of active tasks are overdue
 
-### Deduplication rule
-Before creating any alert, check if an unread alert with the same `(task_id/obra_id, type, message)` already exists:
+### Emisión: siempre por AlertService.emit()
+`emit()` es el único punto de emisión. Centraliza la dedup contra alertas NO leídas por
+`(task_id/obra_id, tipo, mensaje)` y el evento único de historial. No llames a
+`create_alert()` directamente desde una regla:
+
 ```python
-if await self.alert_repo.exists_unread_for_task(task_id, AlertType.DELAY_RISK, message):
-    return  # skip — already exists
-await self.alert_repo.create_alert(AlertType.DELAY_RISK, message, obra_id, task_id)
+await self.alerts.emit(
+    obra_id=ctx.obra.id, task_id=task.id,
+    alert_type=AlertType.MILESTONE_AT_RISK,
+    message=message, reason="milestone_at_risk",
+    severity=AlertSeverity.CRITICA,
+)
 ```
-This prevents alert spam on repeated page loads.
+
+**Los mensajes no deben llevar contadores volátiles** ("vence en 3 días"): la dedup es por
+mensaje exacto, así que un texto que cambia a diario crea una alerta nueva en cada corrida
+en vez de deduplicar. Usá fechas absolutas.
 
 ### Alert scope
 - Task-level alert: `obra_id` set, `task_id` set
@@ -76,9 +92,12 @@ Frontend distinguishes these:
 const obraAlerts = alerts.filter(a => !a.task_id && !a.is_read);
 ```
 
-### No scheduler/cron
-Risk evaluation is triggered synchronously on each task-list fetch.
-There is no background job or cron. Do NOT add one without explicit decision.
+### Cadencias
+`evaluate_task_risks_for_obra()` (delay_risk) corre de forma síncrona en cada fetch de tareas
+**y** en un job cada 4 h. Las 11 reglas de `RiskService` corren solo por cron, en tres
+cadencias declaradas en `RULES` (`FREQUENT` 4 h / `DAILY` / `WEEKLY`), registradas en
+`core/scheduler.py`. Elegí la cadencia por la naturaleza de la regla: una que compara contra
+un snapshot del día anterior no cambia de resultado dentro del mismo día.
 
 ---
 
@@ -112,30 +131,42 @@ Without this, every page load regenerates the same alert.
 ### Adding a new alert type
 
 #### Backend
-1. Add value to `AlertType` enum in `backend/app/models/alert.py`
+1. Add value to `AlertType` enum in `backend/app/models/alert.py` y su severidad por defecto
+   en `DEFAULT_SEVERITY`
 2. Create Alembic migration (enum changes require explicit SQL):
    ```sql
-   ALTER TYPE alerttype ADD VALUE 'new_type';
+   ALTER TYPE alert_type ADD VALUE IF NOT EXISTS 'new_type';
    ```
-3. Add `create_alert()` call (with dedup check) in the appropriate service
+   Si la migración compara la columna contra literales, casteá: `WHERE type::text IN (...)`.
+   Postgres no define `alert_type = varchar` y la migración falla (en SQLite pasa igual, así
+   que los tests no lo detectan).
+3. Emitila con `AlertService.emit()` — nunca con `create_alert()` directo
 
 #### Frontend
 1. Add the new type to `AlertType` in `frontend/src/types/index.ts`:
    ```ts
    export type AlertType = "task_blocked" | "delay_risk" | "new_type";
    ```
-2. Add display entries to `AlertasTab.tsx` — find `TYPE_STYLE` and `type_label` maps:
-   ```tsx
-   const TYPE_STYLE: Record<AlertType, string> = {
-     task_blocked: "border-constructa-danger ...",
-     delay_risk:   "border-constructa-warning ...",
-     new_type:     "border-constructa-info ...",  // ← add
-   };
-   ```
-3. El `TYPE_STYLE` por tipo vive únicamente en `AlertasTab.tsx` (ResumenTab solo muestra el conteo) — no hay segunda copia que sincronizar
+2. Agregá la etiqueta y el ícono en `frontend/src/lib/alertMeta.ts` (`ALERT_LABEL` y
+   `ALERT_ICON`). Los dos son `Record<AlertType, …>` exhaustivos: si falta el tipo, `tsc` falla.
+3. **No agregues colores.** La paleta la manda la severidad (`SEVERITY_PALETTE`), no el tipo.
+   `AlertasTab`, `AlertBell` y `CriticalAlertToast` leen de `alertMeta`; no hay copias que sincronizar.
 4. Run `npm run build`
 
-### Adding a new risk condition to evaluate_task_risks_for_obra()
+### Agregar una regla de detección de riesgo
+
+Va en `RiskService`, no en `AlertService`: `evaluate_task_risks_for_obra()` corre en cada
+carga del dashboard y tiene que seguir siendo barata.
+
+1. Escribí el método `_rule_<nombre>(self, ctx)` en `backend/app/services/risk_service.py`,
+   emitiendo por `self.alerts.emit()`. Si necesita un insumo caro (CPM, línea base,
+   materiales), tomalo de `RiskContext`, que los cachea y los carga bajo demanda.
+2. Agregá su toggle y su umbral a `SystemSettings` (+ migración) y al `SystemSettings` del
+   frontend, o la regla queda apagada para siempre.
+3. Sumá una línea a `RiskService.RULES` con `RiskRule(setting, method, cadence)`.
+4. Un test recorre `RULES` y falla si el toggle o la cadencia no existen.
+
+### Agregar una sub-condición a evaluate_task_risks_for_obra()
 
 1. Open `backend/app/services/alert_service.py`
 2. Inside `evaluate_task_risks_for_obra()`, add a new condition block:

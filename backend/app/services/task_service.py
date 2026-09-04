@@ -1022,12 +1022,22 @@ class TaskService:
     async def compute_critical_path(
         self, obra_id: int, manager_id: int
     ) -> dict:
+        """Igual que compute_critical_path_unchecked(), validando acceso primero.
+        Es la vía que usa el endpoint HTTP."""
+        await self._get_obra_and_assert_access(obra_id, manager_id)
+        return await self.compute_critical_path_unchecked(obra_id)
+
+    async def compute_critical_path_unchecked(self, obra_id: int) -> dict:
         """CPM: forward + backward pass sobre las tareas CON ambas fechas.
         Las tareas sin fecha no se pueden ubicar en el tiempo: se excluyen del
         cálculo (antes se colaban con duración=1 y ES=0, distorsionando la ruta
         en silencio) y se devuelven en `tasks_without_dates` para que el front
-        avise. Devuelve critical_task_ids (float == 0) y float_by_task (días)."""
-        await self._get_obra_and_assert_access(obra_id, manager_id)
+        avise. Devuelve critical_task_ids (float == 0) y float_by_task (días).
+
+        SIN chequeo de acceso: pensado para los jobs de detección de riesgo, que
+        corren sin usuario (RiskService). Todo call site que venga de un request
+        tiene que usar compute_critical_path(), que valida antes de delegar acá.
+        """
         all_tasks = await self.repo.list_by_obra(obra_id)
         links_map = await self.repo.get_all_dependency_links_by_obra(obra_id)
 

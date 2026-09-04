@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { CheckCheck, ArrowRight } from "lucide-react";
-import type { Alert, AlertType, Task } from "../types";
+import { SEVERITY_LABEL, labelOf, paletteOf, severityOf } from "../lib/alertMeta";
+import type { Alert, Task } from "../types";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
 
@@ -11,40 +12,6 @@ const FILTERS: { id: Filter; label: string }[] = [
   { id: "todas",     label: "Todas" },
   { id: "leidas",    label: "Leídas" },
 ];
-
-const TYPE_STYLE: Record<AlertType, { bar: string; bg: string; color: string; border: string }> = {
-  task_blocked: { bar: "#D03A3A", bg: "#FCE5E5", color: "#D03A3A", border: "#F0B0B0" },
-  delay_risk:   { bar: "#E89B14", bg: "#FDF1DE", color: "#C97D0E", border: "#F0D5A0" },
-  task_overdue: { bar: "#D03A3A", bg: "#FCE5E5", color: "#D03A3A", border: "#F0B0B0" },
-  no_response:  { bar: "#2A6FDB", bg: "#E5EEFB", color: "#2A6FDB", border: "#B8CCF5" },
-  reschedule_requested: { bar: "#E76A2D", bg: "#FFF1E9", color: "#E85A26", border: "#FDBFA0" },
-  order_received: { bar: "#1F8A5B", bg: "#E4F3EC", color: "#136E47", border: "#BFE3CE" },
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getAlertLabel(alert: Alert): string {
-  switch (alert.type) {
-    case "task_blocked":  return "Tarea bloqueada";
-    case "task_overdue":  return "Tarea vencida";
-    case "no_response":   return "Sin respuesta";
-    default: {
-      const msg = alert.message.toLowerCase();
-      if (msg.includes("responsable")) return "Sin responsable";
-      if (msg.includes("vencida"))     return "Tarea vencida";
-      if (msg.includes("avance"))      return "Avance inconsistente";
-      return "Riesgo de demora";
-    }
-  }
-}
-
-function getTypeStyle(alert: Alert) {
-  const base = TYPE_STYLE[alert.type];
-  if (base) return base;
-  const msg = alert.message.toLowerCase();
-  if (msg.includes("responsable")) return TYPE_STYLE.delay_risk;
-  return TYPE_STYLE.delay_risk;
-}
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleString("es-AR", {
@@ -205,7 +172,8 @@ export function AlertasTab({ alerts, tasks, onMarkRead, onMarkAllRead, onViewTas
       ) : (
         <ul style={{ margin: 0, padding: 0, listStyle: "none" }}>
           {filtered.map((alert, idx) => {
-            const s          = getTypeStyle(alert);
+            const s          = paletteOf(alert);
+            const severity   = severityOf(alert);
             const isRead     = alert.is_read;
             const taskExists = alert.task_id != null && tasks.some(t => t.id === alert.task_id);
             const canNavigate = !isRead && taskExists;
@@ -237,8 +205,25 @@ export function AlertasTab({ alerts, tasks, onMarkRead, onMarkAllRead, onViewTas
                     border: `1px solid ${isRead ? "#E6E7E5" : s.border}`,
                     whiteSpace: "nowrap" as const,
                   }}>
-                    {getAlertLabel(alert)}
+                    {labelOf(alert)}
                   </span>
+
+                  {/* Solo crítica y alta llevan chip: marcarlas todas equivale a
+                      no marcar ninguna, y lo que se busca es qué mirar primero. */}
+                  {!isRead && (severity === "critica" || severity === "alta") && (
+                    <span style={{
+                      flexShrink: 0,
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      padding: "3px 8px", borderRadius: 99,
+                      fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.07em",
+                      background: "transparent", color: s.color,
+                      border: `1px solid ${s.border}`,
+                      whiteSpace: "nowrap" as const,
+                    }}>
+                      <span style={{ width: 5, height: 5, borderRadius: 99, background: s.bar }} />
+                      {SEVERITY_LABEL[severity]}
+                    </span>
+                  )}
 
                   {/* Message */}
                   <p style={{ flex: 1, margin: 0, fontSize: 13, color: "#3E4A52", lineHeight: 1.4, minWidth: 0 }}>
