@@ -2530,3 +2530,31 @@ La migración 0071 se aplicó contra una base PostgreSQL limpia (`alembic upgrad
 
 ### Pending / next steps
 Quedan dos pendientes menores de la detección de riesgo, ambos documentados: el calendario por defecto (Lun–Sáb) hace que `deadline_conflicts_holiday` marque los vencimientos en domingo aun en obras que nunca lo configuraron, y `chronic_no_response` vuelve a avisar cuando sube la cuenta, a propósito.
+
+---
+
+## 2026-09-04 (cont.) — Primeros tests de frontend (Vitest)
+
+### Objective
+El IPI declaraba desde hace meses una brecha: 521 tests de backend y **cero** del lado del navegador. La semana lo hizo evidente — el defecto de maquetado en la sección de Configuración apareció midiendo el DOM a mano, y el hecho de que el tab Alertas de la obra nunca escuchara `alerts_resolved` estuvo ahí desde siempre sin que nada lo detectara. Se empieza por donde se concentraron los defectos: la lógica de alertas.
+
+### Changes made
+
+**Infraestructura.** Vitest sobre la configuración de Vite que ya existía (comparte transformaciones, resolución y alias), con `happy-dom` como entorno y `globals: false` — cada test importa lo que usa, así `tsc -b` los tipa sin sumar tipos globales al tsconfig de la aplicación. Scripts `npm test` y `npm run test:watch`, y un paso nuevo en el CI.
+
+Se arrancó con `jsdom`, que en la versión actual no levanta con el Node 20.14 de este equipo ni con el Node 20 del CI (`ERR_REQUIRE_ESM` desde `html-encoding-sniffer`). `happy-dom` no tiene el problema y además es más liviano.
+
+**25 tests en tres archivos.** `alertMeta` (el catálogo de tipos y la decisión de colorear por severidad), `useGlobalAlerts` (alta por socket, cola del toast, y la resolución por ids) y `useAlertSocket` (filtrado por obra, propagación de la resolución, baja de suscripciones al desmontar).
+
+Cubren en particular las tres cosas que se rompieron esta semana: que el toast dispare por **severidad** y no por una lista de tipos; que la resolución marque **los ids exactos** y no todas las alertas de la tarea; y que el tab de la obra se entere de las resoluciones.
+
+**Un bug encontrado por los tests, preexistente.** `labelOf()` etiquetaba como *"Tarea vencida"* la alerta de obra *"El N% de las tareas activas de la obra están vencidas"*, porque el mensaje contiene "vencida" — pero no habla de ninguna tarea en particular. Se acotó la desambiguación a los mensajes que empiezan con "La tarea", que es como se arman las sub-condiciones de nivel tarea.
+
+### Files modified
+Frontend: `vite.config.ts` (bloque `test`), `package.json` (scripts + devDependencies), `src/lib/alertMeta.ts` (fix de `labelOf`), y tres archivos nuevos: `src/lib/alertMeta.test.ts`, `src/hooks/useGlobalAlerts.test.ts`, `src/hooks/useAlertSocket.test.ts`. CI: `.github/workflows/ci.yml`. Documentación: `IPI-CONSTRUCTA.md` (la brecha declarada pasa de abierta a parcialmente cerrada, en las cuatro secciones que la mencionaban).
+
+### Validation
+25 tests en verde; `tsc -b`, `npm run build` y ESLint sin errores nuevos. La suite de backend sigue en 521.
+
+### Pending / next steps
+La cobertura de frontend es deliberadamente parcial y así queda declarado en el IPI: cubre la lógica de alertas, no el resto de la interfaz. Faltan los componentes (`AlertasTab`, `ConfiguracionPage`) y sigue sin haber pruebas de extremo a extremo con Playwright. Tampoco hay métrica de cobertura configurada.
