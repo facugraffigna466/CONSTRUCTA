@@ -2498,3 +2498,35 @@ El payload suma `alertIds` con los ids exactos; el camino por `taskId` queda par
 
 ### Pending / next steps
 Nada abierto de este cambio.
+
+---
+
+## 2026-09-04 (cont.) — Las alertas críticas salen por WhatsApp
+
+### Objective
+Segundo de los pendientes que había dejado la detección de riesgo. Las once reglas avisaban solo dentro de la aplicación, lo cual choca con la premisa del producto: el jefe de obra está en obra, no mirando el dashboard. Que una tarea de la ruta crítica se venza y el aviso espere a que alguien abra el navegador es exactamente el problema que CONSTRUCTA dice resolver.
+
+### Changes made
+
+**Solo lo crítico sale por WhatsApp.** Lo que mueve la fecha de fin de obra o compromete un hito ante el comitente. Mandar cada aviso de riesgo al celular convertiría el canal en ruido y la gente lo silenciaría — el problema que el sistema viene a resolver. Con las severidades por defecto eso son `critical_task_delayed`, `milestone_at_risk` y `baseline_deviation` cuando escala al doble del umbral.
+
+**Un mensaje por obra y por corrida, no uno por alerta.** Si tres tareas de la ruta crítica vencen el mismo día, son tres líneas de un mismo aviso. El cuerpo corta en cinco y cuenta el resto, para que siga siendo legible en un celular.
+
+**`alerts.notified_at` hace el envío idempotente** (migración 0071). El job corre cada 4 horas y sin la marca repetiría el aviso en cada corrida mientras la condición siguiera vigente. Va en la alerta y no en una tabla aparte porque es un atributo de la alerta misma, y de paso queda el dato de cuánto tardó en salir.
+
+**La marca se pone solo si el envío salió.** Si el canal está apagado, si es fuera del horario laboral de la obra o si la mensajería falla, no se marca nada y la corrida siguiente reintenta. Eso es justamente lo que se busca cuando la corrida de las 6 de la mañana cae fuera de horario: el aviso sale a las 10, no se pierde ni se manda a las 6.
+
+**Reutiliza `NotificationService.can_notify_obra()`**, que ya agrupaba los tres chequeos comunes a toda notificación proactiva (canal habilitado, envíos automáticos habilitados, horario laboral de la obra) — su docstring pedía explícitamente que un flujo nuevo no los redescubriera. Encima, un interruptor propio por empresa (`risk_whatsapp_critical`), que arranca habilitado como el resto de las notificaciones proactivas y se muestra en Configuración arriba de las once reglas, porque define qué sale de la app y aplica a todas por igual.
+
+### Files modified
+Backend: `services/risk_service.py` (`_notify_critical()`, `_texto_criticas()`), `models/alert.py` (`notified_at`), `models/settings.py` y `schemas/settings.py` (`risk_whatsapp_critical`), migración `0071`. Frontend: `api/settings.ts`, `pages/ConfiguracionPage.tsx` (interruptor en la sección Detección de riesgo).
+
+### Validation
+Suite completa: **521 passed**; 8 tests nuevos (57 en el archivo de reglas) que cubren el envío, la idempotencia entre corridas, el interruptor apagado, que las no-críticas no salgan, el corte en cinco, la falta de destinatario con número, y los dos casos en que NO se debe marcar: fuera de horario y con la mensajería caída.
+
+Los tests del envío fuerzan la ventana horaria en vez de depender del reloj: `can_notify_obra` mira el horario laboral de la obra, así que sin eso pasarían o fallarían según la hora y el día de la corrida — la misma fragilidad de almanaque que ya mordió una vez. Las reglas de la ventana se verifican aparte, en el test que la cierra. El archivo se corrió además simulando los siete días (57 passed en cada uno).
+
+La migración 0071 se aplicó contra una base PostgreSQL limpia (`alembic upgrade head` hasta 0071, columnas y default verificados con `\d`), no solo contra el SQLite de los tests.
+
+### Pending / next steps
+Quedan dos pendientes menores de la detección de riesgo, ambos documentados: el calendario por defecto (Lun–Sáb) hace que `deadline_conflicts_holiday` marque los vencimientos en domingo aun en obras que nunca lo configuraron, y `chronic_no_response` vuelve a avisar cuando sube la cuenta, a propósito.

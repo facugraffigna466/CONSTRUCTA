@@ -389,6 +389,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   risk_chronic_no_response: true,
   risk_chronic_no_response_count: 3,
   risk_chronic_no_response_window_days: 30,
+  risk_whatsapp_critical: true,
   risk_milestone_at_risk: true,
   risk_milestone_lookahead_days: 7,
   company_name: null,
@@ -1073,8 +1074,20 @@ export function ConfiguracionPage() {
                 </p>
               </div>
               <div style={{ padding: "8px 22px 10px" }}>
-                {RISK_RULES.map((rule, i) => (
-                  <RiskRuleRow key={rule.toggle} rule={rule} form={form} set={set} first={i === 0} />
+                {/* El canal va antes que las reglas: define qué sale de la app y
+                    qué llega al celular, y aplica a todas por igual. */}
+                <ToggleRow first
+                  label="Avisar las críticas por WhatsApp"
+                  description="Manda al responsable de la obra un mensaje con las alertas de severidad crítica. Respeta el horario laboral de la obra; el resto de las alertas queda solo en la aplicación."
+                  checked={form.risk_whatsapp_critical}
+                  onChange={v => set("risk_whatsapp_critical", v)}
+                  disabled={!form.chatbot_enabled || !form.auto_reminders}
+                  icon={<MessageCircle size={15} />}
+                  iconStyle={{ background: C.good50, color: C.good }}
+                />
+                <div style={{ height: 4 }} />
+                {RISK_RULES.map((rule) => (
+                  <RiskRuleRow key={rule.toggle} rule={rule} form={form} set={set} />
                 ))}
               </div>
             </div>

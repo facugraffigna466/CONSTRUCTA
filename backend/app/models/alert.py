@@ -98,6 +98,12 @@ class Alert(Base):
     )
     message: Mapped[str] = mapped_column(Text, nullable=False)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Cuándo se avisó por WhatsApp. Hace idempotente el envío: el job de riesgo
+    # corre cada 4 h y sin esta marca repetiría el aviso en cada corrida mientras
+    # la condición siguiera vigente.
+    notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Momento en que la alerta pasó a leída/resuelta. `is_read` solo dice SI se
     # resolvió, no CUÁNDO — sin esto no se puede medir la velocidad de reacción
     # (métrica 5 del motor de insights). Las alertas resueltas antes de la

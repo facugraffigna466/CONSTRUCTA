@@ -4,7 +4,7 @@
 **Rama:** `feature/deteccion-riesgos`
 **Base:** `main` (`94640f0`)
 **Insumo:** [`docs/estado/propuesta-reglas-riesgo.md`](../estado/propuesta-reglas-riesgo.md) — definición de reglas (Martina, 2026-08-31, PR #104)
-**Migraciones:** `0068` → `0070`
+**Migraciones:** `0068` → `0071`
 
 ---
 
@@ -18,7 +18,7 @@ El aporte no es solo la cantidad de reglas. Es que **el sistema pasa de avisar q
 
 Se agregaron dos piezas transversales que la propuesta marcaba como bloqueantes: **severidad** por alerta (`critica`/`alta`/`media`/`baja`) y **configuración por empresa** (un interruptor por regla más su umbral). Ninguna regla requirió fuentes de información nuevas; solo dos necesitaron persistir estado propio, y por el mismo motivo: comparan el presente contra el pasado.
 
-**Estado:** implementado y verificado. 49 pruebas automatizadas nuevas; la suite completa queda en 513.
+**Estado:** implementado y verificado. 57 pruebas automatizadas nuevas; la suite completa queda en 521.
 
 ---
 
@@ -97,6 +97,7 @@ No es una preferencia estética: una regla que compara contra el snapshot de aye
 | `0069` | 23 columnas en `system_settings` (11 interruptores + 12 umbrales) | Configuración por empresa |
 | `0070` | `tasks.last_progress_at` | Insumo de `progress_stalled` |
 | `0070` | Tabla `task_risk_snapshots` | Insumo de `float_shrinking` |
+| `0071` | `alerts.notified_at` + `settings.risk_whatsapp_critical` | Aviso idempotente de las críticas por WhatsApp |
 
 **`severity` es VARCHAR y no un enum de PostgreSQL.** La propuesta anticipa más reglas; un VARCHAR evita pagar un `ALTER TYPE` por cada nivel nuevo. La severidad por defecto de cada tipo vive en `DEFAULT_SEVERITY` (`models/alert.py`); solo las reglas que la calculan dinámicamente la pasan explícitamente.
 
@@ -157,6 +158,16 @@ Se resuelve **dentro de la propia corrida**: el motor ya calcula qué condicione
 
 Esto es lo que cierra el ciclo que la deduplicación necesita: condición → aviso → condición corregida → aviso resuelto → **la condición vuelve → aviso nuevo**. Sin esta pieza, la alerta quedaba pendiente para siempre y la deduplicación, al ver una idéntica sin leer, silenciaba la reaparición del problema.
 
+### 5.10 Solo las críticas salen por WhatsApp
+
+Las once reglas avisan dentro de la aplicación. Por WhatsApp sale **únicamente lo crítico**: lo que mueve la fecha de fin de obra o compromete un hito ante el comitente. Mandar cada aviso de riesgo al celular convertiría el canal en ruido y la gente lo silenciaría — que es exactamente el problema que el sistema viene a resolver.
+
+Un mensaje **por obra y por corrida**, no uno por alerta: si tres tareas de la ruta crítica vencen el mismo día, son tres líneas de un mismo aviso. El mensaje corta en cinco y cuenta el resto.
+
+`alerts.notified_at` hace el envío idempotente: el trabajo corre cada cuatro horas y sin esa marca repetiría el aviso en cada corrida mientras la condición siguiera vigente. La marca se pone **solo si el envío salió**. Si el canal está apagado, si es fuera del horario laboral de la obra o si la mensajería falla, no se marca nada y la corrida siguiente reintenta — que es justamente lo que se busca cuando el trabajo de las 6 de la mañana cae fuera de horario.
+
+El envío reutiliza `NotificationService.can_notify_obra()`, que agrupa los tres chequeos que comparten todas las notificaciones proactivas (canal habilitado, envíos automáticos habilitados y horario laboral de la obra), más un interruptor propio por empresa.
+
 ---
 
 ## 6. Interfaz
@@ -185,13 +196,14 @@ Sección **Detección de riesgo** en Configuración: las once reglas con su inte
 
 ### 7.1 Pruebas automatizadas
 
-49 pruebas nuevas en `tests/test_risk_rules.py`. Suite completa: **513 pasando**.
+57 pruebas nuevas en `tests/test_risk_rules.py`. Suite completa: **521 pasando**.
 
 Además del disparo de cada regla, se verifica explícitamente lo que la propuesta pedía sostener:
 
 - La deduplicación no duplica entre corridas consecutivas.
 - La condición desaparece → el aviso se resuelve (con su `resolved_at`); vuelve a aparecer → avisa de nuevo.
 - El evento de tiempo real lleva los ids exactos, incluidos los de nivel obra.
+- Las críticas salen por WhatsApp una sola vez; fuera de horario o ante un fallo de la mensajería no se marcan como avisadas y se reintenta.
 - Una regla que no corrió —otra cadencia, apagada o con excepción— no resuelve nada suyo.
 - Una alerta marcada como leída **vuelve** a dispararse si la condición persiste (detección de recurrencia).
 - Cada alerta deja exactamente un evento de historial.
@@ -228,7 +240,7 @@ Verificación de tipos y compilación de producción sin errores. El análisis e
 `lib/alertMeta.ts` (**nuevo**), `types/index.ts`, `api/settings.ts`, `components/AlertasTab.tsx`, `components/AlertBell.tsx`, `components/CriticalAlertToast.tsx`, `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ConfiguracionPage.tsx`, `App.tsx`.
 
 **Pruebas**
-`tests/test_risk_rules.py` (**nuevo**, 49 casos).
+`tests/test_risk_rules.py` (**nuevo**, 57 casos).
 
 ---
 
@@ -236,4 +248,3 @@ Verificación de tipos y compilación de producción sin errores. El análisis e
 
 - **Verificación visual en navegador** de la sección de Configuración y del listado de alertas con severidad.
 - **Calendario por defecto.** Cuando una obra no tiene calendario configurado, el repositorio devuelve uno de lunes a sábado. Eso hace que `deadline_conflicts_holiday` marque cualquier vencimiento en domingo, aun en obras que nunca tocaron el calendario. Se dejó así —es severidad baja y un vencimiento en domingo es una señal legítima—, pero si resulta ruidoso, se acota a que dispare solo con excepciones cargadas explícitamente.
-- **Notificación por WhatsApp.** Las once reglas notifican dentro de la aplicación. Enviar las de severidad crítica por WhatsApp al jefe de obra es el paso natural siguiente y no estaba en el alcance de la propuesta.

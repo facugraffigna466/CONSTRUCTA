@@ -38,6 +38,7 @@ export interface SystemSettings {
   risk_chronic_no_response: boolean;
   risk_chronic_no_response_count: number;
   risk_chronic_no_response_window_days: number;
+  risk_whatsapp_critical: boolean;
   risk_milestone_at_risk: boolean;
   risk_milestone_lookahead_days: number;
 
