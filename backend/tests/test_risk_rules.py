@@ -151,15 +151,25 @@ async def test_alerta_leida_vuelve_a_dispararse(db, obra_ctx, cadena_critica):
 
 
 async def test_cada_alerta_deja_un_evento_de_historial(db, obra_ctx, cadena_critica):
-    """Invariante que la propuesta pide sostener: un evento por alerta, ni más ni menos."""
+    """Invariante que la propuesta pide sostener: un evento por alerta, ni más ni menos.
+
+    Se compara contra TODAS las alertas de la corrida y no contra las de un tipo:
+    qué reglas disparan depende del día en que se corra —la de calendario laboral,
+    por ejemplo, marca los vencimientos que caen en domingo—, así que fijar un tipo
+    hacía que el test pasara o fallara según la fecha. Comparar los dos conjuntos
+    completos verifica la invariante de forma más fuerte y sin depender del almanaque.
+    """
     await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
 
-    result = await db.execute(
+    alertas = list((await db.execute(select(Alert))).scalars().all())
+    eventos = list((await db.execute(
         select(HistorialEvento).where(HistorialEvento.event_type == "alert_created")
-    )
-    eventos = list(result.scalars().all())
-    assert len(eventos) == len(await _alerts(db, AlertType.CRITICAL_TASK_DELAYED))
-    assert all(e.payload["alert_type"] == "critical_task_delayed" for e in eventos)
+    )).scalars().all())
+
+    assert len(eventos) == len(alertas)
+    assert sorted(e.payload["alert_type"] for e in eventos) == sorted(a.type.value for a in alertas)
+    # La cadena crítica siempre está entre lo detectado, corra el día que corra.
+    assert "critical_task_delayed" in {e.payload["alert_type"] for e in eventos}
 
 
 async def test_toggle_apagado_no_evalua(db, obra_ctx, cadena_critica):
