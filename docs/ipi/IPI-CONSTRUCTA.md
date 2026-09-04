@@ -240,6 +240,67 @@ Para la construcción de la solución se evaluaron y seleccionaron las siguiente
 - **Correo transaccional:** se integró un proveedor de correo (Brevo) para las invitaciones de equipo.
 - **Privacidad y tratamiento de datos con proveedores de IA:** el envío de audios, notas y documentos de obra a servicios externos (Anthropic, OpenAI) implica transferir información potencialmente sensible o contractual fuera de la infraestructura propia. A la fecha no se han definido políticas formales de retención, eliminación ni acuerdos de tratamiento de datos con estos proveedores; este punto queda pendiente de definición antes de un despliegue con datos reales de clientes.
 
+### 5. Análisis del entorno de negocios
+
+Además del análisis del problema y de las alternativas del mercado, resulta pertinente situar la propuesta dentro del entorno en el que operaría. Se adopta para ello el esquema clásico que distingue entre el **microentorno sectorial** —clientes, proveedores, competidores y sustitutos, ya tratados en los apartados anteriores— y el **macroentorno**, es decir, el conjunto de fuerzas externas que la organización no controla pero que condicionan sus decisiones. El macroentorno se examina según cuatro dimensiones: tecnológica, económica, político-legal y social (Aguilar, 1967).
+
+Este análisis se realiza en el contexto argentino y, más específicamente, en el de las pequeñas y medianas empresas constructoras y los estudios de arquitectura de la ciudad de Córdoba, que constituyen el segmento relevado en el análisis de campo.
+
+#### Dimensión tecnológica
+
+La variable habilitante central de la propuesta es la **adopción prácticamente universal de la mensajería instantánea** —en particular WhatsApp— entre los actores de una obra, incluido el personal de campo. Esta condición es la que hace viable un canal de reporte que no exige instalar ni aprender una aplicación nueva; sin ella, la propuesta de valor del proyecto no se sostendría. En segundo lugar, la disponibilidad de modelos de lenguaje y de reconocimiento del habla como servicios de bajo costo por uso permite incorporar procesamiento de notas de voz y de documentos sin desarrollo propio de modelos, algo que hasta hace pocos años resultaba económicamente inviable para un proyecto de esta escala. La madurez de la infraestructura en la nube opera en el mismo sentido, al eliminar la necesidad de servidores propios.
+
+Como contrapartida, la dimensión tecnológica introduce dos condicionamientos. El primero es la **conectividad móvil**, aceptable en obras urbanas pero irregular en subsuelos, zonas periféricas u obras rurales, lo que obliga a un diseño tolerante a la asincronía y a mensajes livianos. El segundo es la **dependencia de plataformas de terceros** —la API de WhatsApp y los proveedores de modelos de IA—: cambios en sus condiciones de servicio, en sus precios o en sus políticas de mensajería impactan directamente sobre el núcleo funcional de la solución.
+
+#### Dimensión económica
+
+El sector de la construcción es **fuertemente procíclico** y sensible al nivel de actividad, al acceso al crédito y al volumen de obra pública, de modo que la demanda de una herramienta de gestión acompaña ese ciclo. A ello se suma un contexto de **inflación y volatilidad de precios** que desactualiza los presupuestos de materiales en plazos breves; esta condición del entorno refuerza el valor de los módulos de presupuesto y compras, pero al mismo tiempo dificulta la fijación de precios de una suscripción en moneda local.
+
+Un tercer factor es la **asimetría cambiaria de la estructura de costos**: los servicios de infraestructura, mensajería y modelos de IA se contratan en dólares, mientras que los ingresos previstos se percibirían en pesos, lo que expone el margen a la variación del tipo de cambio. Finalmente, la presión de costos sobre las empresas del sector hace que el software de gestión pueda percibirse como un gasto prescindible; esto condiciona tanto el esquema de planes escalonados adoptado como la necesidad de que el beneficio operativo resulte visible en plazos cortos.
+
+#### Dimensión político-legal
+
+La solución almacena y transmite datos personales —números de teléfono, mensajes, notas de voz y registros de actividad de trabajadores—, por lo que queda alcanzada por la **Ley 25.326 de Protección de los Datos Personales** (Honorable Congreso de la Nación Argentina, 2000), con sus exigencias de consentimiento, finalidad determinada y medidas de seguridad. Este punto se vincula directamente con la limitación ya señalada en el apartado de tecnologías investigadas respecto de la ausencia de políticas formales de retención y de acuerdos de tratamiento de datos con los proveedores de IA.
+
+En segundo lugar, las **condiciones de servicio de la plataforma de mensajería** (Meta Platforms, 2026) regulan el uso de plantillas, las ventanas de respuesta y el envío de mensajes no solicitados; su incumplimiento puede derivar en la suspensión del número utilizado, lo que constituye un riesgo operativo concreto. Por último, el marco normativo laboral y de higiene y seguridad otorga un valor adicional al registro histórico inalterable de la aplicación, que puede oficiar de respaldo documental ante una inspección o una controversia, y que por esa misma razón exige garantizar su integridad.
+
+#### Dimensión social
+
+La dimensión social es la que explica el diseño del canal de reporte. La comunicación real de una obra transcurre por vías informales —mensajería y llamadas—, y el personal de campo presenta niveles heterogéneos de alfabetización digital; imponer una aplicación adicional tiende a fracasar. La propuesta se apoya deliberadamente en ese hábito existente en lugar de intentar sustituirlo, decisión coherente con la hipótesis de diseño formulada a partir del análisis de campo.
+
+Debe considerarse además la **percepción de control**: un sistema que solicita reportes periódicos puede ser interpretado por el personal como una forma de vigilancia, por lo que su introducción depende tanto del encuadre organizacional como de las funciones que ofrece. La **alta rotación de personal y de subcontratistas** característica del sector justifica un modelo de equipo de empresa reutilizable entre obras, en lugar de usuarios fijos por proyecto. Finalmente, la creciente expectativa de los comitentes de disponer de información de avance actualizada opera como una fuerza favorable a la adopción, al desplazar la demanda desde la propia empresa constructora hacia su cliente.
+
+#### Variables no controlables
+
+Del conjunto anterior interesa aislar aquellas variables que **influyen sobre el negocio y sobre las cuales la organización no tiene ningún control**, ya que constituyen el objeto propio del análisis del macroentorno y determinan qué debe ser monitoreado en lugar de gestionado.
+
+| Dimensión | Variable no controlable | Cómo influye sobre el negocio | Respuesta posible (mitigación, no control) |
+|---|---|---|---|
+| Tecnológica | Políticas, precios y condiciones de la API de mensajería (Meta/proveedor) | Definen si el canal de reporte —núcleo de la propuesta— puede seguir operando y a qué costo por mensaje | Abstraer la integración para permitir el cambio de proveedor; prever un canal alternativo |
+| Tecnológica | Precios y continuidad de los proveedores de modelos de IA | Inciden en el costo variable por obra y en la disponibilidad de las funciones de transcripción y análisis | Diseño desacoplado del proveedor; degradación funcional prevista si el servicio no está disponible |
+| Tecnológica | Cobertura y calidad de la conectividad móvil en obra | Condiciona la posibilidad efectiva de reportar desde el campo | Mensajes livianos, procesamiento asincrónico y tolerancia a demoras |
+| Tecnológica | Grado de alfabetización digital y equipamiento del personal de campo | Determina el techo de adopción del canal conversacional | Interfaz conversacional sin instalación ni aprendizaje previo |
+| Económica | Nivel de actividad del sector de la construcción y volumen de obra pública | Regula el tamaño del mercado y la disposición a incorporar herramientas | Estructura de costos variable; planes de bajo ticket de entrada |
+| Económica | Inflación y volatilidad de precios de materiales | Desactualiza presupuestos y complica la fijación del precio de la suscripción | Revisión periódica de precios; módulo de presupuesto pensado para actualización frecuente |
+| Económica | Tipo de cambio | Afecta el margen, por costos en dólares e ingresos en pesos | Monitoreo del costo unitario por obra; revisión de planes |
+| Económica | Acceso al crédito hipotecario y a la financiación de obra | Anticipa la cantidad de obras nuevas, y por lo tanto la demanda | Diversificación de segmentos (estudios profesionales además de constructoras) |
+| Político-legal | Régimen de protección de datos personales (Ley 25.326 y su eventual reforma) | Impone obligaciones sobre datos de trabajadores; su incumplimiento implica riesgo legal | Definición de políticas de consentimiento, retención y acuerdos de tratamiento de datos |
+| Político-legal | Términos de servicio de la plataforma de mensajería | Su incumplimiento puede derivar en la suspensión del número utilizado | Cumplimiento estricto de plantillas y ventanas de respuesta |
+| Político-legal | Normativa laboral, de higiene y seguridad, y reglamentación municipal de obra | Define qué registros son exigibles y qué valor probatorio tienen | Registro histórico inalterable y trazabilidad documental |
+| Político-legal | Régimen impositivo y de facturación aplicable a servicios digitales | Incide sobre el precio final y sobre la operación comercial | Previsión en el esquema de monetización |
+| Social | Cultura de comunicación informal en obra | Es simultáneamente el problema que origina el proyecto y la oportunidad que lo habilita | Adaptación al hábito existente en lugar de su reemplazo |
+| Social | Percepción del reporte como control o vigilancia | Puede generar resistencia del personal y limitar la adopción | Encuadre del sistema como herramienta de coordinación; mínima carga de uso |
+| Social | Rotación de personal y de subcontratistas | Reduce la continuidad de uso y obliga a reincorporar usuarios con frecuencia | Equipo de empresa reutilizable entre obras; alta de responsables de bajo costo |
+| Social | Expectativa de los comitentes respecto de la información de avance | Traslada la demanda de trazabilidad desde la constructora hacia su cliente | Funciones orientadas al comitente como argumento de adopción |
+
+Las variables del microentorno sectorial —clientes, proveedores, competidores directos y sustitutos— admiten en cambio algún grado de influencia por parte de la organización, mediante decisiones de producto, precio y posicionamiento, y fueron tratadas en los apartados anteriores.
+
+#### Síntesis y evidencia pendiente
+
+Las dimensiones tecnológica y social resultan predominantemente favorables a la propuesta: la ubicuidad de la mensajería y la persistencia de una cultura de comunicación informal constituyen, en conjunto, la oportunidad que el proyecto busca aprovechar. La dimensión económica es la más adversa, por la prociclicidad del sector, la volatilidad de precios y la asimetría cambiaria de los costos. La dimensión político-legal no favorece ni obstaculiza de manera directa, pero concentra dos riesgos que requieren tratamiento explícito antes de un despliegue con datos reales: el cumplimiento del régimen de protección de datos personales y la dependencia de las condiciones de servicio de la plataforma de mensajería.
+
+Este análisis tiene carácter cualitativo y se apoya en la bibliografía consultada, en el relevamiento de campo descrito y en la caracterización general del sector. No se realizó una cuantificación de las variables mencionadas —penetración efectiva de la mensajería en el personal de obra, elasticidad del gasto en software de las empresas relevadas o incidencia real de los costos dolarizados sobre el margen—, por lo que su verificación empírica queda pendiente.
+
 ---
 
 ## Propuesta de solución
@@ -644,12 +705,14 @@ Quedan pendientes dos tipos de aspectos, de naturaleza distinta. Por un lado, do
 > Listado en formato APA v7. Se priorizan fuentes académicas del dominio y documentación oficial. En la versión final de Google Docs deberá verificarse, mediante la herramienta de citas, la correspondencia entre cada cita del texto y esta lista.
 
 - Adriaanse, A., Voordijk, H., & Dewulf, G. (2010). Adoption and use of interorganizational ICT in a construction project. *Journal of Construction Engineering and Management, 136*(9), 1003–1014. https://doi.org/10.1061/(ASCE)CO.1943-7862.0000201
+- Aguilar, F. J. (1967). *Scanning the business environment*. Macmillan.
 - Alembic. (2026). *Alembic documentation*. https://alembic.sqlalchemy.org
 - Anthropic. (2026). *Claude API documentation*. Anthropic. https://docs.anthropic.com
 - Autodesk. (s. f.). *Construction management software*. Recuperado el 13 de agosto de 2026, de https://construction.autodesk.com/
 - Cámara Argentina de la Construcción. (2018). *Gestión y productividad de obra*. Escuela de Gestión de la Construcción. https://biblioteca.camarco.org.ar/libro/gestion-y-productividad-de-obra/
 - Cho, J., Lee, G., Song, T., & Jeong, H. D. (2023). Chatbot-engaged construction daily work report using mobile messenger. *Automation in Construction, 154*, Artículo 105007. https://doi.org/10.1016/j.autcon.2023.105007
 - FastAPI. (2026). *FastAPI documentation*. https://fastapi.tiangolo.com
+- Honorable Congreso de la Nación Argentina. (2000). *Ley 25.326 de Protección de los Datos Personales*. Boletín Oficial de la República Argentina. https://servicios.infoleg.gob.ar/infolegInternet/anexos/60000-64999/64790/norma.htm
 - Kelley, J. E., & Walker, M. R. (1959). Critical-path planning and scheduling. *Proceedings of the Eastern Joint Computer Conference*, 160–173.
 - Lu, H., Pishdad-Bozorgi, P., Wang, G., Xue, Y., & Tan, D. (2019). ICT implementation of small- and medium-sized construction enterprises: Organizational characteristics, driving forces, and value perceptions. *Sustainability, 11*(12), Article 3441. https://doi.org/10.3390/su11123441
 - Meta Platforms. (2026). *WhatsApp Business Platform documentation*. https://developers.facebook.com/docs/whatsapp
