@@ -915,3 +915,51 @@ async def test_no_resuelve_alertas_de_otra_obra(db, obra_ctx, cadena_critica):
     vecina = [a for a in await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)
               if a.obra_id == otra.id]
     assert len(vecina) == 1
+
+
+async def test_el_evento_de_resolucion_lleva_los_ids_exactos(db, obra_ctx, monkeypatch):
+    """Incluye las alertas de nivel obra, que no tienen task_id.
+
+    Avisar solo "se resolvió algo de la tarea N" dejaba fuera a las de obra —el
+    tab seguía mostrándolas pendientes hasta recargar— y además hacía que el
+    frontend tachara todas las alertas de esa tarea, incluso las que siguen
+    vigentes.
+    """
+    from datetime import datetime, timezone
+
+    import app.services.risk_service as risk_module
+
+    emitidos: list[tuple] = []
+
+    async def capturar(task_id, obra_id, alert_ids=None):
+        emitidos.append((task_id, obra_id, alert_ids))
+
+    monkeypatch.setattr(risk_module, "emit_alerts_resolved", capturar)
+
+    supplier = Supplier(tenant_id=obra_ctx["tenant"].id, name="Corralón Sur")
+    db.add(supplier)
+    await db.flush()
+    order = PurchaseOrder(
+        obra_id=obra_ctx["obra"].id, supplier_id=supplier.id, status="enviado",
+        sent_at=datetime.now(timezone.utc) - timedelta(days=15),
+    )
+    db.add(order)
+    await db.commit()
+
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    pendiente = (await _sin_leer(db, AlertType.ORDER_SENT_NO_CONFIRMATION))[0]
+    assert pendiente.task_id is None
+
+    # El proveedor confirma: la condición desaparece.
+    order.status = "recibido"
+    order.received_at = datetime.now(timezone.utc)
+    await db.commit()
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    assert await _sin_leer(db, AlertType.ORDER_SENT_NO_CONFIRMATION) == []
+    assert len(emitidos) == 1
+    task_id, obra_id, alert_ids = emitidos[0]
+    assert task_id is None
+    assert obra_id == obra_ctx["obra"].id
+    assert pendiente.id in alert_ids

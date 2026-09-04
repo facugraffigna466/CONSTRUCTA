@@ -18,7 +18,7 @@ El aporte no es solo la cantidad de reglas. Es que **el sistema pasa de avisar q
 
 Se agregaron dos piezas transversales que la propuesta marcaba como bloqueantes: **severidad** por alerta (`critica`/`alta`/`media`/`baja`) y **configuración por empresa** (un interruptor por regla más su umbral). Ninguna regla requirió fuentes de información nuevas; solo dos necesitaron persistir estado propio, y por el mismo motivo: comparan el presente contra el pasado.
 
-**Estado:** implementado y verificado. 48 pruebas automatizadas nuevas; la suite completa queda en 512.
+**Estado:** implementado y verificado. 49 pruebas automatizadas nuevas; la suite completa queda en 513.
 
 ---
 
@@ -153,6 +153,7 @@ Se resuelve **dentro de la propia corrida**: el motor ya calcula qué condicione
 - **Solo se barren los tipos cuya regla efectivamente corrió** —habilitada, de la cadencia en curso y sin excepción—. Si una regla no corrió, no sabemos qué sigue vigente para su tipo y darlo por resuelto sería inventar. Por eso el trabajo semanal no toca las alertas de las reglas frecuentes, ni apagar una regla resuelve lo que ya había avisado.
 - **Un cambio de mensaje también resuelve.** Si el desvío pasó de 6 a 12 días, el texto anterior quedó obsoleto y el nuevo ya se emitió en la misma corrida; queda un aviso, no dos.
 - **La clave se registra aunque la deduplicación no cree nada.** Lo que importa es que la condición sigue dándose, no que se haya emitido una alerta nueva.
+- **El aviso de tiempo real lleva los ids resueltos**, no la tarea. Resolver por tarea habría tachado en pantalla avisos de esa misma tarea que siguen vigentes, y habría dejado afuera los de nivel obra, que no cuelgan de ninguna.
 
 Esto es lo que cierra el ciclo que la deduplicación necesita: condición → aviso → condición corregida → aviso resuelto → **la condición vuelve → aviso nuevo**. Sin esta pieza, la alerta quedaba pendiente para siempre y la deduplicación, al ver una idéntica sin leer, silenciaba la reaparición del problema.
 
@@ -184,12 +185,13 @@ Sección **Detección de riesgo** en Configuración: las once reglas con su inte
 
 ### 7.1 Pruebas automatizadas
 
-48 pruebas nuevas en `tests/test_risk_rules.py`. Suite completa: **512 pasando**.
+49 pruebas nuevas en `tests/test_risk_rules.py`. Suite completa: **513 pasando**.
 
 Además del disparo de cada regla, se verifica explícitamente lo que la propuesta pedía sostener:
 
 - La deduplicación no duplica entre corridas consecutivas.
 - La condición desaparece → el aviso se resuelve (con su `resolved_at`); vuelve a aparecer → avisa de nuevo.
+- El evento de tiempo real lleva los ids exactos, incluidos los de nivel obra.
 - Una regla que no corrió —otra cadencia, apagada o con excepción— no resuelve nada suyo.
 - Una alerta marcada como leída **vuelve** a dispararse si la condición persiste (detección de recurrencia).
 - Cada alerta deja exactamente un evento de historial.
@@ -226,7 +228,7 @@ Verificación de tipos y compilación de producción sin errores. El análisis e
 `lib/alertMeta.ts` (**nuevo**), `types/index.ts`, `api/settings.ts`, `components/AlertasTab.tsx`, `components/AlertBell.tsx`, `components/CriticalAlertToast.tsx`, `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ConfiguracionPage.tsx`, `App.tsx`.
 
 **Pruebas**
-`tests/test_risk_rules.py` (**nuevo**, 48 casos).
+`tests/test_risk_rules.py` (**nuevo**, 49 casos).
 
 ---
 

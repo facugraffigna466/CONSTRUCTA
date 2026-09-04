@@ -334,11 +334,25 @@ async def emit_historial_created(event) -> None:
     logger.debug("historial_created eventId=%d obraId=%d", event.id, event.obra_id)
 
 
-async def emit_alerts_resolved(task_id: int, obra_id: int) -> None:
-    payload = {"taskId": task_id, "obraId": obra_id}
+async def emit_alerts_resolved(
+    task_id: int | None, obra_id: int, alert_ids: list[int] | None = None
+) -> None:
+    """Avisa que se resolvieron alertas.
+
+    `alertIds` dice EXACTAMENTE cuáles. Sin él, el receptor solo sabía la tarea y
+    daba por resueltas todas sus alertas, lo cual alcanzaba para los llamadores
+    que resuelven por tipo completo pero no para la reconciliación de riesgo, que
+    decide alerta por alerta: una tarea puede tener una resuelta y otra vigente.
+    Se mantiene `taskId` para los llamadores que no pasan ids.
+
+    `task_id` puede ser None: las alertas a nivel obra no cuelgan de ninguna tarea.
+    """
+    payload = {"taskId": task_id, "obraId": obra_id, "alertIds": alert_ids}
     if obra_id:
         await sio.emit("alerts_resolved", payload, room=f"obra_{obra_id}")
-    logger.debug("alerts_resolved taskId=%d obraId=%s", task_id, obra_id)
+    logger.debug(
+        "alerts_resolved taskId=%s obraId=%s alertIds=%s", task_id, obra_id, alert_ids
+    )
 
 
 async def emit_task_deleted(task_id: int, obra_id: int, title: str, actor: dict | None = None) -> None:

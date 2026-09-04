@@ -2487,10 +2487,14 @@ En cambio, el motor ya calcula en cada pasada qué condiciones están vigentes. 
 Para que fuera preciso, `RiskRule` pasa a declarar el `AlertType` que emite cada regla — antes la relación regla↔tipo estaba solo implícita en el cuerpo del método.
 
 ### Files modified
-Backend: `services/risk_service.py` (`_emit()`, `_resolve_stale()`, `alert_type` en `RiskRule`, `active_keys` en el contexto), `repositories/alert.py` (`list_unread_for_obra_by_types()`, `mark_read_by_ids()`). Tests: 9 casos nuevos en `test_risk_rules.py` (48 en total). Documentación: `docs/features/deteccion-riesgos.md` (§5.9 nueva, pendiente eliminado), `IPI-CONSTRUCTA.md` (fila 6 de trazabilidad).
+Backend: `services/risk_service.py` (`_emit()`, `_resolve_stale()`, `alert_type` en `RiskRule`, `active_keys` en el contexto), `repositories/alert.py` (`list_unread_for_obra_by_types()`, `mark_read_by_ids()`), `core/socket_manager.py` (`alertIds` en el payload). Frontend: `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ObraDetailPage.tsx`. Tests: 10 casos nuevos en `test_risk_rules.py` (49 en total). Documentación: `docs/features/deteccion-riesgos.md` (§5.9 nueva, pendiente eliminado), `IPI-CONSTRUCTA.md` (fila 6 de trazabilidad).
 
 ### Validation
-Suite completa: **512 passed**. El archivo de reglas se corrió además simulando los siete días de la semana (48 passed en cada uno), por la fragilidad de almanaque que ya había mordido una vez.
+Suite completa: **513 passed**. El archivo de reglas se corrió además simulando los siete días de la semana (49 passed en cada uno), por la fragilidad de almanaque que ya había mordido una vez.
+
+**El evento de tiempo real pasa a llevar los ids resueltos.** Al revisar cómo llegaba la resolución al frontend aparecieron tres problemas encadenados, dos de ellos preexistentes. `alerts_resolved` viajaba solo con `taskId`, y el receptor marcaba leídas **todas** las alertas de esa tarea: alcanzaba para los llamadores que resuelven un tipo entero (`TaskService`), pero no para esta reconciliación, que decide alerta por alerta — una tarea puede tener una resuelta y otra vigente, y el frontend habría tachado las dos. Además, las alertas de nivel obra (`order_sent_no_confirmation`, `chronic_no_response`) no tienen `task_id`, así que no había forma de avisar por ellas. Y el tab Alertas de la obra **nunca había escuchado el evento**: mantiene su propio estado y solo se suscribía a las altas, de modo que una alerta resuelta seguía figurando pendiente hasta recargar, incluso con las 6 reglas viejas.
+
+El payload suma `alertIds` con los ids exactos; el camino por `taskId` queda para los emisores que no los pasan. `useAlertSocket` expone la resolución y `ObraDetailPage` la consume, con lo que el tab de la obra se actualiza en vivo por primera vez.
 
 ### Pending / next steps
-Las alertas a nivel obra (`order_sent_no_confirmation`, `chronic_no_response`) se resuelven en la base pero no emiten evento de tiempo real: el `alerts_resolved` de Socket.IO viaja por `task_id` y ellas no tienen. Se ven recién en la próxima carga. Cerrarlo requiere un evento nuevo y tocar el frontend; no se hizo para no ampliar el alcance.
+Nada abierto de este cambio.

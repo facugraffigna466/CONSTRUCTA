@@ -309,11 +309,14 @@ class RiskService:
         await self.alerts.repo.mark_read_by_ids(
             [a.id for a in obsoletas], tenant_id=ctx.obra.tenant_id
         )
-        # El frontend refresca por tarea (evento `alerts_resolved`). Las alertas a
-        # nivel obra no tienen task_id, así que ésas se ven recién en la próxima
-        # carga: no hay evento para ellas todavía.
-        for task_id in {a.task_id for a in obsoletas if a.task_id is not None}:
-            await emit_alerts_resolved(task_id, ctx.obra.id)
+        # Un solo evento con los ids exactos, en vez de uno por tarea: la
+        # reconciliación decide alerta por alerta, así que avisar "todo lo de esta
+        # tarea" haría que el frontend tache también las que siguen vigentes. Y con
+        # ids viajan las de nivel obra, que no tienen task_id y de otro modo se
+        # veían recién en la próxima carga.
+        await emit_alerts_resolved(
+            None, ctx.obra.id, alert_ids=[a.id for a in obsoletas]
+        )
         return len(obsoletas)
 
     # ── Bloque 1 — ruta crítica (CPM) ─────────────────────────────────────────

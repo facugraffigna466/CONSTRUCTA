@@ -4,6 +4,14 @@ import { fetchAlerts, markAlertRead } from "../api/alerts";
 import { fetchObras } from "../api/obras";
 import type { Alert } from "../types";
 
+/** Payload de `alerts_resolved`. `alertIds` es la vía precisa; `taskId` la
+ *  heredada, para emisores que resuelven todas las alertas de una tarea. */
+export interface AlertsResolvedPayload {
+  taskId: number | null;
+  obraId: number;
+  alertIds?: number[] | null;
+}
+
 export interface GlobalAlertsState {
   alerts: Alert[];
   unreadCount: number;
@@ -63,9 +71,16 @@ export function useGlobalAlerts(): GlobalAlertsState {
       }
     }
 
-    function handleAlertsResolved(payload: { taskId: number; obraId: number }) {
+    function handleAlertsResolved(payload: AlertsResolvedPayload) {
+      // `alertIds` marca exactamente las que se resolvieron. El camino por
+      // `taskId` queda para los emisores que resuelven un tipo entero de una
+      // tarea (TaskService) y no mandan ids.
+      const ids = payload.alertIds;
       setAlerts(prev =>
-        prev.map(a => a.task_id === payload.taskId ? { ...a, is_read: true } : a)
+        prev.map(a => {
+          const resuelta = ids ? ids.includes(a.id) : a.task_id === payload.taskId;
+          return resuelta ? { ...a, is_read: true } : a;
+        })
       );
     }
 
