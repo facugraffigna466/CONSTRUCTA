@@ -37,6 +37,7 @@ from app.repositories.obra import ObraRepository
 from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
 from app.services.alert_service import AlertService
+from app.core.socket_manager import emit_alerts_resolved
 from app.services.calendar_service import is_working_day
 
 logger = logging.getLogger(__name__)
@@ -69,9 +70,10 @@ WEEKLY = "weekly"      # 1 vez por semana — patrones acumulados en historial
 
 
 class RiskRule(NamedTuple):
-    setting: str   # campo de SystemSettings que la habilita
-    method: str    # método de RiskService que la evalúa
+    setting: str            # campo de SystemSettings que la habilita
+    method: str             # método de RiskService que la evalúa
     cadence: str
+    alert_type: "AlertType"  # el tipo que emite — lo necesita la reconciliación
 
 
 class RiskContext:
@@ -92,6 +94,10 @@ class RiskContext:
         self._baselines: dict[int, TaskBaseline] | None = None
         self._calendar = None
         self._dependencies: dict[int, list[dict]] | None = None
+        # Claves (task_id, tipo, mensaje) de las condiciones vigentes en esta
+        # corrida. Las llena _emit(); la reconciliación final las usa para saber
+        # qué alertas viejas ya no corresponden a nada.
+        self.active_keys: set[tuple[int | None, str, str]] = set()
         self._materials: list[TaskMaterial] | None = None
         self._orders: list[PurchaseOrder] | None = None
 
@@ -181,17 +187,17 @@ class RiskService:
 
     # ── Registro de reglas ────────────────────────────────────────────────────
     RULES: list[RiskRule] = [
-        RiskRule("risk_critical_task_delayed", "_rule_critical_task_delayed", FREQUENT),
-        RiskRule("risk_baseline_deviation", "_rule_baseline_deviation", FREQUENT),
-        RiskRule("risk_milestone_at_risk", "_rule_milestone_at_risk", FREQUENT),
-        RiskRule("risk_deadline_holiday", "_rule_deadline_conflicts_holiday", FREQUENT),
-        RiskRule("risk_material_pending", "_rule_material_pending_too_long", FREQUENT),
-        RiskRule("risk_order_no_confirmation", "_rule_order_sent_no_confirmation", FREQUENT),
-        RiskRule("risk_material_blocking_task", "_rule_material_blocking_task", FREQUENT),
-        RiskRule("risk_progress_stalled", "_rule_progress_stalled", DAILY),
-        RiskRule("risk_float_shrinking", "_rule_float_shrinking", DAILY),
-        RiskRule("risk_recurring_blocker", "_rule_recurring_blocker", WEEKLY),
-        RiskRule("risk_chronic_no_response", "_rule_chronic_no_response", WEEKLY),
+        RiskRule("risk_critical_task_delayed", "_rule_critical_task_delayed", FREQUENT, AlertType.CRITICAL_TASK_DELAYED),
+        RiskRule("risk_baseline_deviation", "_rule_baseline_deviation", FREQUENT, AlertType.BASELINE_DEVIATION),
+        RiskRule("risk_milestone_at_risk", "_rule_milestone_at_risk", FREQUENT, AlertType.MILESTONE_AT_RISK),
+        RiskRule("risk_deadline_holiday", "_rule_deadline_conflicts_holiday", FREQUENT, AlertType.DEADLINE_CONFLICTS_HOLIDAY),
+        RiskRule("risk_material_pending", "_rule_material_pending_too_long", FREQUENT, AlertType.MATERIAL_PENDING_TOO_LONG),
+        RiskRule("risk_order_no_confirmation", "_rule_order_sent_no_confirmation", FREQUENT, AlertType.ORDER_SENT_NO_CONFIRMATION),
+        RiskRule("risk_material_blocking_task", "_rule_material_blocking_task", FREQUENT, AlertType.MATERIAL_BLOCKING_TASK),
+        RiskRule("risk_progress_stalled", "_rule_progress_stalled", DAILY, AlertType.PROGRESS_STALLED),
+        RiskRule("risk_float_shrinking", "_rule_float_shrinking", DAILY, AlertType.FLOAT_SHRINKING),
+        RiskRule("risk_recurring_blocker", "_rule_recurring_blocker", WEEKLY, AlertType.RECURRING_BLOCKER),
+        RiskRule("risk_chronic_no_response", "_rule_chronic_no_response", WEEKLY, AlertType.CHRONIC_NO_RESPONSE),
     ]
 
     # ── Orquestación ──────────────────────────────────────────────────────────
@@ -208,18 +214,24 @@ class RiskService:
         await ctx.load()
 
         created = 0
+        evaluados: set[AlertType] = set()
         for rule in self.RULES:
             if cadence is not None and rule.cadence != cadence:
                 continue
             if not getattr(cfg, rule.setting, False):
                 continue
-            # Una regla que explota no debe tumbar al resto de la corrida.
+            # Una regla que explota no debe tumbar al resto de la corrida. Y su
+            # tipo NO entra en `evaluados`: sin una corrida completa no sabemos
+            # qué condiciones siguen vigentes, así que no se barre nada de ella.
             try:
                 created += await getattr(self, rule.method)(ctx)
+                evaluados.add(rule.alert_type)
             except Exception:
                 logger.exception(
                     "Regla de riesgo %s falló para obra_id=%d", rule.method, obra_id
                 )
+
+        await self._resolve_stale(ctx, evaluados)
         return created
 
     async def evaluate_all_obras(self, cadence: str | None = None) -> int:
@@ -233,6 +245,79 @@ class RiskService:
             except Exception:
                 logger.exception("evaluate_obra falló para obra_id=%d", obra.id)
         return created
+
+    # ── Emisión y reconciliación ──────────────────────────────────────────────
+
+    async def _emit(
+        self,
+        ctx: RiskContext,
+        *,
+        alert_type: AlertType,
+        message: str,
+        reason: str,
+        task_id: int | None = None,
+        severity: AlertSeverity | None = None,
+        extra: dict | None = None,
+    ) -> int:
+        """Registra la condición como vigente y delega en AlertService.emit().
+
+        La clave se registra SIEMPRE, aunque emit() deduplique y no cree nada: lo
+        que importa para la reconciliación es que la condición sigue dándose, no
+        que se haya emitido una alerta nueva.
+        """
+        ctx.active_keys.add((task_id, alert_type.value, message))
+        return await self.alerts.emit(
+            obra_id=ctx.obra.id,
+            task_id=task_id,
+            alert_type=alert_type,
+            message=message,
+            reason=reason,
+            severity=severity,
+            extra=extra,
+        )
+
+    async def _resolve_stale(self, ctx: RiskContext, tipos: set[AlertType]) -> int:
+        """Marca resueltas las alertas cuya condición ya no se detecta.
+
+        Es la contracara de la deduplicación. La dedup es contra alertas NO leídas,
+        así que sin esto el ciclo se rompe: la condición desaparece, la alerta queda
+        pendiente para siempre y, cuando el problema vuelve, la dedup ve una alerta
+        idéntica sin leer y se calla. El aviso se pierde.
+
+        Solo se barren los tipos cuya regla efectivamente CORRIÓ en esta pasada
+        —habilitada, de la cadencia en curso y sin excepción—. Si una regla no
+        corrió no sabemos qué condiciones están vigentes para su tipo, y darlas por
+        resueltas sería inventar: por eso el job semanal no toca las alertas de las
+        reglas frecuentes, ni apagar una regla resuelve lo que ya había avisado.
+
+        Un cambio de mensaje también resuelve: si el desvío pasó de 6 a 12 días, el
+        texto viejo quedó obsoleto y el nuevo ya se emitió en esta misma corrida.
+        """
+        if not tipos:
+            return 0
+
+        pendientes = await self.alerts.repo.list_unread_for_obra_by_types(
+            ctx.obra.id, tipos
+        )
+        obsoletas = [
+            a for a in pendientes
+            if (a.task_id, a.type.value, a.message) not in ctx.active_keys
+        ]
+        if not obsoletas:
+            return 0
+
+        await self.alerts.repo.mark_read_by_ids(
+            [a.id for a in obsoletas], tenant_id=ctx.obra.tenant_id
+        )
+        # Un solo evento con los ids exactos, en vez de uno por tarea: la
+        # reconciliación decide alerta por alerta, así que avisar "todo lo de esta
+        # tarea" haría que el frontend tache también las que siguen vigentes. Y con
+        # ids viajan las de nivel obra, que no tienen task_id y de otro modo se
+        # veían recién en la próxima carga.
+        await emit_alerts_resolved(
+            None, ctx.obra.id, alert_ids=[a.id for a in obsoletas]
+        )
+        return len(obsoletas)
 
     # ── Bloque 1 — ruta crítica (CPM) ─────────────────────────────────────────
 
@@ -271,8 +356,8 @@ class RiskService:
                 )
                 severity = AlertSeverity.ALTA
 
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task.id,
                 alert_type=AlertType.CRITICAL_TASK_DELAYED,
                 message=message,
@@ -311,8 +396,8 @@ class RiskService:
                 f"según la línea base y hoy está para el {_fmt(task.due_date)}: "
                 f"{deviation} días de atraso."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task.id,
                 alert_type=AlertType.BASELINE_DEVIATION,
                 message=message,
@@ -369,8 +454,8 @@ class RiskService:
                 f"tiene {len(pending)} tarea{plural} previa{plural} sin terminar: "
                 f"{names}{resto}."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=milestone.id,
                 alert_type=AlertType.MILESTONE_AT_RISK,
                 message=message,
@@ -420,8 +505,8 @@ class RiskService:
                 f"La tarea «{task.title}» vence el {_fmt(task.due_date)}, que {motivo}. "
                 "Conviene reprogramarla antes de que llegue la fecha."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task.id,
                 alert_type=AlertType.DEADLINE_CONFLICTS_HOLIDAY,
                 message=message,
@@ -466,8 +551,8 @@ class RiskService:
                 f"sin pedir hace más de {ctx.cfg.risk_material_pending_days} días: "
                 f"{nombres}{resto}."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task_id,
                 alert_type=AlertType.MATERIAL_PENDING_TOO_LONG,
                 message=message,
@@ -497,8 +582,8 @@ class RiskService:
                 f"El pedido #{order.id} a {proveedor} se envió el "
                 f"{_fmt(_as_utc(order.sent_at).date())} y todavía no se confirmó la recepción."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 alert_type=AlertType.ORDER_SENT_NO_CONFIRMATION,
                 message=message,
                 reason="order_sent_no_confirmation",
@@ -546,8 +631,8 @@ class RiskService:
                 f"La tarea «{task.title}» {cuando} y todavía tiene "
                 f"{len(materiales)} material{plural} sin recibir: {nombres}{resto}."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task_id,
                 alert_type=AlertType.MATERIAL_BLOCKING_TASK,
                 message=message,
@@ -586,8 +671,8 @@ class RiskService:
                 f"La tarea «{task.title}» está en progreso al {task.estimated_progress}% "
                 f"y no registra avance desde el {_fmt(ultimo.date())}."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task.id,
                 alert_type=AlertType.PROGRESS_STALLED,
                 message=message,
@@ -654,8 +739,8 @@ class RiskService:
                         f"La holgura de la tarea «{task.title}» bajó de {anterior} a "
                         f"{actual} días. Está por entrar en la ruta crítica."
                     )
-                    created += await self.alerts.emit(
-                        obra_id=ctx.obra.id,
+                    created += await self._emit(
+                        ctx,
                         task_id=task_id,
                         alert_type=AlertType.FLOAT_SHRINKING,
                         message=message,
@@ -705,8 +790,8 @@ class RiskService:
                 f"La tarea «{task.title}» se bloqueó {veces} veces. No es un bloqueo "
                 "puntual: conviene revisar sus dependencias o su responsable."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 task_id=task_id,
                 alert_type=AlertType.RECURRING_BLOCKER,
                 message=message,
@@ -756,8 +841,8 @@ class RiskService:
                 f"{nombre} acumula {veces} alertas por falta de respuesta en los "
                 f"últimos {dias} días. Conviene revisar el canal de contacto."
             )
-            created += await self.alerts.emit(
-                obra_id=ctx.obra.id,
+            created += await self._emit(
+                ctx,
                 alert_type=AlertType.CHRONIC_NO_RESPONSE,
                 message=message,
                 reason="chronic_no_response",

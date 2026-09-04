@@ -206,6 +206,15 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     useCallback((alert) => {
       setAlerts((prev) => prev.some((a) => a.id === alert.id) ? prev : [alert, ...prev]);
     }, []),
+    useCallback((payload) => {
+      const ids = payload.alertIds;
+      setAlerts((prev) =>
+        prev.map((a) => {
+          const resuelta = ids ? ids.includes(a.id) : a.task_id === payload.taskId;
+          return resuelta ? { ...a, is_read: true } : a;
+        }),
+      );
+    }, []),
   );
 
   useHistorialSocket(

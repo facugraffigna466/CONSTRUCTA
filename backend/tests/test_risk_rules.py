@@ -752,3 +752,214 @@ async def test_todas_las_reglas_tienen_toggle_y_cadencia_valida(db):
         assert hasattr(SystemSettings, rule.setting), rule.setting
         assert hasattr(RiskService, rule.method), rule.method
         assert rule.cadence in validas, rule
+
+
+# ── Auto-resolución ───────────────────────────────────────────────────────────
+#
+# Contracara de la dedup: si la condición desaparece y la alerta queda sin leer
+# para siempre, cuando el problema vuelve la dedup la suprime y el aviso se pierde.
+
+async def _sin_leer(db, alert_type: AlertType) -> list[Alert]:
+    result = await db.execute(
+        select(Alert).where(Alert.type == alert_type, Alert.is_read == False)  # noqa: E712
+    )
+    return list(result.scalars().all())
+
+
+async def _despejar_condicion_critica(db, cadena) -> None:
+    """Empuja las dos tareas de la cadena al futuro: dejan de estar en riesgo."""
+    for task, dias in ((cadena["a"], 60), (cadena["b"], 70)):
+        task.start_date = TODAY + timedelta(days=dias - 5)
+        task.due_date = TODAY + timedelta(days=dias)
+    await db.commit()
+
+
+async def test_la_condicion_desaparece_y_la_alerta_se_resuelve(db, obra_ctx, cadena_critica):
+    """Corregidas las fechas, la alerta deja de figurar como pendiente."""
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    assert len(await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)) == 2
+
+    await _despejar_condicion_critica(db, cadena_critica)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    assert await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED) == []
+    # Las alertas siguen existiendo (el historial no se borra), solo resueltas.
+    resueltas = await _alerts(db, AlertType.CRITICAL_TASK_DELAYED)
+    assert len(resueltas) == 2
+    assert all(a.is_read for a in resueltas)
+
+
+async def test_resolver_sella_resolved_at(db, obra_ctx, cadena_critica):
+    """Sin el timestamp no se puede medir la velocidad de reacción (insights)."""
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    await _despejar_condicion_critica(db, cadena_critica)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    assert all(a.resolved_at is not None for a in await _alerts(db, AlertType.CRITICAL_TASK_DELAYED))
+
+
+async def test_la_condicion_vuelve_y_avisa_de_nuevo(db, obra_ctx, cadena_critica):
+    """El ciclo completo, que es el motivo real de todo esto: sin resolver, la
+    dedup vería una alerta idéntica pendiente y se callaría la segunda vez."""
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    await _despejar_condicion_critica(db, cadena_critica)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    assert await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED) == []
+
+    # El problema reaparece: la tarea vuelve a vencer en el pasado.
+    cadena_critica["a"].start_date = TODAY - timedelta(days=8)
+    cadena_critica["a"].due_date = TODAY - timedelta(days=3)
+    cadena_critica["b"].start_date = TODAY - timedelta(days=2)
+    cadena_critica["b"].due_date = TODAY + timedelta(days=2)
+    await db.commit()
+
+    creadas = await service.evaluate_obra(obra_ctx["obra"].id)
+    assert creadas >= 1
+    assert len(await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)) == 2
+
+
+async def test_una_cadencia_distinta_no_barre_lo_ajeno(db, obra_ctx, cadena_critica):
+    """El job semanal no sabe nada de las reglas frecuentes: no puede darlas por
+    resueltas solo porque no las evaluó."""
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id, cadence="frequent")
+    await _despejar_condicion_critica(db, cadena_critica)
+
+    await service.evaluate_obra(obra_ctx["obra"].id, cadence="weekly")
+    assert len(await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)) == 2
+
+
+async def test_apagar_una_regla_no_resuelve_lo_ya_avisado(db, obra_ctx, cadena_critica):
+    """Apagar una regla silencia lo que viene, no borra lo que ya se detectó."""
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    obra_ctx["settings"].risk_critical_task_delayed = False
+    await db.commit()
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    assert len(await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)) == 2
+
+
+async def test_una_regla_que_explota_no_resuelve_las_suyas(db, obra_ctx, cadena_critica, monkeypatch):
+    """Sin una corrida completa no sabemos qué sigue vigente: no se barre nada."""
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    await _despejar_condicion_critica(db, cadena_critica)
+
+    async def boom(self, ctx):
+        raise RuntimeError("el CPM explotó")
+
+    monkeypatch.setattr(RiskService, "_rule_critical_task_delayed", boom)
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    assert len(await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)) == 2
+
+
+async def test_cambiar_el_mensaje_resuelve_el_viejo(db, obra_ctx):
+    """Si el desvío crece, el texto anterior quedó obsoleto: se resuelve y queda
+    solo el nuevo, en vez de acumular dos avisos de la misma tarea."""
+    task = await _mk_task(db, obra_ctx, "Instalación eléctrica",
+                          start_date=TODAY, due_date=TODAY + timedelta(days=31),
+                          status=TaskStatus.EN_PROGRESO)
+    db.add(TaskBaseline(obra_id=obra_ctx["obra"].id, tenant_id=obra_ctx["tenant"].id,
+                        task_id=task.id, baseline_start=TODAY,
+                        baseline_finish=TODAY + timedelta(days=25)))
+    await db.commit()
+
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    pendientes = await _sin_leer(db, AlertType.BASELINE_DEVIATION)
+    assert len(pendientes) == 1 and "6 días de atraso" in pendientes[0].message
+
+    task.due_date = TODAY + timedelta(days=37)
+    await db.commit()
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    pendientes = await _sin_leer(db, AlertType.BASELINE_DEVIATION)
+    assert len(pendientes) == 1
+    assert "12 días de atraso" in pendientes[0].message
+    assert len(await _alerts(db, AlertType.BASELINE_DEVIATION)) == 2
+
+
+async def test_no_toca_las_alertas_de_las_reglas_viejas(db, obra_ctx, cadena_critica):
+    """La reconciliación se limita a los tipos de las reglas que corrió; delay_risk
+    y compañía siguen con su propio mecanismo de auto-resolución."""
+    db.add(Alert(obra_id=obra_ctx["obra"].id, task_id=cadena_critica["a"].id,
+                 tenant_id=obra_ctx["tenant"].id, type=AlertType.DELAY_RISK,
+                 message="La tarea «Encofrado» no tiene responsable asignado.",
+                 severity="media"))
+    await db.commit()
+
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+    assert len(await _sin_leer(db, AlertType.DELAY_RISK)) == 1
+
+
+async def test_no_resuelve_alertas_de_otra_obra(db, obra_ctx, cadena_critica):
+    """La reconciliación está acotada a la obra de la corrida."""
+    otra = Obra(name="Obra Vecina", manager_id=obra_ctx["user"].id,
+                tenant_id=obra_ctx["tenant"].id)
+    db.add(otra)
+    await db.flush()
+    db.add(Alert(obra_id=otra.id, task_id=None, tenant_id=obra_ctx["tenant"].id,
+                 type=AlertType.CRITICAL_TASK_DELAYED,
+                 message="Alerta de la obra vecina", severity="critica"))
+    await db.commit()
+
+    await _despejar_condicion_critica(db, cadena_critica)
+    await RiskService(db).evaluate_obra(obra_ctx["obra"].id)
+
+    vecina = [a for a in await _sin_leer(db, AlertType.CRITICAL_TASK_DELAYED)
+              if a.obra_id == otra.id]
+    assert len(vecina) == 1
+
+
+async def test_el_evento_de_resolucion_lleva_los_ids_exactos(db, obra_ctx, monkeypatch):
+    """Incluye las alertas de nivel obra, que no tienen task_id.
+
+    Avisar solo "se resolvió algo de la tarea N" dejaba fuera a las de obra —el
+    tab seguía mostrándolas pendientes hasta recargar— y además hacía que el
+    frontend tachara todas las alertas de esa tarea, incluso las que siguen
+    vigentes.
+    """
+    from datetime import datetime, timezone
+
+    import app.services.risk_service as risk_module
+
+    emitidos: list[tuple] = []
+
+    async def capturar(task_id, obra_id, alert_ids=None):
+        emitidos.append((task_id, obra_id, alert_ids))
+
+    monkeypatch.setattr(risk_module, "emit_alerts_resolved", capturar)
+
+    supplier = Supplier(tenant_id=obra_ctx["tenant"].id, name="Corralón Sur")
+    db.add(supplier)
+    await db.flush()
+    order = PurchaseOrder(
+        obra_id=obra_ctx["obra"].id, supplier_id=supplier.id, status="enviado",
+        sent_at=datetime.now(timezone.utc) - timedelta(days=15),
+    )
+    db.add(order)
+    await db.commit()
+
+    service = RiskService(db)
+    await service.evaluate_obra(obra_ctx["obra"].id)
+    pendiente = (await _sin_leer(db, AlertType.ORDER_SENT_NO_CONFIRMATION))[0]
+    assert pendiente.task_id is None
+
+    # El proveedor confirma: la condición desaparece.
+    order.status = "recibido"
+    order.received_at = datetime.now(timezone.utc)
+    await db.commit()
+    await service.evaluate_obra(obra_ctx["obra"].id)
+
+    assert await _sin_leer(db, AlertType.ORDER_SENT_NO_CONFIRMATION) == []
+    assert len(emitidos) == 1
+    task_id, obra_id, alert_ids = emitidos[0]
+    assert task_id is None
+    assert obra_id == obra_ctx["obra"].id
+    assert pendiente.id in alert_ids

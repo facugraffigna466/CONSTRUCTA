@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import socket from "../lib/socket";
+import type { AlertsResolvedPayload } from "./useGlobalAlerts";
 import type { Alert } from "../types";
 
 interface AlertCreatedPayload {
@@ -16,6 +17,9 @@ interface AlertCreatedPayload {
 export function useAlertSocket(
   obraId: number,
   onAlertCreated: (alert: Alert) => void,
+  // El tab Alertas de la obra mantiene su propio estado y solo escuchaba las
+  // altas: una alerta resuelta seguía figurando pendiente hasta recargar.
+  onAlertsResolved?: (payload: AlertsResolvedPayload) => void,
 ) {
   useEffect(() => {
     function handleAlertCreated(payload: AlertCreatedPayload) {
@@ -35,7 +39,16 @@ export function useAlertSocket(
       onAlertCreated(alert);
     }
 
+    function handleAlertsResolved(payload: AlertsResolvedPayload) {
+      if (payload.obraId !== obraId) return;
+      onAlertsResolved?.(payload);
+    }
+
     socket.on("alert_created", handleAlertCreated);
-    return () => { socket.off("alert_created", handleAlertCreated); };
-  }, [obraId, onAlertCreated]);
+    socket.on("alerts_resolved", handleAlertsResolved);
+    return () => {
+      socket.off("alert_created", handleAlertCreated);
+      socket.off("alerts_resolved", handleAlertsResolved);
+    };
+  }, [obraId, onAlertCreated, onAlertsResolved]);
 }

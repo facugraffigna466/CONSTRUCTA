@@ -2468,3 +2468,33 @@ El análisis es cualitativo y así queda dicho: no se cuantificaron la penetraci
 
 ### Files modified
 `docs/ipi/IPI-CONSTRUCTA.md` (nueva §5 del marco teórico; dos entradas de bibliografía: Aguilar, 1967 y Ley 25.326), `docs/ipi/IPI-CONSTRUCTA.docx` regenerado con `backend/.venv/bin/python docs/ipi/build_ipi_docx.py`.
+
+---
+
+## 2026-09-04 — Auto-resolución de las alertas de riesgo
+
+### Objective
+Cerrar el pendiente que había quedado declarado al implementar las 11 reglas: sus alertas no se marcaban resueltas cuando la condición desaparecía, como sí hacen las 6 anteriores. No era cosmético. La deduplicación es **contra alertas no leídas**, así que el ciclo se rompía: la condición se corregía, la alerta quedaba pendiente para siempre y, cuando el problema reaparecía, la dedup veía una idéntica sin leer y se callaba. El segundo aviso se perdía. Con `resolved_at` —que main sumó para medir velocidad de reacción en insights— el efecto era peor: una alerta que nunca se resuelve nunca aporta el dato.
+
+### Changes made
+
+**Reconciliar en la corrida, no por evento.** Las 6 reglas viejas resuelven por evento: `TaskService.update()` sabe qué campo cambió y marca leídas las alertas de ese campo. Sirve porque sus condiciones son simples (fecha, responsable, estado). Las 11 nuevas dependen de datos derivados —holgura del CPM, desvío contra línea base, estado de aprovisionamiento, conteos sobre historial, calendario—, y cablear cada una en cada punto de mutación habría sido frágil y habría desparramado el conocimiento de las reglas por todos los servicios, que es justo lo que `RiskService` centraliza.
+
+En cambio, el motor ya calcula en cada pasada qué condiciones están vigentes. Ahora las registra: las reglas emiten por un envoltorio `_emit()` que guarda la clave `(task_id, tipo, mensaje)` en el contexto de la corrida **aunque la dedup no cree nada** —lo que importa es que la condición sigue dándose, no que se haya emitido algo nuevo—. Al terminar, `_resolve_stale()` marca resueltas las alertas pendientes cuya clave no aparece.
+
+**Tres recaudos, cada uno con su test.** Solo se barren los tipos cuya regla efectivamente corrió (habilitada, de la cadencia en curso y sin excepción): si no corrió, no sabemos qué sigue vigente y darlo por resuelto sería inventar — por eso el job semanal no toca lo de las reglas frecuentes, ni apagar una regla resuelve lo ya avisado, ni una regla que explota barre lo suyo. Un cambio de mensaje también resuelve: si el desvío pasó de 6 a 12 días el texto viejo quedó obsoleto y el nuevo ya se emitió, así que queda un aviso y no dos. Y la reconciliación está acotada a los tipos de las reglas nuevas: `delay_risk` y compañía siguen con su mecanismo por evento.
+
+Para que fuera preciso, `RiskRule` pasa a declarar el `AlertType` que emite cada regla — antes la relación regla↔tipo estaba solo implícita en el cuerpo del método.
+
+### Files modified
+Backend: `services/risk_service.py` (`_emit()`, `_resolve_stale()`, `alert_type` en `RiskRule`, `active_keys` en el contexto), `repositories/alert.py` (`list_unread_for_obra_by_types()`, `mark_read_by_ids()`), `core/socket_manager.py` (`alertIds` en el payload). Frontend: `hooks/useGlobalAlerts.ts`, `hooks/useAlertSocket.ts`, `pages/ObraDetailPage.tsx`. Tests: 10 casos nuevos en `test_risk_rules.py` (49 en total). Documentación: `docs/features/deteccion-riesgos.md` (§5.9 nueva, pendiente eliminado), `IPI-CONSTRUCTA.md` (fila 6 de trazabilidad).
+
+### Validation
+Suite completa: **513 passed**. El archivo de reglas se corrió además simulando los siete días de la semana (49 passed en cada uno), por la fragilidad de almanaque que ya había mordido una vez.
+
+**El evento de tiempo real pasa a llevar los ids resueltos.** Al revisar cómo llegaba la resolución al frontend aparecieron tres problemas encadenados, dos de ellos preexistentes. `alerts_resolved` viajaba solo con `taskId`, y el receptor marcaba leídas **todas** las alertas de esa tarea: alcanzaba para los llamadores que resuelven un tipo entero (`TaskService`), pero no para esta reconciliación, que decide alerta por alerta — una tarea puede tener una resuelta y otra vigente, y el frontend habría tachado las dos. Además, las alertas de nivel obra (`order_sent_no_confirmation`, `chronic_no_response`) no tienen `task_id`, así que no había forma de avisar por ellas. Y el tab Alertas de la obra **nunca había escuchado el evento**: mantiene su propio estado y solo se suscribía a las altas, de modo que una alerta resuelta seguía figurando pendiente hasta recargar, incluso con las 6 reglas viejas.
+
+El payload suma `alertIds` con los ids exactos; el camino por `taskId` queda para los emisores que no los pasan. `useAlertSocket` expone la resolución y `ObraDetailPage` la consume, con lo que el tab de la obra se actualiza en vivo por primera vez.
+
+### Pending / next steps
+Nada abierto de este cambio.
