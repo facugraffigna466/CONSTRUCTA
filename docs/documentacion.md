@@ -2558,3 +2558,27 @@ Frontend: `vite.config.ts` (bloque `test`), `package.json` (scripts + devDepende
 
 ### Pending / next steps
 La cobertura de frontend es deliberadamente parcial y así queda declarado en el IPI: cubre la lógica de alertas, no el resto de la interfaz. Faltan los componentes (`AlertasTab`, `ConfiguracionPage`) y sigue sin haber pruebas de extremo a extremo con Playwright. Tampoco hay métrica de cobertura configurada.
+
+---
+
+## 2026-09-04 (cont.) — Vitest llega a los componentes de alertas
+
+### Objective
+Continuar la cobertura de frontend por donde había quedado. La tanda anterior cubrió la lógica (`alertMeta`) y los dos *hooks*; faltaban los dos componentes que efectivamente le muestran las alertas al usuario: el listado por obra (`AlertasTab`) y la campana del encabezado (`AlertBell`). Son los que consumen `alertMeta`, así que ahí es donde una decisión de presentación se vuelve visible o se rompe.
+
+### Changes made
+
+**24 tests nuevos, 49 en total en el frontend.** `AlertBell`: la cuenta del badge y su corte en `99+`, que el desplegable arranque cerrado, que liste solo las no leídas, el estado vacío, que cada tipo aparezca con su nombre propio, y que una alerta cuya obra fue borrada (`obra_id` en NULL por el `ondelete SET NULL`) no intente navegar a ningún lado. `AlertasTab`: los filtros y sus dos estados vacíos —que son distintos: "no hay alertas para esta obra" no es lo mismo que "estás al día"—, el chip de severidad solo en crítica y alta y solo mientras esté sin leer, la desambiguación de `delay_risk`, y las cuatro acciones (ver tarea, tarea eliminada, marcar una, marcar todas).
+
+**Hizo falta enganchar el `cleanup` a mano.** Testing Library registra su limpieza automática solo cuando corre con `globals: true`; acá los tests importan lo que usan de `vitest` para que `tsc -b` los tipe sin sumar tipos globales al tsconfig de la app. Sin el `afterEach(cleanup)` cada render se apilaba en el mismo `document` y las consultas encontraban elementos de tests anteriores — el síntoma fue "Found multiple elements with the role button" en ocho tests a la vez. Queda en `src/test/setup.ts`, declarado como `setupFiles`.
+
+Un caso quedó cubierto por partida doble a propósito: que la alerta de obra "El N% de las tareas activas están vencidas" se muestre como "Riesgo de demora" y no como "Tarea vencida". El test de `alertMeta` verifica la función; el de `AlertasTab`, que el componente efectivamente la use. Es el error que encontró la tanda anterior y conviene que quede sujeto por los dos lados.
+
+### Files modified
+Frontend: `components/AlertBell.test.tsx` y `components/AlertasTab.test.tsx` (nuevos), `test/setup.ts` (nuevo), `vite.config.ts` (`setupFiles`). Documentación: `IPI-CONSTRUCTA.md` (las tres menciones a la cobertura de frontend).
+
+### Validation
+49 tests de frontend en 5 archivos, `tsc -b` y `npm run build` sin errores, ESLint sin hallazgos en los archivos nuevos. El backend no se tocó.
+
+### Pending / next steps
+Sigue sin haber pruebas de extremo a extremo (*Playwright*) ni métrica de cobertura, y la mayor parte de la interfaz —Gantt, planilla, wizard de obra— sigue sin pruebas. El módulo de alertas queda cubierto de punta a punta; el resto no.

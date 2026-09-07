@@ -18,6 +18,7 @@ export default defineConfig({
     // tipa los tests sin tener que sumar tipos globales al tsconfig de la app.
     globals: false,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    setupFiles: ['src/test/setup.ts'],
     restoreMocks: true,
   },
 })
