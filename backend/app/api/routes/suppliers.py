@@ -8,11 +8,24 @@ from app.schemas.supplier import SupplierCreate, SupplierRead, SupplierUpdate
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
 
+async def _get_tenant_scoped(supplier_id: int, db: DbSession, current_user) -> Supplier:
+    """Proveedor por id, verificando que pertenezca al tenant del usuario.
+    Colapsa el caso cross-tenant en el mismo 404 para no filtrar existencia."""
+    supplier = (
+        await db.execute(select(Supplier).where(Supplier.id == supplier_id))
+    ).scalar_one_or_none()
+    if not supplier or (
+        current_user.tenant_id is not None and supplier.tenant_id != current_user.tenant_id
+    ):
+        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    return supplier
+
+
 @router.get("", response_model=list[SupplierRead])
 async def list_suppliers(db: DbSession, current_user: CurrentUser):
     result = await db.execute(
         select(Supplier)
-        .where(Supplier.is_active == True)
+        .where(Supplier.is_active == True, Supplier.tenant_id == current_user.tenant_id)
         .order_by(Supplier.name)
     )
     return result.scalars().all()
@@ -20,7 +33,11 @@ async def list_suppliers(db: DbSession, current_user: CurrentUser):
 
 @router.get("/all", response_model=list[SupplierRead])
 async def list_all_suppliers(db: DbSession, admin: AdminUser):
-    result = await db.execute(select(Supplier).order_by(Supplier.name))
+    result = await db.execute(
+        select(Supplier)
+        .where(Supplier.tenant_id == admin.tenant_id)
+        .order_by(Supplier.name)
+    )
     return result.scalars().all()
 
 
@@ -44,10 +61,7 @@ async def create_supplier(data: SupplierCreate, db: DbSession, admin: AdminUser)
 async def update_supplier(
     supplier_id: int, data: SupplierUpdate, db: DbSession, admin: AdminUser
 ):
-    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
-    supplier = result.scalar_one_or_none()
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    supplier = await _get_tenant_scoped(supplier_id, db, admin)
 
     for field, value in data.model_dump(exclude_unset=True).items():
         setattr(supplier, field, value)
@@ -59,9 +73,6 @@ async def update_supplier(
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_supplier(supplier_id: int, db: DbSession, admin: AdminUser):
-    result = await db.execute(select(Supplier).where(Supplier.id == supplier_id))
-    supplier = result.scalar_one_or_none()
-    if not supplier:
-        raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    supplier = await _get_tenant_scoped(supplier_id, db, admin)
     supplier.is_active = False
     await db.flush()
