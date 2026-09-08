@@ -2582,3 +2582,33 @@ Frontend: `components/AlertBell.test.tsx` y `components/AlertasTab.test.tsx` (nu
 
 ### Pending / next steps
 Sigue sin haber pruebas de extremo a extremo (*Playwright*) ni métrica de cobertura, y la mayor parte de la interfaz —Gantt, planilla, wizard de obra— sigue sin pruebas. El módulo de alertas queda cubierto de punta a punta; el resto no.
+
+---
+
+## 2026-09-08 — Proveedor real en Materiales + aislamiento por tenant de Proveedores (hallazgo de seguridad)
+
+### Context
+La fase "Alertas Inteligentes" (integrar las 11 reglas nuevas a `alert_service.py`) resultó ya implementada y mergeada a `main` en la sesión de trabajo anterior (`risk_service.py`, `docs/features/deteccion-riesgos.md`), así que el trabajo de esta sesión arrancó verificándola: lectura completa de `risk_service.py` contra la propuesta original, corrida de la suite (57/57 en `test_risk_rules.py`, 521/521 total) y chequeo puntual de que el endpoint HTTP de ruta crítica siguiera validando permisos (`compute_critical_path()` vs. la variante `_unchecked` que usa el cron). Sin hallazgos — quedó documentado como verificado, no reimplementado.
+
+De ahí surgió un reporte de bug real: en el modal "Agregar ítem al presupuesto" (tab Materiales de Compras), el campo para asociar un proveedor mostraba responsables del equipo (`Juan Perez · Jefe de obra`) en vez de proveedores. Al reproducirlo en un navegador real contra una obra de prueba apareció algo más serio que el bug reportado.
+
+### Changes made
+
+**1. El bug reportado, en el frontend.** `AddMaterialModal` (`ComprasTab.tsx`) usaba `teamMembers`/`responsible_id` para un campo etiquetado "Contratista (opcional)". El backend ya soportaba `supplier_id` en `TaskMaterialCreate` desde antes — era un bug puramente de frontend. Se cambió el campo a "Proveedor (opcional)", usando la lista de `suppliers` y enviando `supplier_id`.
+
+**2. El hallazgo de seguridad.** Al verificar el fix en el navegador, el dropdown listaba proveedores de *otras empresas* (tenants de prueba masivos). `GET/PATCH/DELETE /suppliers` y `GET /suppliers/all` no filtraban por tenant en absoluto: cualquier usuario autenticado veía y podía editar o borrar el nombre, email y teléfono de los proveedores de **todas** las empresas del sistema. Corregido siguiendo el mismo patrón que ya usa `purchase_orders.py` (colapsar el caso cross-tenant al mismo 404 que "no existe").
+
+**3. El mismo problema en la segunda vía de alta de proveedores.** Al responder una pregunta de producto ("¿cómo se cargan los proveedores?") apareció el segundo camino: `confirmar_contratista()` (`solicitud_service.py`), que auto-crea un `Supplier` al confirmar un contratista directo en una solicitud de cotización. No seteaba `tenant_id` en el registro nuevo, y la búsqueda de "¿ya existe este proveedor?" corría sin filtrar por tenant — dos empresas confirmando un contratista con el mismo teléfono terminaban compartiendo el mismo `Supplier`. Corregido pasando el `tenant_id` del usuario hasta el service y acotando ahí tanto el alta como la búsqueda.
+
+**4. Un crash preexistente, encontrado al escribir el test de (3).** `_order_read()` en `solicitudes.py` construía la respuesta a mano y le faltaban tres campos requeridos por el schema (`created_by`, `sent_at`, `received_at`): el endpoint `confirmar-contratista` (y también `confirmar` de proveedor formal) tiraban 500 siempre que se llamaban, sin que ningún test lo hubiera ejercitado de punta a punta hasta ahora. Reemplazado por `_order_to_read()`, el helper ya correcto de `purchase_orders.py` (que además completa `supplier_name/phone/email`, algo que `_order_read` tampoco hacía).
+
+### Files modified
+Backend: `app/api/routes/suppliers.py` (aislamiento por tenant en las 4 rutas), `app/api/routes/solicitudes.py` (pasa `tenant_id`; reemplaza `_order_read` por `_order_to_read`), `app/services/solicitud_service.py` (`confirmar_contratista` recibe y aplica `tenant_id`). Frontend: `components/ComprasTab.tsx` (`AddMaterialModal`: `suppliers`/`supplier_id` en vez de `teamMembers`/`responsible_id`). Tests: 4 casos nuevos en `tests/test_tenant_isolation.py` (listado y mutación de proveedores cross-tenant; alta de contratista no comparte `Supplier` entre tenants pero sí lo reutiliza dentro del mismo). Documentación: esta entrada e `IPI-CONSTRUCTA.md` (RNF-01 y los cuatro conteos de tests de la suite de backend, 521→526).
+
+### Validation
+Cada fix se verificó reproduciendo primero la falla y confirmando después que el mismo test pasa: los 2 tests de proveedores fallan sin el fix de `suppliers.py` (`git stash` del archivo) y pasan con él; los 2 de `confirmar_contratista` fallan sin el fix de tenant en `solicitud_service.py` y pasan con él. Suite completa de backend: **526 passed** (era 521). Verificación manual en navegador (Playwright headless, sin librería nueva en el proyecto — solo para esta sesión) contra una obra de prueba real: el modal muestra "Proveedor (opcional)" con la lista correcta, y tras el fix de aislamiento el dropdown vuelve a mostrar solo el proveedor de la obra propia.
+
+**El entorno local estaba desfasado respecto de lo mergeado a `main` y hubo que destrabarlo para poder probar:** faltaban las migraciones `0060`–`0071` (`alembic upgrade head`), la dependencia `react-datasheet-grid` sin instalar (`npm install`, rompía Vite con 500 en `TaskSheetView.tsx`), y `python-docx` fuera del venv pese a estar en `requirements.txt` (`pip install -r requirements.txt`). Ninguno es un cambio de código; quedan aplicados en este entorno de desarrollo.
+
+### Pending / next steps
+Un hallazgo menor, deliberadamente sin cerrar: `create_material` (y la creación de pedidos) no valida que un `supplier_id` recibido del cliente pertenezca al tenant del usuario — explotable solo adivinando ids, y filtra a lo sumo el nombre/teléfono de un proveedor puntual, muy por debajo del listado abierto que sí se cerró acá.
