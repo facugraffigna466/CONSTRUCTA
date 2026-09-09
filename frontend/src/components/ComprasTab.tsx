@@ -899,9 +899,9 @@ function OrderModal({ obraId, rows, suppliers, onClose, onCreated }: {
 
 // ─── Modal: agregar material ──────────────────────────────────────────────────
 
-function AddMaterialModal({ tasks, teamMembers, onClose, onAdded }: {
+function AddMaterialModal({ tasks, suppliers, onClose, onAdded }: {
   tasks: Task[];
-  teamMembers: ObraTeamMember[];
+  suppliers: Supplier[];
   onClose: () => void;
   onAdded: () => void;
 }) {
@@ -910,23 +910,19 @@ function AddMaterialModal({ tasks, teamMembers, onClose, onAdded }: {
   const [qty, setQty]               = useState("");
   const [unit, setUnit]             = useState("");
   const [price, setPrice]           = useState("");
-  const [contratistId, setContratistId] = useState("");
+  const [supplierId, setSupplierId] = useState("");
   const [saving, setSaving]         = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [addAnother, setAddAnother] = useState(true);
-
-  // La distinción equipo/contratista se eliminó del backend (migration 0054):
-  // ahora hay una sola entidad "responsable de obra", cualquiera es candidato.
-  const contratistas = teamMembers;
 
   async function handleSave() {
     if (!taskId) { setError("Elegí a qué tarea pertenece el material."); return; }
     if (!name.trim()) { setError("Ingresá el nombre del material."); return; }
     setSaving(true); setError(null);
     try {
-      await createMaterial(Number(taskId), { name: name.trim(), quantity: qty ? Number(qty) : null, unit: unit.trim() || null, unit_price: price ? Number(price) : null, responsible_id: contratistId ? Number(contratistId) : null });
+      await createMaterial(Number(taskId), { name: name.trim(), quantity: qty ? Number(qty) : null, unit: unit.trim() || null, unit_price: price ? Number(price) : null, supplier_id: supplierId ? Number(supplierId) : null });
       onAdded();
-      if (addAnother) { setName(""); setQty(""); setUnit(""); setPrice(""); setContratistId(""); }
+      if (addAnother) { setName(""); setQty(""); setUnit(""); setPrice(""); setSupplierId(""); }
       else { onClose(); }
     } catch {
       setError("No se pudo agregar el material.");
@@ -971,10 +967,10 @@ function AddMaterialModal({ tasks, teamMembers, onClose, onAdded }: {
                 <div><label style={lbl}>$ unit.</label><input style={inp} type="number" min="0" placeholder="8000" value={price} onChange={e => setPrice(e.target.value)} /></div>
               </div>
               <div>
-                <label style={lbl}>Contratista (opcional)</label>
-                <select value={contratistId} onChange={e => setContratistId(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
+                <label style={lbl}>Proveedor (opcional)</label>
+                <select value={supplierId} onChange={e => setSupplierId(e.target.value)} style={{ ...inp, cursor: "pointer" }}>
                   <option value="">Sin asignar</option>
-                  {contratistas.map(m => <option key={m.responsible_id} value={m.responsible_id}>{m.full_name}{m.role ? ` · ${m.role}` : ""}</option>)}
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}{s.category ? ` · ${s.category}` : ""}</option>)}
                 </select>
               </div>
               {error && <p style={{ margin: 0, fontSize: 12, color: "#D03A3A", fontWeight: 600 }}>{error}</p>}
@@ -2592,7 +2588,7 @@ export function ComprasTab({ obraId, obraName, tasks = [], focusTaskId }: { obra
       )}
       {showAddMaterial && (
         <AddMaterialModal
-          tasks={tasks} teamMembers={teamMembers}
+          tasks={tasks} suppliers={suppliers}
           onClose={() => setShowAddMaterial(false)}
           onAdded={load}
         />

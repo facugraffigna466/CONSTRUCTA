@@ -2608,7 +2608,7 @@ El backfill migra el blob preservando estados, descarta fechas que no parsean (l
 Backend: `alembic/versions/0072_suggestions_table.py`, `models/suggestion.py`, `schemas/suggestion.py`, `services/suggestion_service.py`, `api/routes/suggestions.py`, `tests/test_suggestions.py` (nuevos); `models/bitacora.py`, `models/__init__.py`, `schemas/bitacora.py`, `services/bitacora_service.py`, `api/routes/bitacora.py`, `core/obra_permissions.py`, `main.py`, `tests/test_bitacora.py`. Frontend: `api/suggestions.ts`, `components/SuggestionCard.tsx`, `components/TaskSuggestions.tsx` (nuevos); `api/bitacora.ts`, `api/tasks.ts`, `components/TaskFormModal.tsx`, `pages/BitacoraPage.tsx`, `pages/ObraDetailPage.tsx`, `App.tsx`. Documentación: `docs/features/sugerencias-primera-clase.md` (reporte), `IPI-CONSTRUCTA.md`.
 
 ### Validation
-545 pruebas de backend en verde (521 antes; 24 nuevas). Frontend: 49 pruebas en verde, `tsc --noEmit` limpio, ESLint sin hallazgos nuevos. Migración verificada de ida y de vuelta contra PostgreSQL en una base descartable.
+545 pruebas de backend en verde (24 nuevas sobre las 521 de la base). Frontend: 49 pruebas en verde, `tsc --noEmit` limpio, ESLint sin hallazgos nuevos. Migración verificada de ida y de vuelta contra PostgreSQL en una base descartable.
 
 **Arreglo encontrado al probar: la dirección del movimiento de fechas.** Con datos reales apareció un error de interpretación anterior a este trabajo: ante *"mover la fecha dos días para atrás porque se retrasó el proveedor"*, el análisis devolvía *"adelantar la siguiente tarea dos días"* — al revés. El prompt no tenía ninguna regla para resolver la ambigüedad de "para atrás"/"para adelante", que en obra se usan de forma contradictoria. Se agregaron tres reglas a `_analyze`: **la dirección la fija la causa, no el verbo** (una demora mueve la fecha más tarde, siempre; si no queda clara, `note` en vez de `reschedule_task`); el resumen y los puntos clave no usan los verbos ambiguos sino el efecto sobre el cronograma, porque el texto estaba contradiciendo a la sugerencia; y no se proponen cambios que dejen la tarea como ya está. Verificado contra el modelo real en tres casos —frase invertida con causa de atraso, y un adelanto genuino que la regla correctamente no toca—. Queda como limitación conocida que la aritmética de días es aproximada; por eso la sugerencia nunca se aplica sin confirmación y el botón "Editar" permite fijar la fecha.
 
@@ -2627,6 +2627,34 @@ Los mensajes de **texto** de WhatsApp siguen sin pasar por IA: van a la máquina
 
 
 ---
+
+## 2026-09-08 — Proveedor real en Materiales + aislamiento por tenant de Proveedores (hallazgo de seguridad)
+
+### Context
+La fase "Alertas Inteligentes" (integrar las 11 reglas nuevas a `alert_service.py`) resultó ya implementada y mergeada a `main` en la sesión de trabajo anterior (`risk_service.py`, `docs/features/deteccion-riesgos.md`), así que el trabajo de esta sesión arrancó verificándola: lectura completa de `risk_service.py` contra la propuesta original, corrida de la suite (57/57 en `test_risk_rules.py`, 521/521 total) y chequeo puntual de que el endpoint HTTP de ruta crítica siguiera validando permisos (`compute_critical_path()` vs. la variante `_unchecked` que usa el cron). Sin hallazgos — quedó documentado como verificado, no reimplementado.
+
+De ahí surgió un reporte de bug real: en el modal "Agregar ítem al presupuesto" (tab Materiales de Compras), el campo para asociar un proveedor mostraba responsables del equipo (`Juan Perez · Jefe de obra`) en vez de proveedores. Al reproducirlo en un navegador real contra una obra de prueba apareció algo más serio que el bug reportado.
+
+### Changes made
+
+**1. El bug reportado, en el frontend.** `AddMaterialModal` (`ComprasTab.tsx`) usaba `teamMembers`/`responsible_id` para un campo etiquetado "Contratista (opcional)". El backend ya soportaba `supplier_id` en `TaskMaterialCreate` desde antes — era un bug puramente de frontend. Se cambió el campo a "Proveedor (opcional)", usando la lista de `suppliers` y enviando `supplier_id`.
+
+**2. El hallazgo de seguridad.** Al verificar el fix en el navegador, el dropdown listaba proveedores de *otras empresas* (tenants de prueba masivos). `GET/PATCH/DELETE /suppliers` y `GET /suppliers/all` no filtraban por tenant en absoluto: cualquier usuario autenticado veía y podía editar o borrar el nombre, email y teléfono de los proveedores de **todas** las empresas del sistema. Corregido siguiendo el mismo patrón que ya usa `purchase_orders.py` (colapsar el caso cross-tenant al mismo 404 que "no existe").
+
+**3. El mismo problema en la segunda vía de alta de proveedores.** Al responder una pregunta de producto ("¿cómo se cargan los proveedores?") apareció el segundo camino: `confirmar_contratista()` (`solicitud_service.py`), que auto-crea un `Supplier` al confirmar un contratista directo en una solicitud de cotización. No seteaba `tenant_id` en el registro nuevo, y la búsqueda de "¿ya existe este proveedor?" corría sin filtrar por tenant — dos empresas confirmando un contratista con el mismo teléfono terminaban compartiendo el mismo `Supplier`. Corregido pasando el `tenant_id` del usuario hasta el service y acotando ahí tanto el alta como la búsqueda.
+
+**4. Un crash preexistente, encontrado al escribir el test de (3).** `_order_read()` en `solicitudes.py` construía la respuesta a mano y le faltaban tres campos requeridos por el schema (`created_by`, `sent_at`, `received_at`): el endpoint `confirmar-contratista` (y también `confirmar` de proveedor formal) tiraban 500 siempre que se llamaban, sin que ningún test lo hubiera ejercitado de punta a punta hasta ahora. Reemplazado por `_order_to_read()`, el helper ya correcto de `purchase_orders.py` (que además completa `supplier_name/phone/email`, algo que `_order_read` tampoco hacía).
+
+### Files modified
+Backend: `app/api/routes/suppliers.py` (aislamiento por tenant en las 4 rutas), `app/api/routes/solicitudes.py` (pasa `tenant_id`; reemplaza `_order_read` por `_order_to_read`), `app/services/solicitud_service.py` (`confirmar_contratista` recibe y aplica `tenant_id`). Frontend: `components/ComprasTab.tsx` (`AddMaterialModal`: `suppliers`/`supplier_id` en vez de `teamMembers`/`responsible_id`). Tests: 4 casos nuevos en `tests/test_tenant_isolation.py` (listado y mutación de proveedores cross-tenant; alta de contratista no comparte `Supplier` entre tenants pero sí lo reutiliza dentro del mismo). Documentación: esta entrada e `IPI-CONSTRUCTA.md` (RNF-01 y los cuatro conteos de tests de la suite de backend, 521→526).
+
+### Validation
+Cada fix se verificó reproduciendo primero la falla y confirmando después que el mismo test pasa: los 2 tests de proveedores fallan sin el fix de `suppliers.py` (`git stash` del archivo) y pasan con él; los 2 de `confirmar_contratista` fallan sin el fix de tenant en `solicitud_service.py` y pasan con él. Suite completa de backend: **526 passed** (era 521). Verificación manual en navegador (Playwright headless, sin librería nueva en el proyecto — solo para esta sesión) contra una obra de prueba real: el modal muestra "Proveedor (opcional)" con la lista correcta, y tras el fix de aislamiento el dropdown vuelve a mostrar solo el proveedor de la obra propia.
+
+**El entorno local estaba desfasado respecto de lo mergeado a `main` y hubo que destrabarlo para poder probar:** faltaban las migraciones `0060`–`0071` (`alembic upgrade head`), la dependencia `react-datasheet-grid` sin instalar (`npm install`, rompía Vite con 500 en `TaskSheetView.tsx`), y `python-docx` fuera del venv pese a estar en `requirements.txt` (`pip install -r requirements.txt`). Ninguno es un cambio de código; quedan aplicados en este entorno de desarrollo.
+
+### Pending / next steps
+Un hallazgo menor, deliberadamente sin cerrar: `create_material` (y la creación de pedidos) no valida que un `supplier_id` recibido del cliente pertenezca al tenant del usuario — explotable solo adivinando ids, y filtra a lo sumo el nombre/teléfono de un proveedor puntual, muy por debajo del listado abierto que sí se cerró acá.
 
 ## 2026-09-09 — El responsable informa por qué, no solo qué
 
@@ -2647,7 +2675,7 @@ El motivo quedaba en la cadena fija `"Demorada vía WhatsApp"` y la alerta al je
 Backend: `alembic/versions/0073_await_block_reason_step.py` y `tests/test_motivo_bloqueo.py` (nuevos); `models/conversation_session.py`, `services/message_templates.py`, `services/conversation_service.py`, `services/message_service.py`, `repositories/alert.py`, `tests/test_whatsapp_identity_permissions.py`. Documentación: `docs/features/motivo-de-bloqueo.md`.
 
 ### Validation
-554 pruebas en verde (7 nuevas). Migración 0073 verificada de ida y de vuelta contra PostgreSQL. Dos pruebas existentes se ajustaron: verificaban la frase exacta del rechazo por audio y ahora verifican el comportamiento.
+559 pruebas en verde (7 nuevas; el total incluye el fix de proveedores que entró a main en paralelo). Migración 0073 verificada de ida y de vuelta contra PostgreSQL. Dos pruebas existentes se ajustaron: verificaban la frase exacta del rechazo por audio y ahora verifican el comportamiento.
 
 ### Pending / next steps
 El motivo llega al historial y a la alerta, pero todavía **no se muestra como dato propio en la interfaz** (aparece dentro del texto del mensaje de la alerta). Un paso natural sería exponerlo como campo para poder filtrar y contar: "cuántas veces se frenó esta obra por falta de material" es una pregunta que las reglas de riesgo ya podrían responder si el dato estuviera estructurado.

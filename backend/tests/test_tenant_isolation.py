@@ -7,6 +7,7 @@ import pytest_asyncio
 from app.core.security import create_access_token
 from app.models.obra import Obra
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
+from app.models.solicitud_cotizacion import SolicitudCotizacion
 from app.models.supplier import Supplier
 from app.models.task import Task
 from app.models.tenant import Tenant
@@ -67,14 +68,30 @@ async def two_tenants(db):
     await db.flush()
     db.add(PurchaseOrderItem(order_id=order_a.id, name="Cemento", quantity=10, unit="bolsa"))
     await db.flush()
+
+    # Obra de B (ub es admin de B, así que assert_obra_access la deja pasar sin
+    # necesitar una fila de ObraUserRole) + una solicitud de cotización por obra,
+    # para probar confirmar_contratista() (auto-crea Supplier).
+    obra_b = Obra(name="Obra B", manager_id=ub.id, tenant_id=tb.id)
+    db.add(obra_b)
+    await db.flush()
+    sol_a = SolicitudCotizacion(obra_id=obra_a.id, tenant_id=ta.id, ref_code="COT-01")
+    sol_b = SolicitudCotizacion(obra_id=obra_b.id, tenant_id=tb.id, ref_code="COT-01")
+    db.add(sol_a)
+    db.add(sol_b)
+    await db.flush()
     await db.commit()
 
     return {
         "obra_a": obra_a.id,
+        "obra_b": obra_b.id,
         "task_a": task_a.id,
         "user_b": ub.id,
         "collab_b": collab_b.id,
         "order_a": order_a.id,
+        "supplier_a": supplier_a.id,
+        "sol_a": sol_a.id,
+        "sol_b": sol_b.id,
         "token_a": create_access_token(ua.id),
         "token_b": create_access_token(ub.id),
     }
@@ -222,6 +239,102 @@ async def test_cross_tenant_order_receive_blocked(client, two_tenants):
         headers=_auth(ids["token_b"]),
     )
     assert r.status_code == 404, f"Recepción cross-tenant permitida: {r.status_code}"
+
+
+async def test_cross_tenant_supplier_list_isolated(client, two_tenants):
+    """El listado de proveedores de B no debe traer proveedores de A."""
+    ids = two_tenants
+    r = await client.get(f"{API}/suppliers", headers=_auth(ids["token_b"]))
+    assert r.status_code == 200
+    assert not any(s["id"] == ids["supplier_a"] for s in r.json()), (
+        "Fuga cross-tenant: B ve un proveedor de A en /suppliers"
+    )
+
+
+async def test_cross_tenant_supplier_mutation_blocked(client, two_tenants):
+    """Admin de B no puede editar ni borrar un proveedor de A → 404 (no filtra existencia)."""
+    ids = two_tenants
+    r = await client.patch(
+        f"{API}/suppliers/{ids['supplier_a']}",
+        headers=_auth(ids["token_b"]),
+        json={"name": "Secuestrado"},
+    )
+    assert r.status_code == 404, f"Edición cross-tenant de proveedor permitida: {r.status_code}"
+
+    r = await client.delete(f"{API}/suppliers/{ids['supplier_a']}", headers=_auth(ids["token_b"]))
+    assert r.status_code == 404, f"Borrado cross-tenant de proveedor permitido: {r.status_code}"
+
+
+async def test_same_tenant_supplier_access_still_works(client, two_tenants):
+    """No sobre-restringimos: A sí ve y puede editar su propio proveedor."""
+    ids = two_tenants
+    r = await client.get(f"{API}/suppliers", headers=_auth(ids["token_a"]))
+    assert r.status_code == 200
+    assert any(s["id"] == ids["supplier_a"] for s in r.json())
+
+    r = await client.patch(
+        f"{API}/suppliers/{ids['supplier_a']}",
+        headers=_auth(ids["token_a"]),
+        json={"name": "Proveedor A renombrado"},
+    )
+    assert r.status_code == 200, f"Edición legítima rota: {r.status_code} — {r.text[:200]}"
+
+
+async def test_cross_tenant_contratista_confirm_creates_separate_supplier(client, two_tenants):
+    """confirmar_contratista() auto-crea un Supplier. Con el mismo nombre/teléfono,
+    A y B no deben terminar compartiendo el mismo registro ni mezclando pedidos."""
+    ids = two_tenants
+    payload = {"supplier_name": "Contratista Compartido", "supplier_phone": "+549111111111"}
+
+    r_a = await client.post(
+        f"{API}/solicitudes-cotizacion/{ids['sol_a']}/confirmar-contratista",
+        headers=_auth(ids["token_a"]),
+        json=payload,
+    )
+    assert r_a.status_code == 201, f"Confirmación legítima de A rota: {r_a.status_code} — {r_a.text[:200]}"
+    supplier_id_a = r_a.json()["supplier_id"]
+
+    r_b = await client.post(
+        f"{API}/solicitudes-cotizacion/{ids['sol_b']}/confirmar-contratista",
+        headers=_auth(ids["token_b"]),
+        json=payload,
+    )
+    assert r_b.status_code == 201, f"Confirmación legítima de B rota: {r_b.status_code} — {r_b.text[:200]}"
+    supplier_id_b = r_b.json()["supplier_id"]
+
+    assert supplier_id_a != supplier_id_b, (
+        "Fuga cross-tenant: A y B terminaron con el mismo Supplier auto-creado"
+    )
+
+
+async def test_same_tenant_contratista_confirm_reuses_supplier(client, db, two_tenants):
+    """Dentro del mismo tenant, confirmar dos veces el mismo contratista sí reutiliza el Supplier."""
+    ids = two_tenants
+    payload = {"supplier_name": "Contratista Repetido", "supplier_phone": "+549222222222"}
+
+    r1 = await client.post(
+        f"{API}/solicitudes-cotizacion/{ids['sol_a']}/confirmar-contratista",
+        headers=_auth(ids["token_a"]),
+        json=payload,
+    )
+    assert r1.status_code == 201
+    supplier_id_1 = r1.json()["supplier_id"]
+
+    # Segunda solicitud de la misma obra (ref_code distinto por la unicidad
+    # (obra_id, ref_code)), creada directo en DB — lo que se prueba acá es la
+    # reutilización del Supplier, no el endpoint de creación de solicitudes.
+    obra_a = await db.get(Obra, ids["obra_a"])
+    sol_a2 = SolicitudCotizacion(obra_id=obra_a.id, tenant_id=obra_a.tenant_id, ref_code="COT-02")
+    db.add(sol_a2)
+    await db.commit()
+
+    r2 = await client.post(
+        f"{API}/solicitudes-cotizacion/{sol_a2.id}/confirmar-contratista",
+        headers=_auth(ids["token_a"]),
+        json=payload,
+    )
+    assert r2.status_code == 201
+    assert r2.json()["supplier_id"] == supplier_id_1, "No reutilizó el Supplier existente del mismo tenant"
 
 
 async def test_order_send_is_idempotent(client, two_tenants):

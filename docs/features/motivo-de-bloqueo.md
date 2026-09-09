@@ -80,4 +80,4 @@ Siete pruebas nuevas en `test_motivo_bloqueo.py`, sobre lo que define el diseño
 
 Dos pruebas existentes de `test_whatsapp_identity_permissions.py` se ajustaron: verificaban la frase exacta del rechazo; ahora verifican el comportamiento (el gate sigue vigente, y la respuesta ya no es un callejón).
 
-**Suite completa: 554 pruebas en verde.** Migración 0073 probada de ida y de vuelta contra PostgreSQL.
+**Suite completa: 559 pruebas en verde** una vez fusionado con `main` (que sumó en paralelo el fix de aislamiento de proveedores). Migración 0073 probada de ida y de vuelta contra PostgreSQL.

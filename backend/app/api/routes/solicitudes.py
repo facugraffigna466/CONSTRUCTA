@@ -17,6 +17,7 @@ from app.core.obra_permissions import (
     require_obra_role,
     require_solicitud_obra_role,
 )
+from app.api.routes.purchase_orders import _order_to_read
 from app.models.obra import Obra
 from app.models.obra_user_role import ObraUserRoleType
 from app.models.solicitud_cotizacion import SolicitudCotizacion
@@ -52,19 +53,6 @@ async def _assert_solicitud_tenant(solicitud_id: int, db: DbSession, tenant_id: 
         obra = await db.get(Obra, sol.obra_id)
         if obra is not None and obra.tenant_id is not None and obra.tenant_id != tenant_id:
             raise HTTPException(404, "Solicitud no encontrada")
-
-
-def _order_read(order) -> PurchaseOrderRead:
-    return PurchaseOrderRead(
-        id=order.id,
-        obra_id=order.obra_id,
-        supplier_id=order.supplier_id,
-        status=order.status,
-        notes=order.notes,
-        created_at=order.created_at,
-        items=[],
-        total=0.0,
-    )
 
 
 # ── Listar ────────────────────────────────────────────────────────────────────
@@ -147,7 +135,7 @@ async def confirmar_proveedor(
         )
     except ValueError as exc:
         raise HTTPException(404 if "no encontrada" in str(exc).lower() else 422, str(exc))
-    return _order_read(order)
+    return await _order_to_read(order, db)
 
 
 # ── Confirmar contratista (auto-crea Supplier) ────────────────────────────────
@@ -169,10 +157,11 @@ async def confirmar_contratista(
             supplier_name=data.supplier_name,
             supplier_phone=data.supplier_phone,
             confirmed_by=current_user.id,
+            tenant_id=current_user.tenant_id,
         )
     except ValueError as exc:
         raise HTTPException(404 if "no encontrada" in str(exc).lower() else 422, str(exc))
-    return _order_read(order)
+    return await _order_to_read(order, db)
 
 
 # ── Eliminar solicitud ────────────────────────────────────────────────────────

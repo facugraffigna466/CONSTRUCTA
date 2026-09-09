@@ -764,6 +764,7 @@ class SolicitudService:
         supplier_name: str,
         supplier_phone: str | None,
         confirmed_by: int | None,
+        tenant_id: int | None,
     ) -> PurchaseOrder:
         sol = await self.db.get(SolicitudCotizacion, solicitud_id)
         if not sol:
@@ -771,21 +772,29 @@ class SolicitudService:
 
         phone = supplier_phone or sol.contratista_phone
 
-        # Buscar si ya existe un Supplier con ese nombre o teléfono
+        # Buscar si ya existe un Supplier con ese nombre o teléfono, DENTRO del
+        # mismo tenant: sin este filtro, dos empresas que confirman un contratista
+        # con el mismo teléfono terminarían compartiendo el mismo registro.
         existing: Supplier | None = None
         if phone:
-            result = await self.db.execute(select(Supplier).where(Supplier.phone == phone).limit(1))
+            result = await self.db.execute(
+                select(Supplier).where(
+                    Supplier.phone == phone, Supplier.tenant_id == tenant_id
+                ).limit(1)
+            )
             existing = result.scalar_one_or_none()
         if not existing:
             result = await self.db.execute(
-                select(Supplier).where(Supplier.name.ilike(supplier_name)).limit(1)
+                select(Supplier).where(
+                    Supplier.name.ilike(supplier_name), Supplier.tenant_id == tenant_id
+                ).limit(1)
             )
             existing = result.scalar_one_or_none()
 
         if existing:
             supplier = existing
         else:
-            supplier = Supplier(name=supplier_name, phone=phone, is_active=True)
+            supplier = Supplier(name=supplier_name, phone=phone, is_active=True, tenant_id=tenant_id)
             self.db.add(supplier)
             await self.db.flush()
 
