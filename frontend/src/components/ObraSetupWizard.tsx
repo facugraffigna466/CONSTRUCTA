@@ -4,6 +4,7 @@ import { useUser } from "../context/UserContext";
 import {
   X, Plus, Trash2, Pencil, AlertTriangle, CheckCircle2,
   ChevronLeft, ChevronRight, Loader2, Upload, ImageOff, Building2,
+  ClipboardPaste, MapPin,
 } from "lucide-react";
 import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
@@ -575,11 +576,13 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
           </p>
         </div>
         <button type="button" onClick={pasteFromExcel} style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
           padding: "8px 14px", borderRadius: 9, fontSize: 12, fontWeight: 700,
           color: "#E85A26", background: "#fff", border: "1px solid #FDBFA0", cursor: "pointer",
           fontFamily: "'Plus Jakarta Sans', sans-serif", whiteSpace: "nowrap",
         }}>
-          📋 Pegar desde Excel
+          <ClipboardPaste style={{ width: 13, height: 13 }} />
+          Pegar desde Excel
         </button>
         {pasteMsg && (
           <p style={{ margin: 0, width: "100%", fontSize: 11.5, fontWeight: 600, color: pasteMsg.startsWith("✓") ? "#1F8A5B" : "#C97D0E", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -706,8 +709,12 @@ function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
         {/* Meta row: location · dates · comitente */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 10px", alignItems: "center" }}>
           {obraData.location && (
-            <span style={{ fontSize: 12, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              📍 {obraData.location}
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 4,
+              fontSize: 12, color: "#5B6770", fontFamily: "'Plus Jakarta Sans', sans-serif",
+            }}>
+              <MapPin style={{ width: 12, height: 12, flexShrink: 0 }} />
+              {obraData.location}
             </span>
           )}
           {(obraData.start_date || obraData.expected_end_date) && (
