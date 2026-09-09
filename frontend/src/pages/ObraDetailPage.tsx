@@ -13,6 +13,7 @@ import { TaskDeleteConfirm } from "../components/TaskDeleteConfirm";
 import { TaskFormModal } from "../components/TaskFormModal";
 import { TaskTable } from "../components/TaskTable";
 import { TaskSheetView, type SheetViewHandle } from "../components/TaskSheetView";
+import { fetchObraSuggestions } from "../api/suggestions";
 import { ImportModal } from "../components/ImportModal";
 import { useAlertSocket } from "../hooks/useAlertSocket";
 import { useHistorialSocket } from "../hooks/useHistorialSocket";
@@ -65,13 +66,18 @@ interface ObraDetailPageProps {
   activeTab: ObraTab;
   onTabChange: (tab: ObraTab) => void;
   onCounts?: (counts: { tasks: number; alerts: number; responsibles: number }) => void;
+  /** Se resolvió una sugerencia de IA desde adentro de una tarea — el badge
+   *  de pendientes del menú vive en App y tiene que recontar. */
+  onSuggestionResolved?: () => void;
   focusAlert?: { taskId: number; field: AlertFocusField } | null;
 }
 
-export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAlert }: ObraDetailPageProps) {
+export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSuggestionResolved, focusAlert }: ObraDetailPageProps) {
   const can = useCan();
   const viewingUsers = useViewingUsers(obra.id, activeTab);
   const [tasks, setTasks] = useState<Task[]>([]);
+  // taskId → cantidad de sugerencias de IA sin revisar, para marcarlas en las listas.
+  const [suggestionCounts, setSuggestionCounts] = useState<Map<number, number>>(new Map());
   const editingMap   = useEditingSimulation(obra.id);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [historial, setHistorial] = useState<HistorialEvento[]>([]);
@@ -113,12 +119,20 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     setError(null);
     try {
       const tasksData = await fetchTasksByObra(obra.id);
-      const [obraAlerts, historialData, obraTeam] = await Promise.all([
+      const [obraAlerts, historialData, obraTeam, pendingSuggestions] = await Promise.all([
         fetchAlerts(false, obra.id),   // filtrado por obra en el servidor (no traer todo el tenant)
         fetchHistorial(obra.id, HISTORIAL_FETCH_LIMIT),
         fetchObraTeam(obra.id),
+        // Un solo pedido por obra: las vistas de tareas solo necesitan saber
+        // CUÁNTAS propuestas sin revisar tiene cada tarea, no cuáles.
+        fetchObraSuggestions(obra.id, "pendiente").catch(() => []),
       ]);
       setTasks(tasksData);
+      const conteo = new Map<number, number>();
+      for (const sg of pendingSuggestions) {
+        if (sg.task_id) conteo.set(sg.task_id, (conteo.get(sg.task_id) ?? 0) + 1);
+      }
+      setSuggestionCounts(conteo);
       setAlerts(obraAlerts);
       setHistorial(historialData);
       // Convertir ObraTeamMember[] → Responsible[] para compatibilidad con componentes hijos
@@ -239,6 +253,22 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
     } catch { loadData(true); }
   }
 
+  // Aplicar cierra el modal y dispara loadData; descartar NO — el modal sigue
+  // abierto y los marcadores de la lista quedarían mostrando un pendiente que
+  // ya no existe. Se recuentan acá, y de paso se avisa al badge del menú.
+  const handleSuggestionResolved = useCallback(() => {
+    onSuggestionResolved?.();
+    fetchObraSuggestions(obra.id, "pendiente")
+      .then((pendientes) => {
+        const conteo = new Map<number, number>();
+        for (const sg of pendientes) {
+          if (sg.task_id) conteo.set(sg.task_id, (conteo.get(sg.task_id) ?? 0) + 1);
+        }
+        setSuggestionCounts(conteo);
+      })
+      .catch(() => { /* el próximo loadData lo corrige */ });
+  }, [obra.id, onSuggestionResolved]);
+
   function handleTaskSaved(savedTask: Task) {
     setShowCreateTask(false);
     setTaskToEdit(null);
@@ -292,6 +322,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
             obraStartDate={obra.start_date}
             obraExpectedEndDate={obra.expected_end_date}
             obraId={obra.id}
+            suggestionCounts={suggestionCounts}
             error={error}
             onMarkRead={handleMarkRead}
             onViewAlerts={() => onTabChange("alertas")}
@@ -559,9 +590,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
               </div>
               {/* Table / Sheet */}
               {taskView === "tabla" ? (
-                <TaskTable tasks={tasks} responsibles={responsibles} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create", obra.id) ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create", obra.id) ? () => setShowImport(true) : undefined} />
+                <TaskTable tasks={tasks} responsibles={responsibles} suggestionCounts={suggestionCounts} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create", obra.id) ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create", obra.id) ? () => setShowImport(true) : undefined} />
               ) : (
-                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} onTasksChanged={() => loadData(true)} onOpenBudget={(taskId: number) => { setBudgetFocusTaskId(taskId); onTabChange("presupuesto"); }} />
+                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} suggestionCounts={suggestionCounts} onTasksChanged={() => loadData(true)} onOpenBudget={(taskId: number) => { setBudgetFocusTaskId(taskId); onTabChange("presupuesto"); }} />
               )}
             </div>
 
@@ -874,6 +905,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, focusAl
         <TaskFormModal
           mode="edit" obraId={obra.id} task={taskToEdit} tasks={tasks} responsibles={responsibles} taskCount={tasks.length}
           onClose={() => setTaskToEdit(null)} onSaved={handleTaskSaved}
+          onSuggestionResolved={handleSuggestionResolved}
         />
       )}
       {taskToDelete && (

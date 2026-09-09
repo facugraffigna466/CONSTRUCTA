@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "react";
 import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-react";
-import { createTask, fetchCascadePreview, updateTask } from "../api/tasks";
+import { createTask, fetchCascadePreview, fetchTask, updateTask } from "../api/tasks";
 import type { CascadeAffectedTask, TaskUpdatePayload } from "../api/tasks";
 import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
 import { TaskMaterialsSection, type DraftMaterial } from "./TaskMaterialsSection";
 import { TaskBitacoraOrigin } from "./TaskBitacoraOrigin";
+import { TaskSuggestions } from "./TaskSuggestions";
 import { createMaterial } from "../api/taskMaterials";
 import { emitStartEditing, emitStopEditing } from "../hooks/useEditingSimulation";
 import { useDialog } from "../hooks/useDialog";
@@ -100,6 +101,9 @@ interface TaskFormModalProps {
   taskCount: number;
   onClose: () => void;
   onSaved: (task: Task) => void;
+  /** Se resolvió una sugerencia de IA sobre esta tarea: quien tenga
+   *  contadores de pendientes (el badge del menú) tiene que refrescarlos. */
+  onSuggestionResolved?: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -113,6 +117,7 @@ export function TaskFormModal({
   taskCount,
   onClose,
   onSaved,
+  onSuggestionResolved,
 }: TaskFormModalProps) {
   // escClose:false → el Esc en capas propio (cierra subdiálogos primero) sigue mandando.
   const dialogRef = useDialog(onClose, { escClose: false });
@@ -789,6 +794,25 @@ export function TaskFormModal({
             {mode === "edit" && task
               ? <TaskMaterialsSection taskId={task.id} />
               : <TaskMaterialsSection draft={draftMaterials} onDraftChange={setDraftMaterials} />}
+
+            {/* Propuestas de la IA sin resolver sobre esta tarea */}
+            {mode === "edit" && task && (
+              <TaskSuggestions
+                taskId={task.id}
+                onResolved={onSuggestionResolved}
+                onApplied={async () => {
+                  // Aplicar ya guardó el cambio (y pudo correr tareas
+                  // dependientes en cascada): lo que muestra este formulario
+                  // quedó viejo. Se cierra con la tarea fresca en vez de
+                  // dejar campos que ya no son los de la base.
+                  try {
+                    onSaved(await fetchTask(task.id));
+                  } catch {
+                    onClose();
+                  }
+                }}
+              />
+            )}
 
             {/* Origen: notas de voz que originaron/modificaron esta tarea */}
             {mode === "edit" && task && <TaskBitacoraOrigin taskId={task.id} />}

@@ -3,6 +3,7 @@ import { Pencil, Trash2, AlertTriangle, ChevronDown, X } from "lucide-react";
 import { useIsMobile } from "../hooks/useMediaQuery";
 import type { Responsible, Task, TaskStatus } from "../types";
 import type { Editor } from "../hooks/useEditingSimulation";
+import { SuggestionMarker } from "./SuggestionMarker";
 
 // ─── Design tokens (mirrors GanttTimeline) ────────────────────────────────────
 
@@ -219,6 +220,8 @@ function buildLevelMap(tasks: Task[]): Map<number, number> {
 
 interface TaskTableProps {
   tasks: Task[];
+  /** taskId → propuestas de la IA sin revisar sobre esa tarea. */
+  suggestionCounts?: Map<number, number>;
   responsibles?: Responsible[];
   onEdit?: (task: Task) => void;
   onDelete?: (task: Task) => void;
@@ -231,6 +234,7 @@ interface TaskTableProps {
 
 export function TaskTable({
   tasks,
+  suggestionCounts,
   responsibles,
   onEdit,
   onDelete,
@@ -563,7 +567,10 @@ export function TaskTable({
                 )}
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
                   <div style={{ flex: 1, minWidth: 0, paddingLeft: level * 12 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: "#1A2329", lineHeight: 1.35 }}>{task.title}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600, color: "#1A2329", lineHeight: 1.35 }}>
+                      <span>{task.title}</span>
+                      <SuggestionMarker count={suggestionCounts?.get(task.id) ?? 0} />
+                    </div>
                     {task.description && (
                       <div style={{ fontSize: 11.5, color: "#6B7580", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>
                     )}
@@ -648,12 +655,15 @@ export function TaskTable({
                     pointerEvents: "none",
                   }} />
                 )}
-                <div style={{
-                  fontSize: 13.5, fontWeight: 600, color: "#1A2329",
-                  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  lineHeight: 1.3,
-                }} title={task.title}>
-                  {task.title}
+                <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 13.5, fontWeight: 600, color: "#1A2329",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    lineHeight: 1.3,
+                  }} title={task.title}>
+                    {task.title}
+                  </div>
+                  <SuggestionMarker count={suggestionCounts?.get(task.id) ?? 0} />
                 </div>
                 {task.description && (
                   <div style={{

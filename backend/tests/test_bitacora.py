@@ -10,6 +10,7 @@ from sqlalchemy import select
 from app.core.security import create_access_token
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
+from app.models.suggestion import SuggestionStatus
 from app.models.tenant import Tenant
 from app.models.tenant_membership import TenantMembership
 from app.models.user import User
@@ -117,16 +118,30 @@ async def test_ai_quota_counts_whatsapp_entries(ctx):
 
 # ── Sugerencias: hallazgos N2/N5 del audit 08-bitácora ─────────────────────────
 
-def _base_suggestion(**overrides) -> dict:
+def _base_suggestion(**overrides):
+    """Fila de `suggestions` lista para colgar de una entrada.
+
+    Desde la migración 0072 la sugerencia es entidad propia: los tests la
+    construyen como fila, no como objeto dentro del blob JSON de la entrada.
+    """
+    from datetime import date as _date
+
+    from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
+
     base = {
-        "type": "note", "task_id": None, "task_title": None,
+        "type": SuggestionType.NOTE, "task_id": None, "task_title": None,
         "new_start_date": None, "new_due_date": None, "new_status": None,
         "title": None, "description": None, "responsible_name": None,
-        "reason": "test", "applied": False, "dismissed": False,
-        "result_task_id": None, "result_note": None,
+        "reason": "test", "status": SuggestionStatus.PENDIENTE,
+        "result_task_id": None, "result_note": None, "order_index": 0,
     }
     base.update(overrides)
-    return base
+    if isinstance(base["type"], str):
+        base["type"] = SuggestionType(base["type"])
+    for k in ("new_start_date", "new_due_date"):
+        if isinstance(base[k], str):
+            base[k] = _date.fromisoformat(base[k])
+    return Suggestion(**base)
 
 
 async def test_apply_suggestion_rejects_stale_cross_obra_task(client, ctx):
@@ -147,7 +162,7 @@ async def test_apply_suggestion_rejects_stale_cross_obra_task(client, ctx):
     entry = BitacoraEntry(
         obra_id=ctx["obra_id"], source="web", transcript="reprogramar",
         status="procesado",
-        suggestions=[_base_suggestion(type="reschedule_task", task_id=tarea_ajena.id, new_due_date="2026-09-01")],
+        suggestion_rows=[_base_suggestion(type="reschedule_task", task_id=tarea_ajena.id, new_due_date="2026-09-01")],
     )
     db.add(entry)
     await db.commit()
@@ -169,7 +184,7 @@ async def test_apply_suggestion_invalid_date_returns_4xx_not_500(client, ctx):
     await db.flush()
     entry = BitacoraEntry(
         obra_id=ctx["obra_id"], source="web", transcript="reprogramar", status="procesado",
-        suggestions=[_base_suggestion(type="reschedule_task", task_id=tarea.id)],
+        suggestion_rows=[_base_suggestion(type="reschedule_task", task_id=tarea.id)],
     )
     db.add(entry)
     await db.commit()
@@ -191,7 +206,7 @@ async def test_apply_suggestion_invalid_status_returns_4xx_not_500(client, ctx):
     await db.flush()
     entry = BitacoraEntry(
         obra_id=ctx["obra_id"], source="web", transcript="cambiar estado", status="procesado",
-        suggestions=[_base_suggestion(type="update_status", task_id=tarea.id, new_status="estado_que_no_existe")],
+        suggestion_rows=[_base_suggestion(type="update_status", task_id=tarea.id, new_status="estado_que_no_existe")],
     )
     db.add(entry)
     await db.commit()
@@ -233,7 +248,7 @@ async def test_dismiss_suggestion_blocks_cross_tenant_unassigned_entry(client, d
     entry = BitacoraEntry(
         obra_id=None, source="whatsapp", transcript="nota sin obra todavía",
         status="procesado", responsible_id=responsable_a.id, tenant_id=tenant_a.id,
-        suggestions=[_base_suggestion()],
+        suggestion_rows=[_base_suggestion()],
     )
     db.add(entry)
     await db.commit()
@@ -289,7 +304,7 @@ async def test_reprocess_blocked_when_suggestions_already_applied(client, ctx):
     entry = BitacoraEntry(
         obra_id=ctx["obra_id"], source="web", transcript="ya se aplicó algo",
         status="procesado",
-        suggestions=[_base_suggestion(type="note", applied=True)],
+        suggestion_rows=[_base_suggestion(type="note", status=SuggestionStatus.APLICADA)],
     )
     ctx["db"].add(entry)
     await ctx["db"].commit()
@@ -304,7 +319,7 @@ async def test_reprocess_allowed_when_no_suggestion_applied(client, ctx):
     entry = BitacoraEntry(
         obra_id=ctx["obra_id"], source="web", transcript="nada aplicado todavía",
         status="procesado",
-        suggestions=[_base_suggestion(type="note", dismissed=True)],
+        suggestion_rows=[_base_suggestion(type="note", status=SuggestionStatus.DESCARTADA)],
     )
     ctx["db"].add(entry)
     await ctx["db"].commit()

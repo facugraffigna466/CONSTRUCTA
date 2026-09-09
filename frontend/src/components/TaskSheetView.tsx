@@ -6,6 +6,7 @@
  * Lo propio de CONSTRUCTA va en celdas a medida: calendario, responsable,
  * estado, duración derivada, predecesoras estilo MS Project y materiales.
  */
+import { SuggestionMarker } from "./SuggestionMarker";
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -128,11 +129,13 @@ interface Row {
   materials_cost: number;
   materials_count: number;
   materials_pending: number;
+  // Propuestas de la IA sin revisar sobre esta tarea (solo lectura acá).
+  suggestions_pending: number;
   saving?: boolean;
   error?: string | null;
 }
 
-function taskToRow(t: Task, level: number): Row {
+function taskToRow(t: Task, level: number, suggestionsPending = 0): Row {
   return {
     id: t.id,
     title: t.title,
@@ -147,11 +150,13 @@ function taskToRow(t: Task, level: number): Row {
     materials_cost: t.materials_cost ?? 0,
     materials_count: t.materials_count ?? 0,
     materials_pending: t.materials_pending ?? 0,
+    suggestions_pending: suggestionsPending,
   };
 }
 
 const emptyRow = (): Row => ({
   id: null,
+  suggestions_pending: 0,
   title: "",
   responsible_id: null,
   start_date: null,
@@ -229,6 +234,7 @@ const TitleCell = React.memo(({ rowData, setRowData, focus, active }: CellProps<
           pointerEvents: focus ? "auto" : "none",
         }}
       />
+      <SuggestionMarker count={rowData.suggestions_pending} />
       {rowData.saving && <span style={{ fontSize: 10, color: "#9BA3AB", flexShrink: 0 }}>·</span>}
       {rowData.error && <span title={rowData.error} style={{ fontSize: 11, color: "#D03A3A", flexShrink: 0 }}>⚠</span>}
     </div>
@@ -1237,6 +1243,8 @@ interface Props {
   responsibles: Responsible[];
   obraId: number;
   onTasksChanged: () => void;
+  /** taskId → propuestas de la IA sin revisar sobre esa tarea. */
+  suggestionCounts?: Map<number, number>;
   /** Salta a la pestaña Presupuesto, filtrada por los materiales de esa tarea. */
   onOpenBudget?: (taskId: number) => void;
 }
@@ -1273,7 +1281,7 @@ const COL_LABEL: Record<string, string> = {
 };
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(function TaskSheetView(
-  { tasks, responsibles, obraId, onTasksChanged, onOpenBudget }: Props,
+  { tasks, responsibles, obraId, onTasksChanged, suggestionCounts, onOpenBudget }: Props,
   ref
 ) {
   // Qué columnas están ocultas, recordado por obra (igual que la planilla actual).
@@ -1351,8 +1359,8 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(function TaskShe
 
   const levelMap = useMemo(() => buildLevelMap(tasks), [tasks]);
   const serverRows = useMemo(
-    () => tasks.map((t) => taskToRow(t, levelMap.get(t.id) ?? 0)),
-    [tasks, levelMap]
+    () => tasks.map((t) => taskToRow(t, levelMap.get(t.id) ?? 0, suggestionCounts?.get(t.id) ?? 0)),
+    [tasks, levelMap, suggestionCounts]
   );
 
   // La grilla es controlada localmente y se sincroniza contra el server por

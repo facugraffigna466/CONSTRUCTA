@@ -19,6 +19,7 @@ from app.api.routes import suppliers as suppliers_router
 from app.api.routes import task_materials as task_materials_router
 from app.api.routes import purchase_orders as purchase_orders_router
 from app.api.routes import bitacora as bitacora_router
+from app.api.routes import suggestions as suggestions_router
 from app.api.routes import budgets as budgets_router
 from app.api.routes import planos as planos_router
 from app.api.routes import solicitudes as solicitudes_router
@@ -85,6 +86,7 @@ fastapi_app.include_router(suppliers_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(task_materials_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(purchase_orders_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(bitacora_router.router, prefix=API_PREFIX)
+fastapi_app.include_router(suggestions_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(budgets_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(planos_router.router, prefix=API_PREFIX)
 fastapi_app.include_router(solicitudes_router.router, prefix=API_PREFIX)

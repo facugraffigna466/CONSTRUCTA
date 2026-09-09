@@ -1,21 +1,10 @@
 import { apiClient } from "./client";
+import type { Suggestion } from "./suggestions";
 
-export interface BitacoraSuggestion {
-  type: "reschedule_task" | "create_task" | "update_status" | "note";
-  task_id: number | null;
-  task_title: string | null;
-  new_start_date: string | null;
-  new_due_date: string | null;
-  new_status: string | null;
-  title: string | null;
-  description: string | null;
-  responsible_name: string | null;
-  reason: string;
-  applied: boolean;
-  dismissed: boolean;
-  result_task_id: number | null;
-  result_note: string | null;
-}
+// La sugerencia dejó de ser un objeto anidado en la entrada: es entidad propia
+// con id (migración 0072). Vive en `api/suggestions.ts`; acá solo se reexporta
+// con el nombre que ya usaban las pantallas de bitácora.
+export type { Suggestion as BitacoraSuggestion } from "./suggestions";
 
 export interface BitacoraEntry {
   id: number;
@@ -30,7 +19,7 @@ export interface BitacoraEntry {
   transcript: string | null;
   summary: string | null;
   key_points: string[] | null;
-  suggestions: BitacoraSuggestion[] | null;
+  suggestions: Suggestion[] | null;
   status: "pendiente_transcripcion" | "pendiente_analisis" | "pendiente_obra" | "procesado" | "error";
   error: string | null;
   created_at: string;
@@ -95,28 +84,9 @@ export async function assignObra(entryId: number, obraId: number): Promise<Bitac
   return data;
 }
 
-export interface SuggestionEdit {
-  new_start_date?: string | null;
-  new_due_date?: string | null;
-  new_status?: string | null;
-  title?: string | null;
-  responsible_name?: string | null;
-}
-
-export async function applySuggestion(
-  entryId: number, index: number, edits?: SuggestionEdit,
-): Promise<BitacoraEntry> {
-  const { data } = await apiClient.post<BitacoraEntry>(
-    `/bitacora/${entryId}/suggestions/${index}/apply`,
-    edits ?? undefined,
-  );
-  return data;
-}
-
-export async function dismissSuggestion(entryId: number, index: number): Promise<BitacoraEntry> {
-  const { data } = await apiClient.post<BitacoraEntry>(`/bitacora/${entryId}/suggestions/${index}/dismiss`);
-  return data;
-}
+// Aplicar y descartar viven en `api/suggestions.ts`: se direccionan por id de
+// sugerencia, no por su posición dentro de la nota. Las rutas por índice siguen
+// en el backend para compatibilidad, pero la interfaz ya no las usa.
 
 export async function deleteEntry(entryId: number): Promise<void> {
   await apiClient.delete(`/bitacora/${entryId}`);

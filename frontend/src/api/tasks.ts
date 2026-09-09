@@ -6,6 +6,11 @@ export async function fetchTasksByObra(obraId: number): Promise<Task[]> {
   return data;
 }
 
+export async function fetchTask(taskId: number): Promise<Task> {
+  const { data } = await apiClient.get<Task>(`/tasks/${taskId}`);
+  return data;
+}
+
 export interface DependencyLinkInput {
   depends_on_id: number;
   dependency_type?: DependencyType;

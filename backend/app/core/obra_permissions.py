@@ -32,6 +32,7 @@ from app.models.obra_user_role import ObraUserRole, ObraUserRoleType
 from app.models.plano import Plano
 from app.models.purchase_order import PurchaseOrder
 from app.models.solicitud_cotizacion import SolicitudCotizacion
+from app.models.suggestion import Suggestion
 from app.models.task import Task
 from app.models.user import User
 
@@ -216,6 +217,19 @@ def require_bitacora_obra_role(min_role: ObraUserRoleType):
     ) -> User:
         return await _resolve_and_assert(
             db, current_user, BitacoraEntry, entry_id, min_role, allow_null_obra=True
+        )
+    return _dep
+
+
+def require_suggestion_obra_role(min_role: ObraUserRoleType):
+    """Suggestion.obra_id puede ser NULL (sugerencia de una nota de WhatsApp que
+    todavía no se asignó a una obra). En ese caso solo admin de empresa pasa —
+    y aplicarla igual falla, porque sin obra no hay plan que tocar."""
+    async def _dep(
+        suggestion_id: int, db: DbSession, current_user: CurrentUser
+    ) -> User:
+        return await _resolve_and_assert(
+            db, current_user, Suggestion, suggestion_id, min_role, allow_null_obra=True
         )
     return _dep
 

@@ -11,6 +11,7 @@ from app.models.task_material import TaskMaterial
 from app.models.purchase_order import PurchaseOrder, PurchaseOrderItem
 from app.models.solicitud_cotizacion import SolicitudCotizacion, SolicitudSupplier
 from app.models.bitacora import BitacoraEntry
+from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
 from app.models.budget import Budget
 from app.models.plano import Plano
 from app.models.historial import HistorialEvento
@@ -49,6 +50,9 @@ __all__ = [
     "PurchaseOrder",
     "PurchaseOrderItem",
     "BitacoraEntry",
+    "Suggestion",
+    "SuggestionStatus",
+    "SuggestionType",
     "HistorialEvento",
     "Message",
     "MessageDirection",
