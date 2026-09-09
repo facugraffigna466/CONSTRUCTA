@@ -4,9 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.obra import Obra, ObraStatus
 from app.models.task import TaskStatus
+from app.repositories.calendar import CalendarRepository
 from app.repositories.historial import HistorialRepository
 from app.repositories.obra import ObraRepository
 from app.schemas.obra import ObraCreate, ObraUpdate
+from app.services import dashboard_calc
 
 
 class ObraService:
@@ -57,10 +59,16 @@ class ObraService:
 
     async def list_all(self, tenant_id: int | None = None) -> list[dict]:
         obras = await self.repo.list_all(tenant_id=tenant_id)
+        calendar_repo = CalendarRepository(self.repo.session)
         result = []
         for o in obras:
             non_cancelled = [t for t in o.tasks if t.status != TaskStatus.CANCELADA]
             completed     = [t for t in o.tasks if t.status == TaskStatus.COMPLETADA]
+            # Mismo cálculo que ObraDashboardService (I-01) — es lo que D-02 pide:
+            # que el portfolio y el detalle de obra nunca muestren un avance
+            # distinto para la misma obra.
+            calendar = await calendar_repo.get_for_obra(o.id)
+            real_percent = dashboard_calc.weighted_real_progress(calendar, o.tasks)
             result.append({
                 "id": o.id, "name": o.name, "status": o.status,
                 "location": o.location, "image_url": o.image_url,
@@ -70,6 +78,7 @@ class ObraService:
                 "client_phone": o.client_phone,
                 "completed_tasks": len(completed),
                 "total_tasks": len(non_cancelled),
+                "real_percent": real_percent,
             })
         return result
 

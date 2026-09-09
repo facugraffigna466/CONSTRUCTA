@@ -3,6 +3,7 @@ import { Loader2, Plus } from "lucide-react";
 import { fetchAlerts, markAlertRead, markAllAlertsRead } from "../api/alerts";
 import { fetchHistorial } from "../api/historial";
 import { fetchObraTeam } from "../api/obraTeam";
+import { fetchObraDashboard } from "../api/obraDashboard";
 import { fetchTasksByObra, updateTaskStatus } from "../api/tasks";
 import { exportObraExcel } from "../api/exports";
 import { AlertasTab } from "../components/AlertasTab";
@@ -25,7 +26,7 @@ import { ObraResponsablesTab } from "../components/ObraResponsablesTab";
 import { ObraCompletenessChecklist } from "../components/ObraCompletenessChecklist";
 import { ComprasTab } from "../components/ComprasTab";
 import { PlanosTab } from "../components/PlanosTab";
-import type { Alert, HistorialEvento, Obra, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
+import type { Alert, HistorialEvento, Obra, ObraDashboard, ObraStatus, ObraTab, Responsible, Task, TaskStatus } from "../types";
 
 const HISTORIAL_FETCH_LIMIT = 100;
 
@@ -80,6 +81,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
   const [suggestionCounts, setSuggestionCounts] = useState<Map<number, number>>(new Map());
   const editingMap   = useEditingSimulation(obra.id);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [dashboard, setDashboard] = useState<ObraDashboard | null>(null);
   const [historial, setHistorial] = useState<HistorialEvento[]>([]);
   const [responsibles, setResponsibles] = useState<Responsible[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,15 +121,19 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
     setError(null);
     try {
       const tasksData = await fetchTasksByObra(obra.id);
-      const [obraAlerts, historialData, obraTeam, pendingSuggestions] = await Promise.all([
+      const [obraAlerts, historialData, obraTeam, pendingSuggestions, dashboardData] = await Promise.all([
         fetchAlerts(false, obra.id),   // filtrado por obra en el servidor (no traer todo el tenant)
         fetchHistorial(obra.id, HISTORIAL_FETCH_LIMIT),
         fetchObraTeam(obra.id),
         // Un solo pedido por obra: las vistas de tareas solo necesitan saber
         // CUÁNTAS propuestas sin revisar tiene cada tarea, no cuáles.
         fetchObraSuggestions(obra.id, "pendiente").catch(() => []),
+        // Un indicador que no llega no debe tumbar el resto del tab: ResumenTab
+        // cae a su estado vacío si dashboard queda null.
+        fetchObraDashboard(obra.id).catch(() => null),
       ]);
       setTasks(tasksData);
+      setDashboard(dashboardData);
       const conteo = new Map<number, number>();
       for (const sg of pendingSuggestions) {
         if (sg.task_id) conteo.set(sg.task_id, (conteo.get(sg.task_id) ?? 0) + 1);
@@ -315,6 +321,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
       case "resumen":
         return (
           <ResumenTab
+            dashboard={dashboard}
             tasks={tasks}
             alerts={alerts}
             historial={historial}
