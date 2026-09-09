@@ -86,6 +86,32 @@ def add_working_days(calendar: WorkingCalendar, d: date, n: int) -> date:
     return candidate
 
 
+def working_days_between(calendar: WorkingCalendar, start: date, end: date) -> int:
+    """Días laborales entre dos fechas, contando `start` EXCLUSIVE y `end` INCLUSIVE.
+
+    Es la convención bajo la cual "de lunes a lunes son 6 días, no 8": de los 7
+    días de calendario entre un lunes y el lunes siguiente (ambos incluidos),
+    6 son laborales con un calendario lunes-a-sábado. Con `start == end` da 0
+    — el peso de una tarea de un solo día lo cubre `max(1, ...)` en el llamador,
+    no esta función.
+
+    `end < start` devuelve el mismo conteo en negativo: lo usa el indicador de
+    desvío de fecha (fin proyectado vs. fin esperado), donde la proyección
+    puede caer antes de lo esperado.
+    """
+    if end == start:
+        return 0
+    if end < start:
+        return -working_days_between(calendar, end, start)
+    n = 0
+    d = start
+    while d < end:
+        d += timedelta(days=1)
+        if is_working_day(calendar, d):
+            n += 1
+    return n
+
+
 # ── Argentine national holidays ───────────────────────────────────────────────
 
 _AR_HOLIDAYS_2025 = [

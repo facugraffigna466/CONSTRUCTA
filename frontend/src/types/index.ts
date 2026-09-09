@@ -23,6 +23,67 @@ export interface Obra {
   updated_at: string;
   completed_tasks: number;
   total_tasks: number;
+  // Avance ponderado por duración (I-01 del dashboard de indicadores) — la
+  // misma cuenta que usa el detalle de obra, para que portfolio y detalle
+  // nunca muestren un % distinto para la misma obra. null = no calculable
+  // (obra sin tareas), nunca 0 como sustituto.
+  real_percent: number | null;
+}
+
+export interface ObraDashboardProgress {
+  real_percent: number | null;
+  planned_percent: number | null;
+  spi: number | null;
+  spi_confidence: "high" | "low" | null;
+  days_behind: number | null;
+  tasks_total: number;
+  tasks_completed: number;
+  available: boolean;
+  reason: string | null;
+}
+
+export interface ObraDashboardForecast {
+  projected_end_date: string | null;
+  expected_end_date: string | null;
+  deviation_working_days: number | null;
+  method: string;
+  available: boolean;
+  reason: string | null;
+  capped: boolean;
+}
+
+export interface ObraDashboardAlerts {
+  critica: number;
+  alta: number;
+  media: number;
+  baja: number;
+  oldest_critical_age_days: number | null;
+}
+
+export interface ObraDashboardBottleneck {
+  available: boolean;
+  task_id: number | null;
+  title: string | null;
+  blocked_task_count: number | null;
+  status: string | null;
+  overdue_since: string | null;
+}
+
+export interface ObraDashboardDataQuality {
+  tasks_without_dates: number;
+  tasks_without_responsible: number;
+  tasks_without_dependencies: number;
+  milestones_without_dates: number;
+}
+
+export interface ObraDashboard {
+  computed_at: string;
+  as_of: string;
+  progress: ObraDashboardProgress;
+  forecast: ObraDashboardForecast;
+  alerts: ObraDashboardAlerts;
+  bottleneck: ObraDashboardBottleneck;
+  data_quality: ObraDashboardDataQuality;
 }
 
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";

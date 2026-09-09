@@ -83,5 +83,10 @@ class ObraSummary(BaseModel):
     client_phone: str | None = None
     completed_tasks: int = 0
     total_tasks: int = 0
+    # Avance ponderado por duración (docs/features/dashboard-indicadores-obra.md
+    # I-01) — reemplaza a completed_tasks/total_tasks como fuente del % que se
+    # muestra en el portfolio. None cuando no hay tareas que ponderar (D-02: el
+    # portfolio y el detalle de obra usan el mismo cálculo para no contradecirse).
+    real_percent: float | None = None
 
     model_config = {"from_attributes": True}

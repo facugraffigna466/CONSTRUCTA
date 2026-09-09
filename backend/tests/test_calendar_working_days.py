@@ -10,7 +10,7 @@ la volvía imposible de probar.
 from datetime import date
 
 from app.models.calendar import CalendarException, WorkingCalendar
-from app.services.calendar_service import add_working_days
+from app.services.calendar_service import add_working_days, working_days_between
 
 
 def _cal(working_days: int = 0b0011111, exceptions=None) -> WorkingCalendar:
@@ -62,3 +62,35 @@ def test_calendario_con_sabado_cuenta_el_sabado():
     Deja escrito que el resultado depende del calendario, no del almanaque."""
     lun_a_sab = _cal(working_days=0b0111111)
     assert add_working_days(lun_a_sab, date(2026, 5, 29), 2) == date(2026, 6, 1)
+
+
+def test_working_days_between_lunes_a_lunes_son_seis():
+    """El ejemplo literal del diseño de indicadores: lunes a lunes son 6 días
+    laborales, no 8 (calendario lunes-a-sábado)."""
+    lun_a_sab = _cal(working_days=0b0111111)
+    lunes = date(2026, 6, 1)
+    lunes_siguiente = date(2026, 6, 8)
+    assert working_days_between(lun_a_sab, lunes, lunes_siguiente) == 6
+
+
+def test_working_days_between_mismo_dia_es_cero():
+    lunes = date(2026, 6, 1)
+    assert working_days_between(_cal(), lunes, lunes) == 0
+
+
+def test_working_days_between_fin_antes_de_inicio_es_negativo_simetrico():
+    lunes = date(2026, 6, 1)
+    lunes_siguiente = date(2026, 6, 8)
+    lun_a_sab = _cal(working_days=0b0111111)
+    adelante = working_days_between(lun_a_sab, lunes, lunes_siguiente)
+    atras = working_days_between(lun_a_sab, lunes_siguiente, lunes)
+    assert atras == -adelante
+
+
+def test_working_days_between_saltea_feriado_de_la_obra():
+    feriado = CalendarException(date=date(2026, 6, 2), is_working=False, label="Feriado")
+    lun_a_sab = _cal(working_days=0b0111111, exceptions=[feriado])
+    lunes = date(2026, 6, 1)
+    lunes_siguiente = date(2026, 6, 8)
+    # Sin feriado darían 6 (mar,mié,jue,vie,sáb,lun); con el feriado del martes, 5.
+    assert working_days_between(lun_a_sab, lunes, lunes_siguiente) == 5

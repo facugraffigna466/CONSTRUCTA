@@ -188,7 +188,7 @@ class StaffDigestService:
             if not (bloqueadas or vencidas or esta_semana):
                 continue    # esta obra no tiene nada para contar
 
-            cuello = await self._cuello_de_botella(bloqueadas + vencidas)
+            cuello = await self.cuello_de_botella(bloqueadas + vencidas)
             resumen.append({
                 "obra": obra.name,
                 "bloqueadas": len(bloqueadas),
@@ -200,11 +200,14 @@ class StaffDigestService:
 
         return {"obras": resumen}
 
-    async def _cuello_de_botella(self, candidatas: list[Task]) -> dict[str, Any] | None:
+    async def cuello_de_botella(self, candidatas: list[Task]) -> dict[str, Any] | None:
         """La tarea trabada que más tareas frena. None si ninguna frena a otra.
 
         Se mide por dependientes directas: una tarea atrasada que bloquea a tres
         vale mucho más que una aislada con el mismo atraso.
+
+        Público (no `_privado`): lo reusa también `ObraDashboardService` para el
+        indicador I-10 del dashboard de obra, no solo el digest semanal.
         """
         mejor = None
         for t in candidatas:
@@ -215,6 +218,7 @@ class StaffDigestService:
             n = len({d for d in dependientes if d is not None})
             if n and (mejor is None or n > mejor["frena"]):
                 mejor = {
+                    "task_id": t.id,
                     "tarea": t.title,
                     "frena": n,
                     "estado": t.status.value,

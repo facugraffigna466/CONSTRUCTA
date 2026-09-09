@@ -6,14 +6,16 @@ import {
 } from "lucide-react";
 import { GanttTimeline } from "./GanttTimeline";
 import { HistorialPanel } from "./HistorialPanel";
-import type { Alert, HistorialEvento, Responsible, Task, TaskStatus } from "../types";
+import type { Alert, HistorialEvento, ObraDashboard, Responsible, Task, TaskStatus } from "../types";
+import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_PALETTE } from "../lib/alertMeta";
+import { forecastReasonLabel, spiColor, spiLabel } from "../lib/dashboardMeta";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const TODAY = new Date().toISOString().slice(0, 10);
-
-function isActive(task: Task) {
-  return task.status !== "completada" && task.status !== "cancelada";
+function formatDate(d: string | null): string {
+  if (!d) return "—";
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y}`;
 }
 
 // ─── Progress ring ────────────────────────────────────────────────────────────
@@ -58,6 +60,8 @@ function ProgressRing({ pct }: { pct: number }) {
 interface ResumenTabProps {
   /** taskId → propuestas de la IA sin revisar sobre esa tarea. */
   suggestionCounts?: Map<number, number>;
+  /** null mientras carga o si el fetch falló — la banda de KPIs entra en estado "cargando". */
+  dashboard: ObraDashboard | null;
   tasks: Task[];
   alerts: Alert[];
   historial: HistorialEvento[];
@@ -79,6 +83,7 @@ interface ResumenTabProps {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ResumenTab({
+  dashboard,
   tasks,
   alerts,
   historial,
@@ -99,17 +104,8 @@ export function ResumenTab({
   const [draggingId, setDraggingId] = useState<number | null>(null);
 
   // ── Derived metrics ──────────────────────────────────────────────────────────
-  const total          = tasks.length;
-  const activeCount    = tasks.filter(isActive).length;
-  const completedCount = tasks.filter((t) => t.status === "completada").length;
-  const unreadAlerts   = alerts.filter((a) => !a.is_read);
-  const unreadCount    = unreadAlerts.length;
-  const nonCancelled = tasks.filter((t) => t.status !== "cancelada");
-  const avgProgress  = nonCancelled.length === 0
-    ? 0
-    : Math.round((completedCount / nonCancelled.length) * 100);
-
-  const tasksWithoutDates = tasks.filter((t) => !t.start_date && !t.due_date);
+  const total = tasks.length;
+  const unreadAlerts = alerts.filter((a) => !a.is_read);
 
   const topAlert =
     unreadAlerts.find((a) => !a.task_id) ??
@@ -119,19 +115,7 @@ export function ResumenTab({
 
   void topAlert;
 
-  // ── Critical tasks ───────────────────────────────────────────────────────────
-  const seen = new Set<number>();
-  const criticalTasks: Task[] = [];
-  for (const t of [
-    ...tasks.filter((t) => t.status === "bloqueada"),
-    ...tasks.filter((t) => isActive(t) && !!t.due_date && t.due_date < TODAY && t.status !== "bloqueada"),
-    ...tasks.filter((t) => isActive(t) && !t.responsible_id && t.status !== "bloqueada" && !(t.due_date && t.due_date < TODAY)),
-  ]) {
-    if (!seen.has(t.id) && criticalTasks.length < 3) {
-      seen.add(t.id);
-      criticalTasks.push(t);
-    }
-  }
+  const tasksWithoutDates = tasks.filter((t) => !t.start_date && !t.due_date);
 
   // ── Distribution bars by status ──────────────────────────────────────────────
   const statusDist = total === 0 ? null : {
@@ -141,10 +125,16 @@ export function ResumenTab({
     bloqueada:   tasks.filter(t => t.status === "bloqueada").length   / total * 100,
   };
 
-  const avgProgressLabel =
-    avgProgress === 0   ? "Sin tareas aún" :
-    avgProgress === 100 ? "Proyecto completado" :
-                          `Promedio de ${total} tareas`;
+  // ── Dashboard-derived (I-01/I-02/I-03/I-04/I-09/I-10) ────────────────────────
+  const progress = dashboard?.progress ?? null;
+  const forecast = dashboard?.forecast ?? null;
+  const dashAlerts = dashboard?.alerts ?? null;
+  const bottleneck = dashboard?.bottleneck ?? null;
+  const bottleneckTask = bottleneck?.task_id
+    ? tasks.find((t) => t.id === bottleneck.task_id) ?? null
+    : null;
+  const ringPct = progress?.available ? Math.round(progress.real_percent ?? 0) : 0;
+  const totalCriticalAlerts = dashAlerts?.critica ?? 0;
 
   const kpiTileStyle: CSSProperties = {
     background: "#fff",
@@ -181,28 +171,60 @@ export function ResumenTab({
         </div>
       )}
 
-      {/* ── 5-tile KPI strip ── */}
+      {/* ── I-10: banner de cuello de botella ── */}
+      {bottleneck?.available && (
+        <button
+          onClick={() => (bottleneckTask ? onEditTask(bottleneckTask) : onViewTareas())}
+          style={{
+            display: "flex", alignItems: "center", gap: 12, width: "100%",
+            background: "#FFF1E9", border: "1px solid #FDBFA0", borderRadius: 14,
+            padding: "14px 18px", cursor: "pointer", textAlign: "left",
+          }}
+        >
+          <AlertTriangle style={{ width: 18, height: 18, color: "#C4551C", flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: 13.5, color: "#1A2329" }}>
+            <b>«{bottleneck.title}»</b> está frenando {bottleneck.blocked_task_count} tarea{bottleneck.blocked_task_count === 1 ? "" : "s"}
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 600, color: "#C4551C" }}>
+            Ver <ArrowRight style={{ width: 12, height: 12 }} />
+          </span>
+        </button>
+      )}
+
+      {/* ── I-01/I-02/I-03/I-04/I-09: banda de KPIs ── */}
       <div style={{
         display: "grid",
-        gridTemplateColumns: "1.4fr 1fr 1fr 1fr 1fr",
+        gridTemplateColumns: "1.4fr 1fr 1fr 1fr",
         gap: 14,
       }}>
 
-        {/* ── KPI 1: Avance general (hero) ── */}
+        {/* ── Avance (I-01, con I-02 como referencia) ── */}
         <div style={kpiTileStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={kpiLabelStyle}>Avance general</span>
-            <div style={kpiIconStyle("#FFF1E9", "#FF6B35")}>
+            <span style={kpiLabelStyle}>Avance</span>
+            <div
+              style={kpiIconStyle("#FFF1E9", "#FF6B35")}
+              title="Avance ponderado por la duración planificada de cada tarea: una tarea de 20 días pesa 20 veces más que una de 1 día. Incluye el avance parcial de las tareas en curso."
+            >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M1 8h3l2-5 3 10 2-5 4-1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <ProgressRing pct={avgProgress} />
+            <ProgressRing pct={progress?.available ? ringPct : 0} />
             <div>
-              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "#1A2329", lineHeight: 1 }}>
-                {total} tareas
-              </div>
-              <div style={{ fontSize: 11.5, color: "#5B6770", marginTop: 4 }}>{avgProgressLabel}</div>
+              {progress?.available ? (
+                <>
+                  <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "#1A2329", lineHeight: 1 }}>
+                    {progress.tasks_completed} de {progress.tasks_total}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#5B6770", marginTop: 4 }}>
+                    tareas completas
+                    {progress.planned_percent !== null && ` · plan: ${Math.round(progress.planned_percent)}%`}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 11.5, color: "#5B6770" }}>Todavía no hay tareas cargadas</div>
+              )}
             </div>
           </div>
           {statusDist && (
@@ -215,72 +237,76 @@ export function ResumenTab({
           )}
         </div>
 
-        {/* ── KPI 2: Tareas activas ── */}
+        {/* ── SPI (I-03) ── */}
         <div style={kpiTileStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={kpiLabelStyle}>Tareas activas</span>
+            <span style={kpiLabelStyle}>SPI</span>
             <div style={kpiIconStyle("#E5EEFB", "#2A6FDB")}>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M8 4.5V8l2.4 1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>
             </div>
           </div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: "#1A2329", lineHeight: 1 }}>
-            {String(activeCount).padStart(2, "0")}
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: spiColor(progress?.spi ?? null, progress?.spi_confidence ?? null), lineHeight: 1 }}>
+            {progress?.spi != null ? progress.spi.toFixed(2) : "—"}
           </div>
-          <div style={{ fontSize: 11.5, color: "#5B6770" }}>de <b style={{ color: "#1A2329" }}>{total}</b> en total</div>
+          <div style={{ fontSize: 11.5, color: "#5B6770" }}>
+            {spiLabel(progress?.spi ?? null, progress?.spi_confidence ?? null)}
+            {progress?.days_behind != null && progress.days_behind !== 0 && (
+              <> · {progress.days_behind > 0
+                ? `${progress.days_behind} día${progress.days_behind === 1 ? "" : "s"} atrás`
+                : `${Math.abs(progress.days_behind)} día${Math.abs(progress.days_behind) === 1 ? "" : "s"} adelante`}</>
+            )}
+          </div>
         </div>
 
-        {/* ── KPI 3: Completadas ── */}
+        {/* ── Fin previsto (I-04) ── */}
         <div style={kpiTileStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={kpiLabelStyle}>Completadas</span>
+            <span style={kpiLabelStyle}>Fin previsto</span>
             <div style={kpiIconStyle("#E4F3EC", "#1F8A5B")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M5 8.2l2 2 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M5 1.5v3M11 1.5v3M2.5 6.5h11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
             </div>
           </div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: "#1F8A5B", lineHeight: 1 }}>
-            {String(completedCount).padStart(2, "0")}
-          </div>
-          <div style={{ fontSize: 11.5, color: "#5B6770" }}>de <b style={{ color: "#1A2329" }}>{total}</b> en total</div>
+          {forecast?.available ? (
+            <>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "#1A2329", lineHeight: 1 }}>
+                {formatDate(forecast.projected_end_date)}
+              </div>
+              <div style={{ fontSize: 11.5, color: (forecast.deviation_working_days ?? 0) > 0 ? "#D03A3A" : "#1F8A5B" }}>
+                {forecast.deviation_working_days == null
+                  ? "Sin fecha comprometida para comparar"
+                  : forecast.deviation_working_days === 0
+                  ? "En fecha"
+                  : `${forecast.deviation_working_days > 0 ? "+" : ""}${forecast.deviation_working_days} días vs. lo previsto`}
+                {forecast.capped && " (estimación imprecisa)"}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 11.5, color: "#5B6770" }}>{forecastReasonLabel(forecast?.reason ?? null)}</div>
+          )}
         </div>
 
-        {/* ── KPI 4: Alertas activas ── */}
+        {/* ── Alertas por severidad (I-09) ── */}
         <div style={kpiTileStyle}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={kpiLabelStyle}>Alertas activas</span>
-            <div style={kpiIconStyle("#FDF1DE", "#C97D0E")}>
+            <span style={kpiLabelStyle}>Alertas</span>
+            <div style={kpiIconStyle(SEVERITY_PALETTE.critica.bg, SEVERITY_PALETTE.critica.color)}>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2.5L14 13H2L8 2.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none"/><path d="M8 6.5V9.5M8 11.4v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
             </div>
           </div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: unreadCount > 0 ? "#C97D0E" : "#1A2329", lineHeight: 1 }}>
-            {String(unreadCount).padStart(2, "0")}
+          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: totalCriticalAlerts > 0 ? SEVERITY_PALETTE.critica.color : "#1A2329", lineHeight: 1 }}>
+            {String(totalCriticalAlerts).padStart(2, "0")}
           </div>
-          {unreadCount > 0 ? (
-            <button onClick={onViewAlerts} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 600, color: "#C97D0E", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              Ver alertas <ArrowRight style={{ width: 11, height: 11 }} />
-            </button>
-          ) : (
-            <div style={{ fontSize: 11.5, color: "#1F8A5B" }}>Sin alertas</div>
-          )}
-        </div>
-
-        {/* ── KPI 5: Tareas críticas ── */}
-        <div style={kpiTileStyle}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={kpiLabelStyle}>Críticas</span>
-            <div style={kpiIconStyle("#FCE5E5", "#D03A3A")}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 14c2.5 0 4.5-1.7 4.5-4.4 0-2-1.6-2.9-2.5-3.6.5-2 0-3.5-2-4 .5 2.5-2 4-3.7 5.4-.8.7-1.3 1.6-1.3 2.7C3 12.4 5.4 14 8 14z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none"/></svg>
+          <div style={{ fontSize: 11.5, color: "#5B6770" }}>
+            {SEVERITY_ORDER.filter((s) => s !== "critica").map((s) => `${dashAlerts?.[s] ?? 0} ${SEVERITY_LABEL[s].toLowerCase()}`).join(" · ")}
+          </div>
+          {dashAlerts?.oldest_critical_age_days != null && dashAlerts.oldest_critical_age_days > 2 && (
+            <div style={{ fontSize: 11, fontWeight: 600, color: SEVERITY_PALETTE.critica.color }}>
+              la más vieja: hace {dashAlerts.oldest_critical_age_days} días
             </div>
-          </div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: criticalTasks.length > 0 ? "#D03A3A" : "#1A2329", lineHeight: 1 }}>
-            {String(criticalTasks.length).padStart(2, "0")}
-          </div>
-          {criticalTasks.length > 0 ? (
-            <button onClick={onViewTareas} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 600, color: "#D03A3A", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-              Ver tareas <ArrowRight style={{ width: 11, height: 11 }} />
-            </button>
-          ) : (
-            <div style={{ fontSize: 11.5, color: "#1F8A5B" }}>Sin tareas críticas</div>
           )}
+          <button onClick={onViewAlerts} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 600, color: "#FF6B35", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
+            Ver alertas <ArrowRight style={{ width: 11, height: 11 }} />
+          </button>
         </div>
       </div>
 

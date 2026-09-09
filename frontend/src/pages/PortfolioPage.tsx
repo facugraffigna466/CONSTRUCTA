@@ -78,7 +78,9 @@ function ObraCard({ obra, onSelect, isPinned, onTogglePin, members, onStatusChan
   const [imgError, setImgError] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const pill      = STATUS_PILL[obra.status];
-  const pct       = obra.total_tasks === 0 ? 0 : Math.round((obra.completed_tasks / obra.total_tasks) * 100);
+  // Avance ponderado por duración (D-02): mismo cálculo que el detalle de
+  // obra, para que portfolio y detalle nunca muestren un % distinto.
+  const pct       = obra.real_percent !== null ? Math.round(obra.real_percent) : null;
   const barColor  = PROGRESS_COLOR[obra.status];
   const days      = daysRemaining(obra.expected_end_date);
   const nameAbbr  = obra.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
@@ -213,10 +215,10 @@ function ObraCard({ obra, onSelect, isPinned, onTogglePin, members, onStatusChan
         {/* Progress */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: "auto", paddingTop: 8 }}>
           <div style={{ flex: 1, height: 6, background: "#F0F1EF", borderRadius: 99, overflow: "hidden" }}>
-            <div style={{ height: "100%", borderRadius: 99, background: barColor, width: `${pct}%`, transition: "width 0.6s" }} />
+            <div style={{ height: "100%", borderRadius: 99, background: barColor, width: `${pct ?? 0}%`, transition: "width 0.6s" }} />
           </div>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11.5, color: "#5B6770", minWidth: 36, textAlign: "right" }}>
-            {pct}%
+            {pct !== null ? `${pct}%` : "—"}
           </span>
         </div>
       </div>
@@ -532,10 +534,11 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
                 icon={<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M8 4.5V8l2.4 1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>}
                 iconBg="#E5EEFB" iconColor="#2A6FDB"
                 delta={(() => {
-                  const conTareas = obras.filter(o => o.status === "en_progreso" && o.total_tasks > 0);
+                  // D-02: mismo real_percent que el detalle de obra, no completed_tasks/total_tasks.
+                  const conTareas = obras.filter(o => o.status === "en_progreso" && o.real_percent !== null);
                   // 6.5: leyenda correcta cuando no hay ninguna obra en progreso.
                   if (conTareas.length === 0) return <>sin obras en progreso</>;
-                  const avg = Math.round(conTareas.reduce((a, o) => a + o.completed_tasks / o.total_tasks, 0) / conTareas.length * 100);
+                  const avg = Math.round(conTareas.reduce((a, o) => a + (o.real_percent ?? 0), 0) / conTareas.length);
                   return <>avance medio <strong style={{ color: "#2A6FDB" }}>{avg}%</strong></>;
                 })()}
                 sparkColor="#2A6FDB"
