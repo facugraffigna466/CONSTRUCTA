@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CalendarCheck, CalendarOff } from "lucide-react";
 import { saveBaseline } from "../api/baseline";
 import {
   fetchCalendar,
@@ -403,9 +404,14 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
                             padding: "5px 8px", borderRadius: 7,
                             background: colors.bg, border: `1px solid ${colors.border}`,
                           }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: colors.text, flexShrink: 0 }}>
-                              {exc.is_working ? "✅" : "🚫"}
-                            </span>
+                            {/* Ícono monocromo en vez de ✅/🚫: el emoji lo dibuja
+                                el sistema operativo, así que ignora `colors.text`
+                                —el código ya distingue laborable de no laborable
+                                por color— y mete verde y rojo saturados en una
+                                interfaz de trazo fino. */}
+                            {exc.is_working
+                              ? <CalendarCheck style={{ width: 12, height: 12, color: colors.text, flexShrink: 0 }} />
+                              : <CalendarOff style={{ width: 12, height: 12, color: colors.text, flexShrink: 0 }} />}
                             <span style={{ fontSize: 11, fontWeight: 600, color: "#5B6770", flexShrink: 0 }}>
                               {fmtDateLabel(exc.date)}
                             </span>

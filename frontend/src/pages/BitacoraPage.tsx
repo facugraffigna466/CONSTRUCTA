@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ClipboardList,
-  Loader2, Mic, MicOff, RefreshCw, Search, Sparkles, Square, Trash2, Upload, X,
+  Loader2, Mic, MicOff, PenLine, RefreshCw, Search, Sparkles, Square, Trash2, Upload, X,
 } from "lucide-react";
 import {
   assignObra, createAudioEntry, createTextEntry, deleteEntry,
@@ -476,6 +476,7 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
               key={m}
               onClick={() => setMode(m)}
               style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7,
                 padding: "8px 20px", borderRadius: 99, fontSize: 12.5, fontWeight: 700,
                 letterSpacing: "0.01em", minWidth: 96,
                 background: mode === m ? "#1A2329" : "transparent",
@@ -484,7 +485,14 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
                 transition: "background .15s ease, color .15s ease",
               }}
             >
-              {m === "audio" ? "🎙️ Audio" : "✍️ Texto"}
+              {/* Íconos de lucide y no emoji: los emoji los dibuja el sistema
+                  operativo, así que no heredan el color del pill (quedaban a
+                  todo color sobre el fondo oscuro) ni el grosor de trazo del
+                  resto de la interfaz, y cambian de forma entre plataformas. */}
+              {m === "audio"
+                ? <Mic style={{ width: 14, height: 14 }} />
+                : <PenLine style={{ width: 14, height: 14 }} />}
+              {m === "audio" ? "Audio" : "Texto"}
             </button>
           ))}
         </div>
