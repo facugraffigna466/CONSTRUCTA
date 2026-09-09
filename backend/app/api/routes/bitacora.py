@@ -36,9 +36,9 @@ from app.models.user import User
 from app.schemas.bitacora import (
     BitacoraAssignObra,
     BitacoraEntryRead,
-    BitacoraSuggestionEdit,
     BitacoraTextCreate,
 )
+from app.schemas.suggestion import SuggestionEdit
 from app.services.bitacora_service import BitacoraService
 
 router = APIRouter(tags=["bitacora"])
@@ -192,7 +192,10 @@ async def list_entries(
 async def pending_count(
     db: DbSession, current_user: CurrentUser, obra_id: int | None = None
 ) -> dict[str, int]:
-    """Sugerencias sin revisar (Sí/No pendiente) de una obra — para el badge del menú."""
+    """Sugerencias sin revisar (Sí/No pendiente) de una obra — para el badge del menú.
+
+    Alias histórico de `GET /suggestions/pending-count`, que es el canónico
+    desde que la sugerencia dejó de ser un objeto de la bitácora."""
     if obra_id is not None:
         await assert_obra_access(db, current_user, obra_id, ObraUserRoleType.SOLO_LECTURA)
     count = await BitacoraService(db).pending_suggestions_count(
@@ -258,7 +261,7 @@ async def reprocess(
     # procesada reemplaza `suggestions` entero con applied=False para todas —
     # si alguna ya se había aplicado (creó/modificó una tarea real), se pierde
     # el registro y un segundo "aplicar" duplicaría la acción.
-    if entry.status == "procesado" and any(s.get("applied") for s in (entry.suggestions or [])):
+    if entry.status == "procesado" and any(s.applied for s in entry.suggestion_rows):
         raise UnprocessableError(
             "Esta nota ya tiene sugerencias aplicadas — reprocesarla las reemplazaría sin "
             "dejar rastro de lo ya hecho. Descartá primero las que falten o pedile a un "
@@ -300,6 +303,7 @@ async def assign_obra(
     await assert_obra_access(db, current_user, data.obra_id, ObraUserRoleType.JEFE_OBRA)
     entry.obra_id = data.obra_id
     entry.tenant_id = current_user.tenant_id
+    await service.reassign_obra(entry, data.obra_id, current_user.tenant_id)
     # Re-analizar con el contexto de la obra correcta
     if entry.transcript:
         entry.status = "pendiente_analisis"
@@ -314,7 +318,7 @@ async def apply_suggestion(
     index: int,
     db: DbSession,
     current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.COLABORADOR))],
-    edits: BitacoraSuggestionEdit | None = None,
+    edits: SuggestionEdit | None = None,
 ):
     actor = {
         "id": current_user.id,
@@ -338,7 +342,7 @@ async def dismiss_suggestion(
     current_user: Annotated[User, Depends(require_bitacora_obra_role(ObraUserRoleType.COLABORADOR))],
 ):
     service = BitacoraService(db)
-    entry = await service.dismiss_suggestion(entry_id, index)
+    entry = await service.dismiss_suggestion(entry_id, index, current_user.id)
     return await _to_read(entry, db, current_user.tenant_id)
 
 

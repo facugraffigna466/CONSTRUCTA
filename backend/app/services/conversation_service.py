@@ -38,7 +38,11 @@ from app.repositories.settings import SettingsRepository
 from app.repositories.task import TaskRepository
 from app.schemas.task import TaskStatusUpdate
 from app.services.message_templates import (
+    BLOCK_REASONS,
     build_already_in_status_message,
+    build_block_reason_confirmation,
+    build_block_reason_message,
+    build_block_reason_skipped,
     build_cancelled_message,
     build_confirmation_message,
     build_no_tasks_message,
@@ -277,6 +281,13 @@ class ConversationService:
 
         if is_expired or conv.step == ConversationStep.IDLE:
             return await self._start_fresh(responsible)
+
+        # Va ANTES del cancel global a propósito: en este paso la tarea ya quedó
+        # bloqueada, así que "X" no cancela nada — solo saltea la aclaración. El
+        # mensaje genérico ("conversación cancelada") daría a entender que el
+        # reporte no se registró, que es justo lo contrario de lo que pasó.
+        if conv.step == ConversationStep.AWAIT_BLOCK_REASON:
+            return await self._handle_block_reason(responsible, conv, body)
 
         # Global cancel — reset to idle from any step
         if _is_cancel(body):
@@ -753,6 +764,59 @@ class ConversationService:
 
     # ── action helpers ─────────────────────────────────────────────────────────
 
+    async def _handle_block_reason(
+        self,
+        responsible: Responsible,
+        conv: ConversationSession,
+        body: str | None,
+    ) -> tuple[str, int | None]:
+        """Recibe el motivo del bloqueo y lo hace llegar a donde el jefe mira.
+
+        El motivo va a dos lugares: al historial de la obra (registro
+        permanente) y al mensaje de la alerta que ya se había emitido, para que
+        el jefe lo vea sin tener que abrir nada más. La tarea ya está bloqueada
+        desde el paso anterior: acá no se cambia ningún estado.
+        """
+        task_id = conv.selected_task_id
+        opts = conv.task_options or []
+        title = (opts[0].get("title") if opts else None) or "la tarea"
+
+        # Salida en un tap: si no quiere aclarar, el bloqueo igual quedó hecho.
+        if _is_cancel(body) or _is_back(body):
+            await self.session_repo.upsert(responsible.id, ConversationStep.IDLE)
+            return build_block_reason_skipped(title), task_id
+
+        idx = _parse_option(body, max_val=len(BLOCK_REASONS))
+        if idx is None:
+            return build_block_reason_message(responsible.full_name, title), None
+
+        code, label = BLOCK_REASONS[idx - 1]
+        await self.session_repo.upsert(responsible.id, ConversationStep.IDLE)
+
+        if task_id is None:
+            return build_block_reason_skipped(title), None
+
+        task = await self.task_repo.get(task_id)
+        if task is None:
+            return build_block_reason_skipped(title), None
+
+        await self.historial.log(
+            obra_id=task.obra_id,
+            task_id=task_id,
+            event_type="task_block_reason",
+            description=f"Motivo del bloqueo de «{task.title}»: {label}",
+            payload={"reason_code": code, "reason_label": label,
+                     "responsible_id": responsible.id},
+            triggered_by="chatbot",
+        )
+        await self.alert_repo.append_reason_to_open_alert(
+            task_id, AlertType.TASK_BLOCKED, label
+        )
+        return (
+            build_block_reason_confirmation(responsible.full_name, title, label),
+            task_id,
+        )
+
     async def _apply_en_curso(
         self, responsible: Responsible, task_id: int | None, opt: dict | None
     ) -> str:
@@ -807,4 +871,14 @@ class ConversationService:
             return build_already_in_status_message(responsible.full_name, title, "bloqueada")
 
         await self.task_service.force_block(task_id, triggered_by="chatbot")
-        return build_confirmation_message(responsible.full_name, title, "bloqueada")
+        # El bloqueo ya quedó aplicado y la alerta ya salió: el reporte de campo
+        # no se pierde aunque la persona no conteste lo que sigue. Recién ahora
+        # se le pregunta el motivo, que es el dato que le falta al jefe para
+        # decidir (comprar, llamar al proveedor, reprogramar).
+        await self.session_repo.upsert(
+            responsible.id,
+            ConversationStep.AWAIT_BLOCK_REASON,
+            selected_task_id=task_id,
+            task_options=[{"id": task_id, "title": title}],
+        )
+        return build_block_reason_message(responsible.full_name, title)

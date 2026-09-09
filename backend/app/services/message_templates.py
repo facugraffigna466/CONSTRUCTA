@@ -201,6 +201,56 @@ def build_reschedule_request_message(
     )
 
 
+# ── Motivo del bloqueo ────────────────────────────────────────────────────────
+#
+# El menú informaba QUÉ pasó (la tarea está bloqueada) pero nunca POR QUÉ, y el
+# motivo es el dato que decide si el jefe manda a comprar, llama al proveedor o
+# reprograma. Sin él la alerta obligaba a levantar el teléfono — justamente la
+# comunicación informal que el sistema existe para eliminar.
+#
+# Se resuelve con una pregunta numerada más, no con texto libre: el responsable
+# está en obra y responde con una mano.
+BLOCK_REASONS: list[tuple[str, str]] = [
+    ("falta_material", "Falta material"),
+    ("falta_personal", "Falta personal"),
+    ("clima", "Clima"),
+    ("espera_tarea", "Espera otra tarea"),
+    ("otro", "Otro motivo"),
+]
+
+
+def block_reason_label(code: str) -> str:
+    return dict(BLOCK_REASONS).get(code, code)
+
+
+def build_block_reason_message(name: str, task_name: str) -> str:
+    opciones = "\n".join(
+        f"{_n(i)} {label}" for i, (_, label) in enumerate(BLOCK_REASONS, start=1)
+    )
+    return (
+        f"✅ Listo {name}, «{task_name}» quedó bloqueada.\n\n"
+        f"¿Por qué?\n\n"
+        f"{opciones}\n\n"
+        f"Escribí el número. Si preferís no aclarar, escribí X."
+    )
+
+
+def build_block_reason_confirmation(name: str, task_name: str, reason_label: str) -> str:
+    return (
+        f"✅ Gracias {name}.\n\n"
+        f"Tarea: {task_name}\n"
+        f"Motivo: {reason_label}\n\n"
+        f"El jefe de obra ya lo ve en Constructa."
+    )
+
+
+def build_block_reason_skipped(task_name: str) -> str:
+    return (
+        f"Listo. «{task_name}» queda bloqueada sin motivo cargado.\n"
+        f"Si querés reportar algo más, escribinos de nuevo."
+    )
+
+
 def build_confirmation_message(name: str, task_name: str, status: str) -> str:
     label = STATUS_LABELS.get(status, status)
     return (

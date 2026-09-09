@@ -33,7 +33,6 @@ class BitacoraEntry(Base):
     transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_points: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    suggestions: Mapped[list | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(
         String(30), default="pendiente_transcripcion", nullable=False
     )
@@ -49,3 +48,13 @@ class BitacoraEntry(Base):
 
     obra: Mapped["Obra | None"] = relationship("Obra")
     responsible: Mapped["Responsible | None"] = relationship("Responsible")
+    # Las sugerencias dejaron de ser un blob JSON de esta fila y pasaron a ser
+    # entidad propia (migración 0072). `lazy="selectin"` porque en async no hay
+    # lazy load implícito y todo lector de la entrada las necesita.
+    suggestion_rows: Mapped[list["Suggestion"]] = relationship(
+        "Suggestion",
+        back_populates="source_entry",
+        cascade="all, delete-orphan",
+        order_by="Suggestion.order_index",
+        lazy="selectin",
+    )

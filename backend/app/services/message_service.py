@@ -54,6 +54,23 @@ def _sanitize_for_caption(text: str, max_len: int = 120) -> str:
     cleaned = " ".join(cleaned.split())
     return cleaned[:max_len].strip()
 
+def _acciones_sugeridas(entry) -> int:
+    """Cuántas de las sugerencias de la nota proponen tocar el plan.
+
+    Las notas quedan afuera: no cambian nada, solo dejan constancia, y
+    anunciarlas como "acciones sugeridas" en el WhatsApp de vuelta prometería
+    un cambio que no va a ocurrir.
+
+    Desde la migración 0072 las sugerencias son filas (`suggestion_rows`) y no
+    un blob JSON en la entrada. La relación es `lazy="selectin"`, así que ya
+    viene cargada; y `AsyncSessionLocal` usa `expire_on_commit=False`, así que
+    sigue siendo legible después del commit de la tarea de fondo.
+    """
+    from app.models.suggestion import SuggestionType
+
+    return sum(1 for s in entry.suggestion_rows if s.type != SuggestionType.NOTE)
+
+
 class MessageService:
     def __init__(self, session: AsyncSession) -> None:
         self.db = session
@@ -635,10 +652,15 @@ class MessageService:
         from app.services.bitacora_service import BitacoraService
 
         if not is_staff:
+            # Agarró la herramienta equivocada. Mandarlo con su jefe lo deja sin
+            # salida y pierde el reporte; mostrarle acá mismo el menú que sí
+            # puede usar refuerza el canal que el producto quiere para él.
+            from app.services.conversation_service import ConversationService
+
+            menu, _ = await ConversationService(self.db).handle_inbound(sender, "menu")
             return (
-                "La bitácora por audio es solo para el equipo administrativo. "
-                "Si necesitás dejar constancia de una novedad, avisale a tu "
-                "jefe de obra."
+                "🎙️ La bitácora por audio es del equipo administrativo, pero podés "
+                "reportar lo que pasó desde acá mismo.\n\n" + menu
             )
 
         # 1. Descargar el audio de Twilio (basic auth SID:token).
@@ -746,7 +768,7 @@ class MessageService:
                         # Notificar al usuario por WhatsApp con el resultado
                         from app.integrations.twilio.client import send_whatsapp_message
                         if bg_entry.status == "procesado":
-                            n = len([s for s in (bg_entry.suggestions or []) if s.get("type") != "note"])
+                            n = _acciones_sugeridas(bg_entry)
                             msg = f"📋 Nota procesada. Resumen: {bg_entry.summary}"
                             if n:
                                 msg += (
@@ -791,7 +813,7 @@ class MessageService:
 
     def _bitacora_reply(self, entry) -> str:
         if entry.status == "procesado":
-            n = len([s for s in (entry.suggestions or []) if s.get("type") != "note"])
+            n = _acciones_sugeridas(entry)
             base = f"📋 Nota registrada en la bitácora{' de la obra' if entry.obra_id else ''}. Resumen: {entry.summary}"
             if n:
                 base += (f"\n\nDetecté {n} {'acciones sugeridas' if n != 1 else 'acción sugerida'} "
@@ -947,7 +969,7 @@ class MessageService:
                         if sender_phone:
                             from app.integrations.twilio.client import send_whatsapp_message
                             if bg_entry.status == "procesado":
-                                n = len([s for s in (bg_entry.suggestions or []) if s.get("type") != "note"])
+                                n = _acciones_sugeridas(bg_entry)
                                 msg = f"📋 Nota procesada. Resumen: {bg_entry.summary}"
                                 if n:
                                     msg += f"\n\n{n} {'acciones sugeridas' if n != 1 else 'acción sugerida'} en la app."

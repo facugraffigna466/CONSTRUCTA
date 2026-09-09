@@ -2585,6 +2585,49 @@ Sigue sin haber pruebas de extremo a extremo (*Playwright*) ni métrica de cober
 
 ---
 
+## 2026-09-07 — Las sugerencias de IA dejan de ser un objeto de la bitácora
+
+### Objective
+La tarjeta pedía generalizar las sugerencias de IA (reprogramar, crear tarea, cambiar estado) para que fueran una funcionalidad de primera clase, visible y accionable desde otros lugares de la app y no escondidas en el módulo de bitácora. El análisis previo mostró que el obstáculo no era de interfaz sino de modelo: cada sugerencia era un objeto dentro de la columna JSON `bitacora_entries.suggestions` y se resolvía **por su posición en el arreglo**. Sin id estable no se puede consultar por tarea, contar en SQL, enlazar, ni resolver desde una pantalla que no tenga la nota de origen a mano.
+
+### Changes made
+
+**Migración 0072 — tabla `suggestions`.** La sugerencia pasa a entidad del dominio: id propio, FK a obra / tarea / entrada de origen, `status` (`pendiente`/`aplicada`/`descartada`) en vez de dos booleanos que podían ser ambos verdaderos, y auditoría de quién resolvió y cuándo. `source` + `source_entry_id` describen el origen sin que la tabla dependa de la bitácora: mañana puede ser un mensaje de texto o un análisis de riesgo y quien las consume no se entera. `order_index` conserva el orden en que la IA las propuso y mantiene vivas las rutas viejas por índice. Las dos referencias a tareas usan `SET NULL`: si la tarea se borra, la propuesta queda como registro de lo que se pidió.
+
+El backfill migra el blob preservando estados, descarta fechas que no parsean (la IA devolvía texto libre) y degrada tipos desconocidos a `note` para no perder el texto del acuerdo. Se probó el ciclo `upgrade`/`downgrade` completo contra PostgreSQL con una entrada que incluía los tres casos raros; sobreviven la ida y la vuelta.
+
+**`SuggestionService`.** La lógica de aplicar salió de `BitacoraService`. La regla queda explícita: la bitácora las **genera**, `SuggestionService` las **resuelve**, venga la orden de donde venga. Se movieron con la lógica las tres guardas de la auditoría 08 (N2 tarea de otra obra, N5 fecha inválida → 422, N6 reprocesar sin perder lo aplicado — ahora garantizado también en el modelo, no solo en la ruta) y se agregó una nueva: **no se puede descartar algo ya aplicado**, porque descartarlo no desharía el cambio en la obra.
+
+**Rutas por id.** `GET /suggestions`, `GET /suggestions/pending-count`, `GET /tasks/{id}/suggestions`, `POST /suggestions/{id}/apply|dismiss`. Cada sugerencia viaja con su contexto de origen (obra, resumen de la nota, quién la reportó): dentro de la bitácora ese contexto está en pantalla, dentro de una tarea no hay nada alrededor que lo diga y sin eso el jefe no tiene con qué decidir. Las rutas `/bitacora/{id}/suggestions/{idx}/...` siguen funcionando y delegan en el mismo servicio.
+
+**La sugerencia aparece dentro de la tarea.** `SuggestionCard` salió de `BitacoraPage` a componente propio, id-based. `TaskSuggestions` lo monta en `TaskFormModal` en modo edición, arriba del bloque `TaskBitacoraOrigin`: abajo lo que ya pasó, arriba lo que la IA propone que pase. Aplicar cierra el formulario con la tarea recién pedida al servidor —el cambio ya está guardado y pudo correr dependientes en cascada, así que los campos abiertos quedaron viejos—; descartar solo colapsa la tarjeta.
+
+**El badge se entera.** El contador de pendientes del menú se refrescaba al navegar. Desde que se puede resolver una sugerencia sin pasar por la Bitácora, eso dejaba el badge mintiendo; ahora sube un aviso explícito hasta `App`. Y el contador pasó de sumar objetos del blob en memoria a ser un `COUNT` con índice, que además excluye las sugerencias sin obra: no se pueden aplicar, así que no son un pendiente accionable.
+
+### Files modified
+Backend: `alembic/versions/0072_suggestions_table.py`, `models/suggestion.py`, `schemas/suggestion.py`, `services/suggestion_service.py`, `api/routes/suggestions.py`, `tests/test_suggestions.py` (nuevos); `models/bitacora.py`, `models/__init__.py`, `schemas/bitacora.py`, `services/bitacora_service.py`, `api/routes/bitacora.py`, `core/obra_permissions.py`, `main.py`, `tests/test_bitacora.py`. Frontend: `api/suggestions.ts`, `components/SuggestionCard.tsx`, `components/TaskSuggestions.tsx` (nuevos); `api/bitacora.ts`, `api/tasks.ts`, `components/TaskFormModal.tsx`, `pages/BitacoraPage.tsx`, `pages/ObraDetailPage.tsx`, `App.tsx`. Documentación: `docs/features/sugerencias-primera-clase.md` (reporte), `IPI-CONSTRUCTA.md`.
+
+### Validation
+545 pruebas de backend en verde (24 nuevas sobre las 521 de la base). Frontend: 49 pruebas en verde, `tsc --noEmit` limpio, ESLint sin hallazgos nuevos. Migración verificada de ida y de vuelta contra PostgreSQL en una base descartable.
+
+**Arreglo encontrado al probar: la dirección del movimiento de fechas.** Con datos reales apareció un error de interpretación anterior a este trabajo: ante *"mover la fecha dos días para atrás porque se retrasó el proveedor"*, el análisis devolvía *"adelantar la siguiente tarea dos días"* — al revés. El prompt no tenía ninguna regla para resolver la ambigüedad de "para atrás"/"para adelante", que en obra se usan de forma contradictoria. Se agregaron tres reglas a `_analyze`: **la dirección la fija la causa, no el verbo** (una demora mueve la fecha más tarde, siempre; si no queda clara, `note` en vez de `reschedule_task`); el resumen y los puntos clave no usan los verbos ambiguos sino el efecto sobre el cronograma, porque el texto estaba contradiciendo a la sugerencia; y no se proponen cambios que dejen la tarea como ya está. Verificado contra el modelo real en tres casos —frase invertida con causa de atraso, y un adelanto genuino que la regla correctamente no toca—. Queda como limitación conocida que la aritmética de días es aproximada; por eso la sugerencia nunca se aplica sin confirmación y el botón "Editar" permite fijar la fecha.
+
+**El marcador en las listas, encontrado al probar.** La primera versión puso la tarjeta dentro de la tarea y nada más; probando sobre una obra real de 45 tareas quedó claro el agujero: nada en la lista decía cuáles tenían una propuesta sin revisar, así que había que abrirlas de a una. Una funcionalidad que solo se encuentra si ya sabías que estaba no está terminada. Se agregó `SuggestionMarker` —distintivo naranja con contador— junto al nombre de la tarea en las tres vistas del plan (tabla, planilla y Gantt), alimentado por un único pedido por obra que `ObraDetailPage` baja como `Map<taskId, cantidad>`. No es clickeable a propósito: cada vista ya tiene su forma de abrir la tarea y otro objetivo en la fila competiría con la edición en línea y el arrastre del cronograma. Descartar desde la tarea recuenta los marcadores, porque en ese caso el modal no se cierra y no hay recarga de obra que los corrija.
+
+**La aritmética de días dejó de hacerla el modelo.** El otro hallazgo de la misma tanda: "dos días" sobre un viernes daba tres días laborales después. La causa de fondo es la misma que la de la dirección — el modelo estaba haciendo aritmética de calendario, que es una operación determinística sobre datos que ni siquiera tiene (los feriados propios de la obra están en la base). La corrección no fue enseñarle a contar sino sacarle la cuenta: el esquema de análisis acepta ahora `shift_working_days` + `shift_target`, el modelo devuelve fecha concreta **solo** si el audio nombra una, y `BitacoraService._resolve_dates` resuelve el corrimiento con `calendar_service.add_working_days` contra el calendario real de la obra antes de guardar la fila. El signo también lo fija la causa: la primera versión de la regla no alcanzó —ante *"se nos van una semana para atrás, no llegó el hierro"* devolvió `-5`— y hubo que decirlo explícitamente sobre el campo nuevo. Verificado contra el modelo real en cuatro casos, incluido un adelanto genuino que sigue dando negativo. Lo mejor del cambio es que la cuenta ahora **se puede probar**: `test_calendar_working_days.py` cubre fin de semana, sentido inverso, feriados de la obra y el caso que sorprende —el calendario por defecto de una obra incluye el sábado, así que "dos días" desde un viernes es el lunes—.
+
+**Aplicar una sugerencia ya no borra la fecha que no se nombró.** Defecto heredado de `main`: aplicar un cambio de vencimiento le vaciaba el inicio a la tarea, porque `TaskService.update` usa `exclude_unset` y `TaskUpdate(start_date=None, ...)` significa "borrala", no "no la toques". Ahora el update se arma solo con los campos que la sugerencia trae, y una sugerencia sin ninguna fecha se rechaza en vez de marcarse aplicada sin efecto. La misma regla se hizo explícita en el prompt: `shift_target` pasó de enum sin criterio a regla —lo que decide es qué punta nombra el audio; `both` por defecto (la tarea se corre entera conservando su duración), `start` o `due` solo si se nombra el arranque o la entrega, y ahí la otra fecha queda intacta—. Calibrarlo llevó tres iteraciones porque al reforzar un caso el modelo desatendía otro; quedó estable en los cuatro escenarios. Las cuatro pruebas nuevas se validaron revirtiendo el arreglo: tres fallan sin él.
+
+**Batería de 16 casos contra el modelo real.** Se ejercitó el análisis con la obra y el calendario reales para cubrir los puntos críticos: atraso relativo, "para atrás" con causa de demora, adelanto genuino, solo entrega, solo inicio, fecha absoluta, fecha que cae en día no laborable, cambio de estado, tarea nueva, tarea ya en ese estado, referencia ambigua, audio sin nada accionable, "no se mueve", autocorrección dentro del mismo audio, y tarea inexistente en sus dos variantes. Dejó dos cosas: el caso de los feriados (una tarea corrida cinco días hábiles cae en 18/08 y no 17/08 porque el 17 es feriado nacional, conservando la duración en días hábiles) confirma por qué la cuenta tenía que salir del modelo; y **el modelo corrigió una regla mal escrita del prompt** — ante "hay que *correr* la tarea de ascensores" (que no existe) devolvió una nota, mientras el prompt le pedía `create_task`. Esa regla valía para un trabajo nuevo, no para una tarea que el audio da por existente; se separaron las dos ramas.
+
+**"Aplicar" prometía de más en las notas.** Una sugerencia de tipo `note` no toca el plan: escribe un evento en el historial y confirma por WhatsApp. Para ese tipo el botón dice ahora "Registrar" y el estado resuelto, "registrada".
+
+### Pending / next steps
+Los mensajes de **texto** de WhatsApp siguen sin pasar por IA: van a la máquina de conversación por reglas y no generan sugerencias. Y las otras superficies posibles —Gantt, campanita del encabezado, resumen de obra— ahora se pueden sumar sin trabajo de modelo, que es lo que este cambio habilita, pero quedan fuera de esta etapa.
+
+
+---
+
 ## 2026-09-08 — Proveedor real en Materiales + aislamiento por tenant de Proveedores (hallazgo de seguridad)
 
 ### Context
@@ -2612,3 +2655,27 @@ Cada fix se verificó reproduciendo primero la falla y confirmando después que 
 
 ### Pending / next steps
 Un hallazgo menor, deliberadamente sin cerrar: `create_material` (y la creación de pedidos) no valida que un `supplier_id` recibido del cliente pertenezca al tenant del usuario — explotable solo adivinando ids, y filtra a lo sumo el nombre/teléfono de un proveedor puntual, muy por debajo del listado abierto que sí se cerró acá.
+
+## 2026-09-09 — El responsable informa por qué, no solo qué
+
+### Objective
+Revisando el flujo de audios de WhatsApp quedó a la vista una asimetría deliberada del producto: la bitácora por voz es la libreta del jefe de obra (camina la obra, toma notas rápidas, después se sienta a ordenar con la IA), y el responsable reporta por menú numérico (está trabajando, responde con una mano). Esa división es correcta. Pero el canal del responsable cumplía la mitad de lo que promete: sabía registrar **qué** pasó —"la tarea quedó bloqueada"— y nunca **por qué**.
+
+El motivo quedaba en la cadena fija `"Demorada vía WhatsApp"` y la alerta al jefe decía solamente "La tarea X fue bloqueada", obligándolo a levantar el teléfono para saber si faltaba material, faltaba gente o había llovido — la comunicación informal que el sistema existe para eliminar. Y es el dato que decide la acción: comprar, reasignar o reprogramar.
+
+### Changes made
+
+**Una pregunta numerada más, no texto libre ni IA.** Tras marcar una tarea como bloqueada, el chatbot pregunta el motivo con cinco opciones (falta material / falta personal / clima / espera otra tarea / otro). Requiere un paso nuevo en la máquina de conversación, `await_block_reason`, y como `conversation_step` es un enum nativo de PostgreSQL hizo falta la **migración 0073** (`ALTER TYPE ... ADD VALUE` con `COMMIT` explícito; el downgrade no quita el valor porque PostgreSQL no lo permite y reconstruir el tipo por un paso efímero no vale la pena).
+
+**Primero se bloquea, después se pregunta.** La alternativa era pedir el motivo antes de aplicar el bloqueo, y así la alerta nacería con la causa. Se descartó: si la persona abandona la conversación se pierde el reporte entero, que contradice la promesa central del producto. El orden es bloquear → avisar → enriquecer: cuando el motivo llega se escribe en el historial y se suma al mensaje de la alerta abierta (`AlertRepository.append_reason_to_open_alert`, idempotente y tolerante a que el jefe ya la haya leído). Por la misma razón, "X" en ese paso no cancela nada —la tarea ya está bloqueada— y responde con su propio mensaje en vez del genérico de cancelación, que haría creer que no se registró; el paso se enruta antes del cancel global a propósito.
+
+**El audio de un responsable ya no es un callejón.** El gate a staff no se tocó, pero la respuesta mandaba a la persona a hablar con su jefe y perdía el reporte. Ahora trae el menú que sí puede usar, así el intento equivocado termina en un reporte estructurado.
+
+### Files modified
+Backend: `alembic/versions/0073_await_block_reason_step.py` y `tests/test_motivo_bloqueo.py` (nuevos); `models/conversation_session.py`, `services/message_templates.py`, `services/conversation_service.py`, `services/message_service.py`, `repositories/alert.py`, `tests/test_whatsapp_identity_permissions.py`. Documentación: `docs/features/motivo-de-bloqueo.md`.
+
+### Validation
+559 pruebas en verde (7 nuevas; el total incluye el fix de proveedores que entró a main en paralelo). Migración 0073 verificada de ida y de vuelta contra PostgreSQL. Dos pruebas existentes se ajustaron: verificaban la frase exacta del rechazo por audio y ahora verifican el comportamiento.
+
+### Pending / next steps
+El motivo llega al historial y a la alerta, pero todavía **no se muestra como dato propio en la interfaz** (aparece dentro del texto del mensaje de la alerta). Un paso natural sería exponerlo como campo para poder filtrar y contar: "cuántas veces se frenó esta obra por falta de material" es una pregunta que las reglas de riesgo ya podrían responder si el dato estuviera estructurado.

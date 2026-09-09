@@ -356,7 +356,11 @@ async def test_responsible_bloqueado_en_bitacora_audio_no_es_staff(db, ctx):
         ).order_by(Message.id.desc())
     )).scalars().first()
     assert out is not None
-    assert "solo para el equipo administrativo" in out.body
+    # El gate sigue vigente: el audio no entra a la bitácora. Pero la respuesta
+    # ya no es un callejón — le muestra el canal que sí puede usar, así el
+    # reporte de campo no se pierde por haber agarrado la herramienta equivocada.
+    assert "equipo administrativo" in out.body
+    assert "avisale a tu jefe" not in out.body.lower()
 
 
 async def test_responsible_equipo_tambien_bloqueado_en_bitacora_audio(db, ctx):
@@ -384,7 +388,11 @@ async def test_responsible_equipo_tambien_bloqueado_en_bitacora_audio(db, ctx):
         ).order_by(Message.id.desc())
     )).scalars().first()
     assert out is not None
-    assert "solo para el equipo administrativo" in out.body
+    # El gate sigue vigente: el audio no entra a la bitácora. Pero la respuesta
+    # ya no es un callejón — le muestra el canal que sí puede usar, así el
+    # reporte de campo no se pierde por haber agarrado la herramienta equivocada.
+    assert "equipo administrativo" in out.body
+    assert "avisale a tu jefe" not in out.body.lower()
 
 
 async def test_staff_no_bloqueado_en_bitacora_audio(db, ctx):
@@ -414,7 +422,7 @@ async def test_staff_no_bloqueado_en_bitacora_audio(db, ctx):
     )).scalars().first()
     assert out is not None
     # No es el mensaje de bloqueo (pasó el gate "solo staff").
-    assert "solo para el equipo administrativo" not in out.body
+    assert "equipo administrativo" not in out.body
 
 
 # ─────────────────────────────────────────────────────────────

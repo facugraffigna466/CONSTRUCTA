@@ -6,6 +6,7 @@ import type { Task, TaskStatus, Responsible } from "../types";
 import { fetchCriticalPath, type CriticalPathResult } from "../api/criticalPath";
 import { fetchBaseline, type BaselineEntry } from "../api/baseline";
 import { useGanttCursors, emitCursorMove, emitCursorLeave } from "../hooks/useGanttCursors";
+import { SuggestionMarker } from "./SuggestionMarker";
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
 
@@ -148,6 +149,8 @@ interface PendingSchedule   { task: Task; dropDate: string; insertIdx: number; }
 interface RowDragState { taskId: number; startY: number; currentDeltaY: number; }
 
 interface GanttTimelineProps {
+  /** taskId → propuestas de la IA sin revisar sobre esa tarea. */
+  suggestionCounts?: Map<number, number>;
   tasks: Task[];
   responsibles: Responsible[];
   obraStartDate?: string | null;
@@ -173,6 +176,7 @@ export function GanttTimeline({
   onStatusChange,
   tasksWithoutDates = 0,
   obraId,
+  suggestionCounts,
 }: GanttTimelineProps) {
   // ── View options (synced with settings drawer) ──────────────────────────────
   const [viewOptions, setViewOptions] = useState<GanttViewOptions>({
@@ -1045,9 +1049,12 @@ export function GanttTimeline({
 
                     {/* Name + owner */}
                     <div style={{ minWidth: 0, lineHeight: 1.2, paddingLeft: taskLevel * 12 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1A2329", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {taskLevel > 0 && <span style={{ color: "#ADAAA4", marginRight: 4, fontSize: 11 }}>└</span>}
-                        {task.title}
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 600, color: "#1A2329", minWidth: 0 }}>
+                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {taskLevel > 0 && <span style={{ color: "#ADAAA4", marginRight: 4, fontSize: 11 }}>└</span>}
+                          {task.title}
+                        </span>
+                        <SuggestionMarker count={suggestionCounts?.get(task.id) ?? 0} />
                       </div>
                       {(resp || depNames.length > 0) && (
                         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, minWidth: 0 }}>

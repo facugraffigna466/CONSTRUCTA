@@ -56,6 +56,8 @@ function ProgressRing({ pct }: { pct: number }) {
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface ResumenTabProps {
+  /** taskId → propuestas de la IA sin revisar sobre esa tarea. */
+  suggestionCounts?: Map<number, number>;
   tasks: Task[];
   alerts: Alert[];
   historial: HistorialEvento[];
@@ -92,6 +94,7 @@ export function ResumenTab({
   onDeleteTask,
   onTaskRescheduled,
   onStatusChange,
+  suggestionCounts,
 }: ResumenTabProps) {
   const [draggingId, setDraggingId] = useState<number | null>(null);
 
@@ -294,6 +297,7 @@ export function ResumenTab({
           onStatusChange={onStatusChange}
           tasksWithoutDates={tasksWithoutDates.length}
           obraId={obraId}
+          suggestionCounts={suggestionCounts}
         />
       </section>
 

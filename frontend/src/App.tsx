@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { clearRefreshToken, clearToken, getToken, setRefreshToken, setToken } from "./lib/tokenStorage";
 import { switchTenant } from "./api/auth";
 import { fetchObra } from "./api/obras";
-import { fetchBitacoraPendingCount } from "./api/bitacora";
+import { fetchSuggestionsPendingCount } from "./api/suggestions";
 import { AppLayout } from "./components/layout/AppLayout";
 import { ActivityToast } from "./components/ActivityToast";
 import { ObraSetupWizard } from "./components/ObraSetupWizard";
@@ -83,12 +83,17 @@ function App() {
     if (authed && !userLoading && !isOnboardingDone()) setShowOnboarding(true);
   }, [authed, userLoading]);
 
-  // Badge de sugerencias de bitácora sin revisar — por obra (es un módulo de la obra).
-  // Se refresca al cambiar de obra y al navegar (p.ej. al volver de la Bitácora tras aplicar/descartar).
+  // Badge de sugerencias de IA sin revisar — por obra.
+  // Se refresca al cambiar de obra, al navegar (p.ej. al volver de la Bitácora
+  // tras aplicar/descartar) y cuando se resuelve una desde adentro de una tarea:
+  // desde que la sugerencia es entidad propia se puede resolver sin pasar por la
+  // Bitácora, y el badge tiene que enterarse igual.
+  const [suggestionsTick, setSuggestionsTick] = useState(0);
+  const refreshBitacoraPending = useCallback(() => setSuggestionsTick(n => n + 1), []);
   useEffect(() => {
     if (!authed || userLoading || !selectedObra) { setBitacoraPending(0); return; }
-    fetchBitacoraPendingCount(selectedObra.id).then(setBitacoraPending).catch(() => { /* ignore */ });
-  }, [authed, userLoading, selectedObra, activePage]);
+    fetchSuggestionsPendingCount(selectedObra.id).then(setBitacoraPending).catch(() => { /* ignore */ });
+  }, [authed, userLoading, selectedObra, activePage, suggestionsTick]);
 
   const inviteToken                     = getInviteToken();
   const resetToken                      = getResetToken();
@@ -245,7 +250,7 @@ function App() {
   function renderPage() {
     if (activePage === "panel") {
       return selectedObra ? (
-        <ObraDetailPage obra={selectedObra} activeTab={activeTab} onTabChange={handleTabChange} onCounts={handleObraCounts} focusAlert={focusAlert} />
+        <ObraDetailPage obra={selectedObra} activeTab={activeTab} onTabChange={handleTabChange} onCounts={handleObraCounts} onSuggestionResolved={refreshBitacoraPending} focusAlert={focusAlert} />
       ) : (
         <PortfolioPage
           onSelectObra={handleSelectObra}

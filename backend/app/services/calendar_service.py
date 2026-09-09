@@ -56,6 +56,36 @@ def next_working_day(calendar: WorkingCalendar, d: date) -> date:
     return candidate
 
 
+def add_working_days(calendar: WorkingCalendar, d: date, n: int) -> date:
+    """Corre `d` en `n` días LABORALES según el calendario de la obra.
+
+    `n` es con signo: positivo mueve más tarde, negativo más temprano. Cero
+    normaliza al día laboral más cercano hacia adelante.
+
+    Existe porque cuando alguien en obra dice "corrélo dos días" no está
+    hablando de dos días de almanaque: si la tarea vence un viernes, dos días
+    es el martes siguiente, no el domingo. Antes esta cuenta la hacía el modelo
+    de lenguaje dentro del análisis de la bitácora y la erraba —contar días
+    hábiles salteando feriados no es lo que un LLM hace bien—, así que ahora la
+    hace el backend, que es el único que conoce el calendario real de la obra.
+    """
+    if n == 0:
+        return next_working_day(calendar, d)
+    step = timedelta(days=1 if n > 0 else -1)
+    restantes = abs(n)
+    candidate = d
+    # Cota de seguridad: 30 días de calendario por cada día laboral pedido cubre
+    # cualquier feriado largo sin poder colgarse si el calendario no tuviera
+    # ningún día laboral configurado.
+    for _ in range(restantes * 30):
+        candidate += step
+        if is_working_day(calendar, candidate):
+            restantes -= 1
+            if restantes == 0:
+                return candidate
+    return candidate
+
+
 # ── Argentine national holidays ───────────────────────────────────────────────
 
 _AR_HOLIDAYS_2025 = [

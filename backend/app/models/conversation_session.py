@@ -14,6 +14,8 @@ class ConversationStep(str, enum.Enum):
     TASK_SELECT = "task_select"
     STATUS_MENU = "status_menu"
     AWAIT_DATE = "await_date"
+    # Se preguntó el motivo del bloqueo y se espera el número (migración 0073).
+    AWAIT_BLOCK_REASON = "await_block_reason"
     PLANO_OBRA_SELECT = "plano_obra_select"
 
 

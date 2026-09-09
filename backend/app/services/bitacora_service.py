@@ -26,10 +26,10 @@ from app.core.exceptions import NotFoundError, UnprocessableError
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
 from app.models.responsible import Responsible
-from app.models.task import Task, TaskStatus
+from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
+from app.models.task import Task
 from app.repositories.historial import HistorialRepository
-from app.schemas.task import TaskCreate, TaskStatusUpdate, TaskUpdate
-from app.services.task_service import TaskService
+from app.services.suggestion_service import SuggestionService
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +61,23 @@ _ANALYSIS_SCHEMA = {
                     "type": {"type": "string", "enum": ["reschedule_task", "create_task", "update_status", "note"]},
                     "task_id": {"type": ["integer", "null"]},
                     "task_title": {"type": ["string", "null"]},
-                    "new_start_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
-                    "new_due_date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
+                    "new_start_date": {"type": ["string", "null"], "description": "YYYY-MM-DD, SOLO si el audio nombra una fecha concreta"},
+                    "new_due_date": {"type": ["string", "null"], "description": "YYYY-MM-DD, SOLO si el audio nombra una fecha concreta"},
+                    "shift_working_days": {
+                        "type": ["integer", "null"],
+                        "description": (
+                            "Corrimiento en DÍAS LABORALES cuando el audio habla en relativo "
+                            "('dos días', 'una semana'). Positivo = más tarde, negativo = más temprano. "
+                            "El backend calcula la fecha resultante con el calendario de la obra."
+                        ),
+                    },
+                    "shift_target": {
+                        "anyOf": [
+                            {"type": "string", "enum": ["start", "due", "both"]},
+                            {"type": "null"},
+                        ],
+                        "description": "Qué fecha corre el shift: el inicio, el fin, o ambas.",
+                    },
                     "new_status": {
                         # la API de structured outputs no acepta enum sobre tipo union — usar anyOf
                         "anyOf": [
@@ -76,6 +91,7 @@ _ANALYSIS_SCHEMA = {
                     "reason": {"type": "string", "description": "Cita o referencia a lo dicho en el audio que justifica la acción"},
                 },
                 "required": ["type", "task_id", "task_title", "new_start_date", "new_due_date",
+                             "shift_working_days", "shift_target",
                              "new_status", "title", "description", "responsible_name", "reason"],
                 "additionalProperties": False,
             },
@@ -90,6 +106,8 @@ class BitacoraService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.historial = HistorialRepository(session)
+        # La bitácora genera sugerencias; resolverlas es de SuggestionService.
+        self.suggestions = SuggestionService(session)
 
     # ── Control de costo de IA ────────────────────────────────────────────────
 
@@ -229,22 +247,29 @@ class BitacoraService:
         self, *, task_id: int, tenant_id: int | None = None, user_id: int | None = None
     ) -> list[BitacoraEntry]:
         """Notas de voz cuyas sugerencias aplicadas afectaron a esta tarea (la originaron
-        o la modificaron). Trazabilidad tarea → audio."""
+        o la modificaron). Trazabilidad tarea → audio.
+
+        Con las sugerencias en tabla propia esto es un join directo; antes había
+        que traer todas las entradas de la obra y filtrar el blob en Python.
+        """
         obra_id = (await self.session.execute(
             select(Task.obra_id).where(Task.id == task_id)
         )).scalar_one_or_none()
         if obra_id is None:
             return []
+        entry_ids = set((await self.session.execute(
+            select(Suggestion.source_entry_id).where(
+                Suggestion.result_task_id == task_id,
+                Suggestion.status == SuggestionStatus.APLICADA,
+                Suggestion.source_entry_id.is_not(None),
+            )
+        )).scalars().all())
+        if not entry_ids:
+            return []
         entries = await self.list_entries(
             tenant_id=tenant_id, user_id=user_id, obra_id=obra_id, limit=500
         )
-        return [
-            e for e in entries
-            if any(
-                s.get("applied") and s.get("result_task_id") == task_id
-                for s in (e.suggestions or [])
-            )
-        ]
+        return [e for e in entries if e.id in entry_ids]
 
     async def pending_suggestions_count(
         self,
@@ -253,27 +278,15 @@ class BitacoraService:
         user_id: int | None = None,
         obra_id: int | None = None,
     ) -> int:
-        """Cantidad de sugerencias sin aplicar ni descartar (lo que espera el Sí/No
-        del jefe). Scopeado por tenant y, si se pasa obra_id, por esa obra (el badge
-        es por obra). Alimenta el badge del menú de cada obra."""
-        q = select(BitacoraEntry.suggestions).where(BitacoraEntry.status == "procesado")
-        if obra_id is not None:
-            q = q.where(BitacoraEntry.obra_id == obra_id)
-        if tenant_id is not None:
-            q = q.outerjoin(Obra, BitacoraEntry.obra_id == Obra.id).where(
-                or_(
-                    Obra.tenant_id == tenant_id,
-                    and_(BitacoraEntry.obra_id.is_(None), BitacoraEntry.created_by == user_id),
-                )
-            )
-        rows = (await self.session.execute(q)).scalars().all()
-        total = 0
-        for suggestions in rows:
-            if suggestions:
-                total += sum(
-                    1 for s in suggestions if not s.get("applied") and not s.get("dismissed")
-                )
-        return total
+        """Sugerencias sin resolver (lo que espera el Sí/No del jefe). Alimenta el
+        badge del menú de cada obra.
+
+        Delega en SuggestionService: desde 0072 es un COUNT sobre la tabla, no
+        una suma en memoria sobre los blobs de todas las entradas. `user_id`
+        queda en la firma porque las entradas sin obra ya no aportan al badge
+        —siempre se pide por obra— pero los llamadores lo siguen pasando.
+        """
+        return await self.suggestions.pending_count(tenant_id=tenant_id, obra_id=obra_id)
 
     async def create_entry(
         self,
@@ -431,13 +444,56 @@ class BitacoraService:
             "   - note: para acuerdos importantes que no mapean a una tarea (quedan como registro).\n\n"
             "Reglas:\n"
             f"- Hoy es {today}. Interpretá expresiones relativas ('la semana que viene', 'el lunes') contra esa fecha.\n"
-            "- Solo sugerí acciones que el audio respalde claramente; en 'reason' citá la frase que lo justifica.\n"
-            "- Si una tarea mencionada no matchea ninguna de la lista, usá create_task (no inventes task_id).\n"
+            "- DIRECCIÓN DEL MOVIMIENTO: en obra, 'correr/mover la fecha para atrás', 'para adelante', 'patearla' "
+            "y 'adelantarla' se usan de forma ambigua y contradictoria según quién habla. NO decidas la dirección "
+            "por esas palabras: decidila por la CAUSA que se menciona. Si la causa es un problema o una demora "
+            "(lluvia, material que no llegó, proveedor atrasado, falta de personal, una tarea previa sin terminar), "
+            "la fecha se va MÁS TARDE — nunca más temprano. Solo proponé una fecha ANTERIOR a la actual si el audio "
+            "dice explícitamente que algo se terminó antes, se liberó el frente o se quiere ganar tiempo. "
+            "Si la dirección sigue sin quedar clara, no propongas reschedule_task: dejá una 'note' con lo que se dijo.\n"
+            "- En el resumen y los puntos clave NO uses 'adelantar', 'para adelante' ni 'para atrás': son las "
+            "palabras ambiguas. Describí el efecto sobre el cronograma — 'se corre N días más tarde', "
+            "'pasa del X al Y', 'se termina antes' — para que el texto no contradiga a la sugerencia.\n"
+            "- No propongas cambios que dejen la tarea como ya está (p. ej. marcar 'completada' una tarea que el "
+            "contexto ya muestra completada), ni reprogrames una tarea ya completada o cancelada: en esos casos "
+            "dejá una 'note' con lo que se dijo.\n"
+            "- Solo sugerí acciones que el audio respalde claramente; en 'reason' citá la frase que lo justifica "
+            "Y, si proponés mover una fecha, nombrá la causa que fija la dirección.\n"
+            "- Si una tarea mencionada no matchea ninguna de la lista, NUNCA inventes un task_id. Qué hacer "
+            "depende de lo que afirme el audio: si propone un trabajo NUEVO ('arrancamos una tarea de...', "
+            "'hay que sumar...'), usá create_task; si habla de la tarea como si ya existiera ('hay que correr "
+            "la tarea de ascensores'), dejá una 'note' diciendo que no se encontró — puede ser que la tarea "
+            "esté con otro nombre o que falte cargarla, y adivinar cuál es sería peor que preguntar.\n"
             "- Para reschedule_task completá SOLO la fecha que se discutió: si se habló de la entrega/fin, mandá "
             "new_due_date y dejá new_start_date en null; si se habló del inicio, mandá new_start_date y dejá "
             "new_due_date en null. No completes una fecha que el audio no mencionó.\n"
-            "- Las fechas que propongas (inicio o fin) deben caer en días laborales según el calendario del contexto: "
-            "evitá sábados, domingos y feriados.\n"
+            "- NO CALCULES DÍAS HÁBILES. Si el audio habla en relativo ('dos días', 'una semana', "
+            "'para el lunes que viene'), NO devuelvas una fecha: devolvé `shift_working_days` con el "
+            "corrimiento en días laborales y `shift_target` "
+            "con la fecha que se corre. Lo que decide `shift_target` es QUÉ PUNTA NOMBRA el audio. "
+            "Preguntate: ¿el audio dijo 'inicio' o 'fin'? Si no dijo ninguno, es 'both'.\n"
+            "    · 'both' — POR DEFECTO. El audio habla de la tarea, no de una de sus fechas: 'el revoque se "
+            "atrasa dos días', 'esto se corre una semana', 'se demora porque no llegó el material'. La tarea "
+            "se mueve entera y conserva su duración. Ante la duda, 'both'.\n"
+            "    · 'start' — el audio nombra el arranque: 'empieza tres días después', 'lo arrancamos antes', "
+            "'se demora el comienzo'. Se mueve el inicio; el vencimiento QUEDA COMO ESTÁ.\n"
+            "    · 'due' — el audio nombra la entrega o el vencimiento: 'lo entregamos dos días más tarde', "
+            "'la fecha de fin se corre'. Se mueve el fin; el inicio QUEDA COMO ESTÁ. Ojo: esto afirma que la "
+            "tarea DURA MÁS, que es distinto de que se atrase.\n"
+            "Nunca muevas una punta que el audio no nombró: la persona espera encontrar intacta la fecha de la "
+            "que nadie habló. El backend calcula la fecha resultante con "
+            "el calendario real de la obra, que es el único que conoce los feriados. "
+            "Una semana son 5 días laborales; una quincena, 10.\n"
+            "- EL SIGNO DE `shift_working_days` LO FIJA LA CAUSA, igual que la dirección: si el motivo es una "
+            "demora o un problema, el signo es POSITIVO (la fecha se va más tarde) por más que la frase diga "
+            "'para atrás'. Solo usá signo negativo cuando el audio dice que algo se terminó antes, se liberó "
+            "el frente o se quiere ganar tiempo. Ante la duda, positivo si hay una causa de atraso; y si no "
+            "hay causa clara, no propongas reschedule_task.\n"
+            "- Devolvé `new_start_date`/`new_due_date` SOLO cuando el audio nombra una fecha concreta "
+            "('el 20 de julio', 'el 3 del mes que viene'). En ese caso dejá `shift_working_days` en null. "
+            "Nunca completes las dos cosas para la misma fecha. Y completá solo la fecha que el audio nombra: la que no se menciona NO se toca, la tarea la conserva.\n"
+            "- Si igualmente proponés una fecha concreta, que caiga en día laboral según el calendario del "
+            "contexto: evitá sábados, domingos y feriados.\n"
             "- Si el audio no contiene nada accionable, devolvé suggestions vacío — no fuerces sugerencias."
         )
 
@@ -462,6 +518,111 @@ class BitacoraService:
         if not text:
             raise UnprocessableError("El modelo no devolvió un análisis.")
         return json.loads(text)
+
+    # ── Generación de sugerencias ─────────────────────────────────────────────
+
+    @staticmethod
+    def _iso_date(value) -> date | None:
+        """La IA devuelve fechas como texto. Lo que no parsea se descarta acá y
+        no llega a la fila — la sugerencia queda sin esa fecha en vez de romper
+        el análisis entero."""
+        if not value or not isinstance(value, str):
+            return None
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            logger.warning("La IA propuso una fecha inválida: %r", value)
+            return None
+
+    async def _resolve_dates(
+        self, s: dict, obra_id: int | None
+    ) -> tuple[date | None, date | None]:
+        """Convierte el corrimiento relativo que propuso la IA en fechas concretas.
+
+        Contar días hábiles salteando feriados no es algo que un modelo de
+        lenguaje haga bien: en una prueba, "dos días" sobre un viernes dio tres
+        días laborales. Ahora el modelo declara la INTENCIÓN
+        (`shift_working_days` + `shift_target`) y la cuenta la hace el backend
+        con el calendario real de la obra, que además es el único que conoce
+        sus feriados y sus días no laborables propios.
+
+        Si el audio nombró una fecha concreta, el modelo la manda directo y acá
+        no hay nada que calcular.
+        """
+        inicio = self._iso_date(s.get("new_start_date"))
+        fin = self._iso_date(s.get("new_due_date"))
+
+        shift = s.get("shift_working_days")
+        if not isinstance(shift, int) or shift == 0 or not obra_id or not s.get("task_id"):
+            return inicio, fin
+        # Una fecha explícita gana: es más específica que un corrimiento.
+        target = s.get("shift_target") or "due"
+        if (inicio and target in ("start", "both")) and (fin and target in ("due", "both")):
+            return inicio, fin
+
+        task = (await self.session.execute(
+            select(Task).where(Task.id == s["task_id"])
+        )).scalar_one_or_none()
+        if task is None:
+            return inicio, fin
+
+        from app.repositories.calendar import CalendarRepository
+        from app.services.calendar_service import add_working_days
+
+        cal = await CalendarRepository(self.session).get_for_obra(obra_id)
+        if target in ("start", "both") and inicio is None and task.start_date:
+            inicio = add_working_days(cal, task.start_date, shift)
+        if target in ("due", "both") and fin is None and task.due_date:
+            fin = add_working_days(cal, task.due_date, shift)
+        return inicio, fin
+
+    async def _replace_pending_suggestions(
+        self, entry: BitacoraEntry, payload: list[dict]
+    ) -> list[Suggestion]:
+        """Reemplaza las sugerencias sin resolver por las del análisis nuevo.
+
+        Las ya aplicadas o descartadas NO se tocan: son el registro de una
+        decisión que se tomó (y, si se aplicó, de un cambio real en la obra).
+        Reprocesar reemplazaba el blob entero y borraba ese rastro — es el
+        hallazgo N6 de docs/auditoria/08-bitacora.md, que la ruta cubre con un
+        guard; acá queda cubierto también en el modelo.
+        """
+        conservadas = [
+            r for r in entry.suggestion_rows if r.status != SuggestionStatus.PENDIENTE
+        ]
+        # delete-orphan: sacarlas de la colección las borra de la base.
+        entry.suggestion_rows[:] = conservadas
+
+        nuevas: list[Suggestion] = []
+        for i, s in enumerate(payload):
+            try:
+                stype = SuggestionType(s.get("type"))
+            except ValueError:
+                logger.warning("La IA propuso un tipo desconocido: %r", s.get("type"))
+                continue
+            inicio, fin = await self._resolve_dates(s, entry.obra_id)
+            nuevas.append(
+                Suggestion(
+                    tenant_id=entry.tenant_id,
+                    obra_id=entry.obra_id,
+                    source="bitacora",
+                    order_index=len(conservadas) + i,
+                    type=stype,
+                    task_id=s.get("task_id"),
+                    task_title=s.get("task_title"),
+                    new_start_date=inicio,
+                    new_due_date=fin,
+                    new_status=s.get("new_status"),
+                    title=s.get("title"),
+                    description=s.get("description"),
+                    responsible_name=s.get("responsible_name"),
+                    reason=s.get("reason") or "",
+                    status=SuggestionStatus.PENDIENTE,
+                )
+            )
+        entry.suggestion_rows.extend(nuevas)
+        await self.session.flush()
+        return nuevas
 
     # ── Pipeline completo ─────────────────────────────────────────────────────
 
@@ -489,16 +650,15 @@ class BitacoraService:
                 analysis = await self._analyze(entry.transcript, entry.obra_id)
                 entry.summary = analysis.get("summary")
                 entry.key_points = analysis.get("key_points") or []
-                entry.suggestions = [
-                    {**s, "applied": False, "dismissed": False, "result_task_id": None, "result_note": None}
-                    for s in (analysis.get("suggestions") or [])
-                ]
+                nuevas = await self._replace_pending_suggestions(
+                    entry, analysis.get("suggestions") or []
+                )
                 entry.status = "procesado"
                 entry.error = None
                 entry.processed_at = datetime.now(timezone.utc)
 
                 if entry.obra_id:
-                    n = len([s for s in entry.suggestions if s["type"] != "note"])
+                    n = len([s for s in nuevas if s.type != SuggestionType.NOTE])
                     await self.historial.log(
                         event_type="bitacora_procesada",
                         description=(
@@ -506,7 +666,7 @@ class BitacoraService:
                             + (f" ({n} acción{'es' if n != 1 else ''} sugerida{'s' if n != 1 else ''})" if n else "")
                         ),
                         obra_id=entry.obra_id,
-                        payload={"entry_id": entry.id, "suggestions_count": len(entry.suggestions or [])},
+                        payload={"entry_id": entry.id, "suggestions_count": len(nuevas)},
                         triggered_by="system",
                     )
                     # Aviso en tiempo real al jefe (toast): llegó una nota de voz.
@@ -535,213 +695,37 @@ class BitacoraService:
         await self.session.flush()
         return entry
 
-    # ── Aplicar sugerencias ───────────────────────────────────────────────────
-
-    async def _assert_task_in_entry_obra(self, task_id: int, entry_obra_id: int | None) -> None:
-        """`apply_suggestion` delega en TaskService, que solo valida tenant —
-        nunca el rol por-obra del usuario. Si la sugerencia quedó apuntando a
-        una tarea de OTRA obra (p. ej. la entrada se reasignó con assign_obra
-        y las sugerencias no se limpiaron), alguien con acceso solo a la obra
-        de la entrada podría mutar una tarea de una obra en la que no tiene
-        ningún rol. Ver audit 08-bitácora, hallazgo N2."""
-        task_obra_id = (await self.session.execute(
-            select(Task.obra_id).where(Task.id == task_id)
-        )).scalar_one_or_none()
-        if task_obra_id is not None and task_obra_id != entry_obra_id:
-            raise UnprocessableError(
-                "Esta sugerencia quedó desactualizada — la tarea que referencia ya no "
-                "pertenece a la obra de esta nota. Reprocesá la entrada para generar "
-                "sugerencias al día."
-            )
-
-    def _parse_edit_date(self, value: str | None, label: str) -> date | None:
-        """`date.fromisoformat` sin capturar dejaba un `ValueError` sin manejar
-        —500 opaco— cuando el jefe editaba la sugerencia con una fecha mal
-        escrita antes de aplicarla. Ver audit 08-bitácora, hallazgo N5."""
-        if not value:
-            return None
-        try:
-            return date.fromisoformat(value)
-        except ValueError:
-            raise UnprocessableError(f"'{value}' no es una fecha válida para {label} (formato AAAA-MM-DD).")
-
-    def _parse_edit_status(self, value: str) -> TaskStatus:
-        try:
-            return TaskStatus(value)
-        except ValueError:
-            valid = ", ".join(t.value for t in TaskStatus)
-            raise UnprocessableError(f"'{value}' no es un estado válido de tarea (opciones: {valid}).")
+    # ── Sugerencias: la bitácora las genera, SuggestionService las resuelve ───
+    #
+    # Estos dos métodos existen para las rutas legacy por índice
+    # (`/bitacora/{id}/suggestions/{idx}/...`). La lógica de aplicar vive en
+    # SuggestionService, que es a donde apuntan las rutas nuevas por id.
 
     async def apply_suggestion(
         self, entry_id: int, index: int, manager_id: int, actor: dict | None = None,
         edits: dict | None = None,
     ) -> BitacoraEntry:
         entry = await self.get_or_raise(entry_id)
-        suggestions = list(entry.suggestions or [])
-        if index < 0 or index >= len(suggestions):
-            raise NotFoundError("Sugerencia", index)
-        s = dict(suggestions[index])
-        if s.get("applied"):
-            return entry
-        if not entry.obra_id:
-            raise UnprocessableError("Asigná la entrada a una obra antes de aplicar sugerencias.")
-
-        # El jefe puede ajustar la sugerencia antes de aplicarla (la IA propone, él decide).
-        if edits:
-            for k in ("new_start_date", "new_due_date", "new_status", "title", "responsible_name", "description"):
-                if k in edits:
-                    s[k] = edits[k]
-
-        task_service = TaskService(self.session)
-        stype = s.get("type")
-
-        if stype == "reschedule_task":
-            if not s.get("task_id"):
-                raise UnprocessableError("La sugerencia no referencia una tarea válida.")
-            await self._assert_task_in_entry_obra(s["task_id"], entry.obra_id)
-            update = TaskUpdate(
-                start_date=self._parse_edit_date(s.get("new_start_date"), "la fecha de inicio"),
-                due_date=self._parse_edit_date(s.get("new_due_date"), "la fecha de fin"),
-            )
-            # cascade_dates=True: si la tarea tiene dependientes, se corren en cadena
-            updated = await task_service.update(s["task_id"], update, manager_id, actor=actor, cascade_dates=True)
-            s["result_task_id"] = s["task_id"]
-            if getattr(updated, "_date_adjustment", None):
-                s["result_note"] = updated._date_adjustment
-
-        elif stype == "create_task":
-            responsible_id = None
-            if s.get("responsible_name"):
-                # Responsible es global por tenant (ya no tiene obra_id): matchear por
-                # nombre dentro del tenant de la obra. Si no hay match, la tarea se crea
-                # sin responsable (no es un error).
-                obra_tenant = (await self.session.execute(
-                    select(Obra.tenant_id).where(Obra.id == entry.obra_id)
-                )).scalar_one_or_none()
-                q = select(Responsible).where(
-                    Responsible.is_active == True,  # noqa: E712
-                    Responsible.full_name.ilike(f"%{s['responsible_name']}%"),
-                )
-                if obra_tenant is not None:
-                    q = q.where(Responsible.tenant_id == obra_tenant)
-                resp = (await self.session.execute(q)).scalars().first()
-                responsible_id = resp.id if resp else None
-            created = await task_service.create(
-                TaskCreate(
-                    obra_id=entry.obra_id,
-                    title=s.get("title") or "Tarea desde bitácora",
-                    description=(s.get("description") or "") + f"\n\n[Origen: bitácora #{entry.id}]",
-                    start_date=self._parse_edit_date(s.get("new_start_date"), "la fecha de inicio"),
-                    due_date=self._parse_edit_date(s.get("new_due_date"), "la fecha de fin"),
-                    responsible_id=responsible_id,
-                ),
-                manager_id,
-                actor=actor,
-            )
-            s["result_task_id"] = created.id
-            if getattr(created, "_date_adjustment", None):
-                s["result_note"] = created._date_adjustment
-
-        elif stype == "update_status":
-            if not s.get("task_id") or not s.get("new_status"):
-                raise UnprocessableError("La sugerencia no tiene tarea o estado válido.")
-            await self._assert_task_in_entry_obra(s["task_id"], entry.obra_id)
-            await task_service.apply_status_update_checked(
-                s["task_id"],
-                TaskStatusUpdate(
-                    status=self._parse_edit_status(s["new_status"]),
-                    triggered_by="user",
-                    reason=f"Bitácora #{entry.id}: {s.get('reason', '')[:200]}",
-                ),
-                manager_id,
-            )
-            s["result_task_id"] = s["task_id"]
-
-        elif stype == "note":
-            await self.historial.log(
-                event_type="bitacora_nota",
-                description=s.get("reason") or s.get("description") or "Nota de bitácora",
-                obra_id=entry.obra_id,
-                payload={"entry_id": entry.id},
-                triggered_by="user",
-            )
-
-        s["applied"] = True
-        suggestions[index] = s
-        entry.suggestions = suggestions  # reasignar para que SQLAlchemy detecte el cambio
-        await self.session.flush()
-        # Cierra el loop: avisa por WhatsApp al que mandó la nota que su reporte se aplicó.
-        await self._notify_reporter(entry, self._confirmation_text(s, (actor or {}).get("name")), manager_id)
+        suggestion = await self.suggestions.get_by_entry_index(entry_id, index)
+        await self.suggestions.apply(suggestion, manager_id, actor=actor, edits=edits)
+        await self.session.refresh(entry)
         return entry
 
-    async def dismiss_suggestion(self, entry_id: int, index: int) -> BitacoraEntry:
+    async def dismiss_suggestion(
+        self, entry_id: int, index: int, user_id: int | None = None
+    ) -> BitacoraEntry:
         entry = await self.get_or_raise(entry_id)
-        suggestions = list(entry.suggestions or [])
-        if index < 0 or index >= len(suggestions):
-            raise NotFoundError("Sugerencia", index)
-        s = dict(suggestions[index])
-        s["dismissed"] = True
-        suggestions[index] = s
-        entry.suggestions = suggestions
-        await self.session.flush()
+        suggestion = await self.suggestions.get_by_entry_index(entry_id, index)
+        await self.suggestions.dismiss(suggestion, user_id)
+        await self.session.refresh(entry)
         return entry
 
-    def _fmt_date(self, iso: str | None) -> str:
-        if not iso:
-            return ""
-        try:
-            return date.fromisoformat(iso).strftime("%d/%m/%Y")
-        except ValueError:
-            return iso
-
-    def _confirmation_text(self, s: dict, actor_name: str | None) -> str:
-        who = f"{actor_name} " if actor_name else ""
-        t = s.get("type")
-        if t == "reschedule_task":
-            ref = s.get("task_title") or f"tarea #{s.get('task_id')}"
-            partes = []
-            if s.get("new_start_date"):
-                partes.append(f"inicio {self._fmt_date(s['new_start_date'])}")
-            if s.get("new_due_date"):
-                partes.append(f"fin {self._fmt_date(s['new_due_date'])}")
-            extra = f": {' · '.join(partes)}" if partes else ""
-            return f"✅ {who}reprogramó «{ref}»{extra} a partir de tu nota de voz."
-        if t == "create_task":
-            return f"✅ {who}creó la tarea «{s.get('title') or 'nueva tarea'}» a partir de tu nota de voz."
-        if t == "update_status":
-            ref = s.get("task_title") or f"tarea #{s.get('task_id')}"
-            estado = (s.get("new_status") or "").replace("_", " ")
-            return f"✅ {who}marcó «{ref}» como {estado} a partir de tu nota de voz."
-        return f"✅ {who}registró tu nota en la bitácora de la obra. ¡Gracias!"
-
-    async def _notify_reporter(self, entry: BitacoraEntry, text: str, manager_id: int | None) -> None:
-        """Avisa por WhatsApp a quien mandó la nota (salvo que sea quien está aplicando).
-        Nunca rompe el flujo si el envío falla."""
-        from app.integrations.twilio.client import send_whatsapp_message
-        from app.models.obra import Obra
-        from app.models.tenant_membership import TenantMembership
-        number = None
-        if entry.responsible_id is not None:
-            number = (await self.session.execute(
-                select(Responsible.whatsapp_number).where(Responsible.id == entry.responsible_id)
-            )).scalar_one_or_none()
-        elif entry.created_by is not None and entry.created_by != manager_id:
-            # whatsapp_number vive en TenantMembership (Fase 3) — resolvemos
-            # la membership de la obra de la entrada si la tiene; si no,
-            # cualquiera de sus membership sirve para este best-effort.
-            stmt = select(TenantMembership.whatsapp_number).where(
-                TenantMembership.user_id == entry.created_by
-            )
-            if entry.obra_id is not None:
-                obra_tenant_id = (await self.session.execute(
-                    select(Obra.tenant_id).where(Obra.id == entry.obra_id)
-                )).scalar_one_or_none()
-                if obra_tenant_id is not None:
-                    stmt = stmt.where(TenantMembership.tenant_id == obra_tenant_id)
-            number = (await self.session.execute(stmt)).scalars().first()
-        if not number:
-            return
-        try:
-            await send_whatsapp_message(number, text)
-        except Exception:
-            logger.exception("No se pudo notificar al emisor de la bitácora %s", entry.id)
+    async def reassign_obra(self, entry: BitacoraEntry, obra_id: int, tenant_id: int | None) -> None:
+        """Al mover la nota de obra, las sugerencias sin resolver se mueven con
+        ella. Si quedaran apuntando a la obra vieja, el guard por obra de la ruta
+        las dejaría inaccesibles desde la nota."""
+        for row in entry.suggestion_rows:
+            if row.status == SuggestionStatus.PENDIENTE:
+                row.obra_id = obra_id
+                row.tenant_id = tenant_id
+        await self.session.flush()

@@ -118,6 +118,39 @@ class AlertRepository(BaseRepository[Alert]):
         )
         return result.scalar_one_or_none() is not None
 
+    async def append_reason_to_open_alert(
+        self, task_id: int, alert_type, reason_label: str
+    ) -> bool:
+        """Suma el motivo al mensaje de la alerta abierta de esa tarea.
+
+        La alerta se crea en el instante del cambio de estado, antes de que el
+        responsable conteste por qué. En vez de retrasar el bloqueo hasta tener
+        el motivo —lo que perdería el reporte si la persona abandona la
+        conversación— se avisa primero y se enriquece después: el reporte de
+        campo nunca se pierde, y el motivo llega al mismo lugar donde el jefe ya
+        estaba mirando.
+
+        Devuelve False si no hay ninguna alerta abierta que actualizar (por
+        ejemplo si el jefe ya la marcó leída).
+        """
+        alert = (await self.session.execute(
+            select(Alert)
+            .where(
+                Alert.task_id == task_id,
+                Alert.type == alert_type,
+                Alert.is_read.is_(False),
+            )
+            .order_by(Alert.created_at.desc())
+            .limit(1)
+        )).scalar_one_or_none()
+        if alert is None:
+            return False
+        if reason_label.lower() in (alert.message or "").lower():
+            return True  # ya lo tiene: no duplicar
+        alert.message = f"{(alert.message or '').rstrip('.')}: {reason_label.lower()}."
+        await self.session.flush()
+        return True
+
     async def mark_read_by_task_and_type(
         self, task_id: int, alert_type: AlertType, tenant_id: int | None = None
     ) -> None:
