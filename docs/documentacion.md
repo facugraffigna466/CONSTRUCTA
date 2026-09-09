@@ -2679,3 +2679,27 @@ Backend: `alembic/versions/0073_await_block_reason_step.py` y `tests/test_motivo
 
 ### Pending / next steps
 El motivo llega al historial y a la alerta, pero todavía **no se muestra como dato propio en la interfaz** (aparece dentro del texto del mensaje de la alerta). Un paso natural sería exponerlo como campo para poder filtrar y contar: "cuántas veces se frenó esta obra por falta de material" es una pregunta que las reglas de riesgo ya podrían responder si el dato estuviera estructurado.
+
+## 2026-09-09 — Diseño de indicadores de obra (Dashboard Avanzado)
+
+### Objective
+Ticket de diseño, no de implementación: definir qué métricas muestra el dashboard de obra y cómo, para que la implementación se tome después a partir del documento. Entregable: `docs/features/dashboard-indicadores-obra.md`.
+
+### Changes made
+El relevamiento previo dejó a la vista que el problema no era falta de números sino que están repartidos en tres lugares que no se hablan, y que el único indicador visible es el más pobre: `ResumenTab.tsx:108` calcula el avance como `completadas / no_canceladas`, así que una tarea al 95% aporta lo mismo que una sin empezar — `Task.estimated_progress` existe desde siempre y no alimenta ningún agregado. En paralelo, las 5 métricas de `obra_stats_service.py` (921 líneas, bien documentadas) no las ve nadie: alimentan solo el informe mensual con IA.
+
+El documento define 13 indicadores: 6 nuevos (avance ponderado por días laborables, avance planificado, SPI, fecha de fin proyectada, curva S, rollup de desvío vs. línea base), 2 agregados nuevos sobre datos que ya se calculan pero no se resumen (holgura/ruta crítica, hitos) y 5 que ya existen y hoy están escondidos (alertas por severidad, cuello de botella del digest semanal, ejecución de materiales, y los dos del snapshot mensual). Cada ficha trae fórmula cerrada, campo de origen, casos borde y visual. Se fijan una sola vez las definiciones comunes (universo de tareas, peso, avance, avance planificado) para que el panel no se contradiga a sí mismo.
+
+Tres decisiones que conviene registrar. **La serie real de la curva S se historiza hacia adelante** con una tabla nueva (`obra_progress_daily`) y un job diario en el scheduler existente, en vez de reconstruirla desde `historial_eventos`: el replay es frágil y no se backfillea porque inventar historia es peor que no tenerla. **Se descarta CPI/Earned Value de costo**: el sistema tiene materiales por tarea, sin mano de obra ni subcontratos, y un CPI sobre eso sería un número con nombre serio y contenido falso; en su lugar va un indicador de alineación entre materiales recibidos y avance real, con su alcance declarado en el tooltip. **Se descarta productividad por responsable** — el día que el capataz sospecha que reportar un bloqueo le baja el puntaje, deja de reportar bloqueos.
+
+El contrato de API exige `available` + `reason` por bloque y prohíbe mandar 0 en lugar de "no calculable": en pantalla se ven igual y significan lo opuesto.
+
+### Files modified
+`docs/features/dashboard-indicadores-obra.md` (nuevo) y esta entrada.
+
+### Pending / next steps
+Las tres decisiones de producto quedaron cerradas y volcadas al documento (sección 9): el ranking de retraso **por responsable** se muestra solo a admin y se filtra en el backend, no en el frontend —el ranking por tarea lo ve cualquiera—; el cambio del % de avance se comunica con un **tooltip permanente** en el indicador en vez de una nota de release, porque también le sirve al usuario que entra seis meses después; y el fix del portfolio (`PortfolioPage.tsx:538`, que promedia con la fórmula vieja) **entra en la misma entrega que I-01** y dejó de ser un paso suelto al final del plan: mostrar 35% en el portfolio y 42% en el detalle para la misma obra hace perder la confianza en los dos números.
+
+Quedan dos cosas abiertas, ninguna bloqueante: confirmar el formato del documento con Facundo, y una regla de riesgo por SPI que el diseño dejó anotada pero **deliberadamente fuera de alcance** —toca `risk_service.py`, `SystemSettings` y una migración de configuración, y es alcance de otro ticket.
+
+**El IPI no se toca todavía**: el documento describe una solución diseñada, no implementada; la sección de Implementación se actualiza cuando Martina tenga el módulo andando.
