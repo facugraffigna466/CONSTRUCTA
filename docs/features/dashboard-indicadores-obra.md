@@ -1,10 +1,10 @@
 # Diseño de indicadores de obra — Dashboard Avanzado
 
-> **Estado:** diseño aprobado para implementar. **Este documento no implementa nada**: define qué indicadores muestra el dashboard de obra, con qué fórmula exacta, de qué campo salen, qué pasa cuando el dato no alcanza y cómo se ven. La implementación la toma Martina a partir de acá.
+> **Estado:** **implementado y mergeado a `main`** (I-01 a I-16, backend y frontend, migración `0074` incluida). Nació como documento de diseño previo a la implementación y hoy es **la especificación de lo que corre en producción**: define qué indicadores muestra el dashboard de obra, con qué fórmula exacta, de qué campo salen, qué pasa cuando el dato no alcanza y cómo se ven. Si el código y este documento se contradicen, es un bug de alguno de los dos — no un plan pendiente.
 > **Fase:** Dashboard Avanzado (Gantt) — 29/09 a 23/10.
 > **Regla de oro:** ningún indicador de este documento usa un modelo de lenguaje. Todos salen de SQL/Python y son verificables a mano con los datos de una obra.
 > **Formato:** pendiente de confirmar contra la plantilla que define Facundo. La estructura de acá sigue la de los demás `docs/features/*.md` del repo.
-> **Extensión 2026-09-10 — "Visualización de desvíos y problemas":** se agregan I-14 a I-16 al final de la sección 4. Mismo estado que el resto del documento (diseño listo para implementar, no implementado todavía) — entran como paso 7 del plan (sección 10).
+> **Extensión 2026-09-10 — "Visualización de desvíos y problemas":** se agregan I-14 a I-16 en la sección 4-bis. Mismo estado que el resto del documento: implementados, paso 7 del plan (sección 10).
 
 ---
 
@@ -382,7 +382,7 @@ Van en el mismo acordeón "Análisis del período" que I-12/I-13 (mismo endpoint
 
 **Fuente:** `ObraStatsService._top_deviations()` ya arma, para las `TOP_DEVIATIONS_COUNT` (3) tareas con mayor `abs(deviation_days)`, un paquete completo: menciones de bitácora en la ventana previa al vencimiento, alertas propias y de predecesoras, últimos eventos de historial (hasta 30, con `payload` crudo y `triggered_by`) y el impacto en cascada (`cascade_impact`).
 
-**Qué se muestra y qué no (D-04):** el paquete completo es insumo para que un modelo redacte un informe, no para pegar tal cual en una tarjeta. El panel muestra un **resumen curado** por tarea: título, desvío en días, hasta 3 menciones de bitácora (resumen + categoría matcheada), cantidad de alertas asociadas, y `len(cascade_impact.tasks_pushed_by_cascade)` si es > 0 ("empujó a N tareas") — no `direct_dependent_count`, que cuenta dependencias estructurales del grafo aunque nunca haya disparado una cascada real. **No se muestra `responsible_id` ni `triggered_by`** — esto es evidencia sobre una *tarea*, no un ranking de quién la causó; es el mismo criterio que en la sección 8 descartó "productividad por responsable". El JSON completo sigue disponible en el snapshot para quien lo consulte por API; la UI no lo despliega.
+**Qué se muestra y qué no (D-04):** el paquete completo es insumo para que un modelo redacte un informe, no para pegar tal cual en una tarjeta. El panel muestra un **resumen curado** por tarea: título, desvío en días, hasta 3 menciones de bitácora (resumen + categoría matcheada), cantidad de alertas asociadas, y `len(cascade_impact.tasks_pushed_by_cascade)` si es > 0 ("empujó a N tareas") — no `direct_dependent_count`, que cuenta dependencias estructurales del grafo aunque nunca haya disparado una cascada real. **No se muestra `responsible_id`** — esto es evidencia sobre una *tarea*, no un ranking de quién la causó; es el mismo criterio que en la sección 8 descartó "productividad por responsable". Tampoco se muestran los eventos de historial crudos ni `triggered_by`, pero **por ruido, no por privacidad**: `triggered_by` es el canal por el que entró el evento (`user` | `chatbot` | `system`, ver `models/historial.py`), no quién lo hizo, y confundirlo con un dato de persona haría creer que la tarjeta protege algo que no protege. El JSON completo sigue disponible en el snapshot para quien lo consulte por API; la UI no lo despliega.
 
 **Casos borde:**
 - `top_deviations.count == 0` (ninguna tarea con `deviation_days != 0` ese período) → no se muestra la sección. Es buena noticia, no un estado vacío que llenar.

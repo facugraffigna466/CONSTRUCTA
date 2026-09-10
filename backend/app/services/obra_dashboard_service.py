@@ -587,7 +587,7 @@ class ObraDashboardService:
             "estimation_accuracy": metrics.get("estimation_accuracy"),
             # I-14/I-15/I-16: sin filtro de rol — a diferencia de by_responsible
             # arriba, ninguna trae ranking por persona (D-04 lo resuelve el front
-            # no renderizando responsible_id/triggered_by, el JSON viaja completo).
+            # no renderizando responsible_id, el JSON viaja completo).
             # No es un criterio nuevo: risk_concentration["by_task"] ya viaja sin
             # filtrar con responsible_id en cada fila (D-01 solo exige admin para
             # by_responsible, el ranking por tarea "lo ve cualquiera").
