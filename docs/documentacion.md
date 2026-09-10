@@ -2728,4 +2728,31 @@ Backend: `app/services/dashboard_calc.py`, `app/services/obra_dashboard_service.
 Suite completa de backend: **603 passed** (era 559 antes de esta sesión). Migración 0074 probada con upgrade/downgrade/upgrade contra PostgreSQL local. Cada etapa se verificó además contra datos reales de una obra de prueba (no solo la suite automatizada): se generaron a mano un snapshot mensual y varias filas de `obra_progress_daily` para poder ver el acordeón y la curva con datos reales en el navegador (Playwright headless, sin librería nueva en el proyecto), lo que fue lo que permitió encontrar el bug del emparejamiento de fechas — con datos sintéticos alineados por casualidad, como los que arma un test, no se hubiera notado. Frontend: `tsc` y `eslint` limpios sobre los archivos tocados, 49/49 tests de Vitest sin cambios.
 
 ### Pending / next steps
-El toggle semana/mes de la curva de avance quedó acotado a semanal (simplificación de alcance ya declarada en el diseño); agregar el mensual es un cambio menor si hiciera falta. Los tres PRs quedan encadenados y pendientes de revisión y merge en orden (P0 ya en `main`; P1 y P2 abiertos, cada uno con base en el anterior).
+El toggle semana/mes de la curva de avance quedó acotado a semanal (simplificación de alcance ya declarada en el diseño); agregar el mensual es un cambio menor si hiciera falta. Los tres PRs se revisaron y mergearon en orden (P0 #121, P1 #122, P2 #124), todos en `main`.
+
+## 2026-09-10 — Limpieza integral de ESLint en el frontend
+
+### Objective
+Durante la verificación manual del Dashboard Avanzado apareció el pedido de revisar "las fallas de lint". El chequeo mostró que ningún archivo tocado por el dashboard tenía problemas, pero `npx eslint .` sobre todo el proyecto sí: 70 problemas preexistentes (65 errores + 5 warnings) repartidos en el frontend, sin relación con esta feature. Decisión explícita: "no importa si lo toque yo o no, tiene que estar todo bien" — se resolvieron los 70, no solo los del dashboard.
+
+### Changes made
+Tres grupos de reglas, cada una con un patrón de fix consistente:
+
+**Reglas nuevas de React** (`react-hooks/set-state-in-effect`, `react-hooks/refs`, `react-hooks/static-components`), parte de las "React Compiler rules" que trajo la versión instalada de `eslint-plugin-react-hooks`. `set-state-in-effect` (llamar a un setter de forma síncrona dentro de un `useEffect`) se resolvió envolviendo la llamada en `queueMicrotask()`, el mismo patrón que ya usaba el código existente vía `.then()`. Escribir una ref durante el render se movió a un `useEffect` sin dependencias. Un componente definido dentro de otro (`FilterBtn` en `TaskTable.tsx`, `SectionLabel` en `ObraSetupWizard.tsx`) se hoisteó a nivel de módulo, recibiendo por props lo que antes tomaba por clausura.
+
+**Bug real encontrado al aplicar el fix de refs, no buscado.** En `GanttTimeline.tsx`, `getRowTranslate` —la función que calcula cuánto se desplaza una fila mientras se arrastra para reordenarla— leía `orderedVisRef.current` de forma síncrona durante el render. Al mover la actualización de esa ref a un `useEffect` (el fix estándar de la regla), esa lectura hubiera quedado leyendo el valor del render anterior durante el arrastre. Se detectó rastreando manualmente todos los sitios que leen esa ref antes de aplicar el fix en todo el archivo, y se corrigió haciendo que la función use `orderedVisible` (el valor ya fresco del closure del render actual) en vez del ref.
+
+**`react-refresh/only-export-components`** (Vite): un archivo que exporta un componente de React solo puede exportar componentes, o Fast Refresh cae a recarga completa en desarrollo. No hay excepción para hooks (`useX`), se verificó leyendo la regla en `eslint-plugin-react-refresh`. Se separaron en archivos propios: `useUser` (antes en `UserContext.tsx`), `useConfirm` (antes en `ConfirmProvider.tsx`), los objetos `UserContext`/`ConfirmContext` (`userContextObject.ts`, `confirmContextObject.ts`), y tres módulos de constantes/helpers que vivían dentro de componentes (`lib/userMeta.ts`, `lib/onboarding.ts`, `lib/planLimit.ts`).
+
+El resto: variables sin usar, ternarios usados por su efecto secundario convertidos a `if/else`, y una asignación inicial que TypeScript ya prueba innecesaria por control de flujo.
+
+**Deliberadamente fuera de alcance:** los diagnósticos de SonarLint que aparecen en el editor (complejidad cognitiva, ternarios anidados, accesibilidad) son un linter distinto del que corre en CI (`eslint.config.js`); solo se atendió el output real de `npx eslint .`, que es el que el proyecto tiene configurado y hace fallar el build.
+
+### Files modified
+43 archivos de `frontend/src/` (componentes, hooks, contexts, páginas); 7 nuevos: `components/confirmContextObject.ts`, `context/userContextObject.ts`, `hooks/useConfirm.ts`, `hooks/useUser.ts`, `lib/onboarding.ts`, `lib/planLimit.ts`, `lib/userMeta.ts`. Ningún archivo de `backend/`. PR #125, rama `fix/frontend-eslint-cleanup`.
+
+### Validation
+`npx eslint .`, `npx tsc -b` y `npx vitest run` (49/49) limpios; `npm run build` sin errores. Verificación manual en navegador (Playwright headless) sin errores de consola en ningún flujo: Portfolio, tab Resumen completo (KPIs, curva S, ruta crítica, línea base, hitos, materiales), tab Tareas en vista Planilla y Tabla, dropdown de filtro (el `FilterBtn` hoisteado), y — por ser el fix de mayor riesgo — el drag-and-drop de reordenamiento de filas en el Gantt.
+
+### Pending / next steps
+Ninguno abierto: era una limpieza acotada y quedó cerrada en el mismo PR.
