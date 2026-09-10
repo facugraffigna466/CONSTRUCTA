@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { GanttTimeline } from "./GanttTimeline";
 import { HistorialPanel } from "./HistorialPanel";
+import { CurvaSChart } from "./CurvaSChart";
+import { MonthlyInsightsAccordion } from "./MonthlyInsightsAccordion";
 import type { Alert, HistorialEvento, ObraDashboard, Responsible, Task, TaskStatus } from "../types";
 import { SEVERITY_LABEL, SEVERITY_ORDER, SEVERITY_PALETTE } from "../lib/alertMeta";
 import { forecastReasonLabel, spiColor, spiLabel } from "../lib/dashboardMeta";
@@ -336,6 +338,9 @@ export function ResumenTab({
           </button>
         </div>
       </div>
+
+      {/* ── I-05: curva S ──────────────────────────────────────────────────────── */}
+      <CurvaSChart obraId={obraId} />
 
       {/* ── Gantt timeline ────────────────────────────────────────────────────── */}
       <section>
@@ -695,6 +700,9 @@ export function ResumenTab({
           </div>
         </section>
       </div>
+
+      {/* ── I-12/I-13: análisis del período (colapsado) ───────────────────────── */}
+      <MonthlyInsightsAccordion obraId={obraId} />
     </div>
   );
 }

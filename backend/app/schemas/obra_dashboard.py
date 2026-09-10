@@ -6,6 +6,8 @@ docs/features/dashboard-indicadores-obra.md: bloques P0
 Cada bloque trae `available` (y `reason` cuando aplica): el frontend nunca
 decide si un dato es válido, lo dice el backend.
 """
+from typing import Any
+
 from pydantic import BaseModel
 
 
@@ -104,6 +106,30 @@ class DashboardMaterials(BaseModel):
     percent_committed: float
     percent_received: float
     alignment_delta: float | None
+
+
+class CurvaSPoint(BaseModel):
+    date: str
+    planned: float
+    real: float | None
+
+
+class CurvaSRead(BaseModel):
+    granularity: str
+    tracking_since: str | None
+    points: list[CurvaSPoint]
+
+
+class MonthlyInsightsRead(BaseModel):
+    available: bool
+    period: str | None
+    computed_at: str | None
+    # Formas que ya define obra_stats_service.py (_risk_concentration /
+    # _estimation_accuracy) — se leen tal cual del snapshot, sin re-tipar acá
+    # cada campo interno; el contrato Pydantic de esas fórmulas vive donde se
+    # calculan, no en este endpoint que solo las reexpone.
+    risk_concentration: dict[str, Any] | None
+    estimation_accuracy: dict[str, Any] | None
 
 
 class ObraDashboardRead(BaseModel):
