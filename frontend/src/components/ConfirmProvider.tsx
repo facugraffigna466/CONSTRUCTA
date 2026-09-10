@@ -1,32 +1,6 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useDialog } from "../hooks/useDialog";
-
-interface ConfirmOpts {
-  title: string;
-  message?: string;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  danger?: boolean;
-}
-interface AlertOpts {
-  title: string;
-  message?: string;
-  okLabel?: string;
-}
-
-interface ConfirmApi {
-  /** Diálogo de confirmación estilado. Resuelve true si el usuario confirma. */
-  confirm: (opts: ConfirmOpts) => Promise<boolean>;
-  /** Aviso estilado de un solo botón (reemplaza `alert()`). */
-  alert: (opts: AlertOpts) => Promise<void>;
-}
-
-const ConfirmContext = createContext<ConfirmApi>({
-  confirm: async () => false,
-  alert: async () => {},
-});
-
-export const useConfirm = () => useContext(ConfirmContext);
+import { ConfirmContext, type AlertOpts, type ConfirmOpts } from "./confirmContextObject";
 
 type Pending =
   | { kind: "confirm"; opts: ConfirmOpts; resolve: (v: boolean) => void }

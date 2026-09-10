@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import socket from "../lib/socket";
-import { useUser } from "../context/UserContext";
+import { useUser } from "./useUser";
 import { fetchOnlineUsers } from "../api/presence";
 
 export interface OnlineUser {
@@ -29,7 +29,7 @@ export function useOnlineUsers(): OnlineUser[] {
   const { user } = useUser();
   const [online, setOnline] = useState<OnlineUser[]>([]);
   const userIdRef = useRef(user.id);
-  userIdRef.current = user.id;
+  useEffect(() => { userIdRef.current = user.id; });
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +70,6 @@ export function useOnlineUsers(): OnlineUser[] {
       document.removeEventListener("visibilitychange", handleVisibility);
       stop();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return online;
@@ -87,9 +86,11 @@ export function useViewingUsers(obraId: number, tab: string): OnlineUser[] {
   const obraIdRef = useRef(obraId);
   const tabRef = useRef(tab);
   const userIdRef = useRef(user.id);
-  obraIdRef.current = obraId;
-  tabRef.current = tab;
-  userIdRef.current = user.id;
+  useEffect(() => {
+    obraIdRef.current = obraId;
+    tabRef.current = tab;
+    userIdRef.current = user.id;
+  });
 
   useEffect(() => {
     if (!socket.connected) socket.connect();
@@ -113,7 +114,6 @@ export function useViewingUsers(obraId: number, tab: string): OnlineUser[] {
       socket.off("connect", emitJoin);
       setViewers([]);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraId]);
 
   // Al cambiar de módulo dentro de la misma obra, actualizamos el tab sin

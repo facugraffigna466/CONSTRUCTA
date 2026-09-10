@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "r
 import { X, AlertTriangle, Loader2, ClipboardList, GitBranch } from "lucide-react";
 import { createTask, fetchCascadePreview, fetchTask, updateTask } from "../api/tasks";
 import type { CascadeAffectedTask, TaskUpdatePayload } from "../api/tasks";
-import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
+import { UpgradeModal } from "./UpgradeModal";
+import { getPlanLimitError, type PlanLimitInfo } from "../lib/planLimit";
 import { TaskMaterialsSection, type DraftMaterial } from "./TaskMaterialsSection";
 import { TaskBitacoraOrigin } from "./TaskBitacoraOrigin";
 import { TaskSuggestions } from "./TaskSuggestions";
@@ -126,6 +127,11 @@ export function TaskFormModal({
       emitStartEditing(task.id, obraId);
       return () => { emitStopEditing(task.id, obraId); };
     }
+    // Deliberadamente `task?.id`, no `task`: solo interesa el id para la
+    // señal de edición en vivo — reaccionar al objeto completo reenviaría
+    // start/stop cada vez que el padre pasa una referencia nueva con el
+    // mismo id (p.ej. tras un refetch en segundo plano).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, task?.id, obraId]);
 
   // Lock body scroll while modal is open

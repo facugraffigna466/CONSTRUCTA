@@ -17,8 +17,8 @@ export function CriticalAlertToast({ alert, onDismiss }: Props) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (!alert) { setVisible(false); return; }
-    setVisible(true);
+    if (!alert) { queueMicrotask(() => setVisible(false)); return; }
+    queueMicrotask(() => setVisible(true));
     const t = setTimeout(() => { setVisible(false); setTimeout(onDismiss, 350); }, DISMISS_MS);
     return () => clearTimeout(t);
   }, [alert, onDismiss]);

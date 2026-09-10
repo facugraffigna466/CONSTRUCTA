@@ -15,7 +15,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import type { Obra, ObraStatus, ObraTab, Page, TenantOption } from "../../types";
-import { useUser } from "../../context/UserContext";
+import { useUser } from "../../hooks/useUser";
 
 const HERO_DOT_COLORS = ["#FF8856","#3D8BFF","#2AC58A","#B07CF7","#8FA8B5","#E8B14A","#5DA8B5"];
 // Etiqueta real del estado de la obra (antes se mostraba un % hardcodeado por

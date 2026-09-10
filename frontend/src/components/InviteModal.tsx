@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
+import { useUser } from "../hooks/useUser";
+import { ROLE_LABELS, ROLE_COLORS } from "../lib/userMeta";
 import type { UserRole } from "../context/UserContext";
 import { usePermission } from "../hooks/usePermission";
 import { useDialog } from "../hooks/useDialog";
 import { fetchMembers, inviteMember, removeMember, resendInvite } from "../api/users";
 import type { ApiUser, ObraAssignmentInvite, ObraUserRoleType } from "../api/users";
 import type { Obra } from "../types";
-import { useConfirm } from "./ConfirmProvider";
-import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
+import { useConfirm } from "../hooks/useConfirm";
+import { UpgradeModal } from "./UpgradeModal";
+import { getPlanLimitError, type PlanLimitInfo } from "../lib/planLimit";
 
 interface Props {
   onClose: () => void;
@@ -94,7 +96,7 @@ export function InviteModal({ onClose, obras = [] }: Props) {
     }
   }
 
-  useEffect(() => { loadMembers(); }, []);
+  useEffect(() => { queueMicrotask(loadMembers); }, []);
 
   async function handleSend() {
     if (!email.trim()) return;

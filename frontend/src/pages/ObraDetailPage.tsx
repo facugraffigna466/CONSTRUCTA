@@ -108,8 +108,14 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
 
   useEffect(() => {
     if (!focusAlert || loading) return;
-    onTabChange("tareas");
-    setTaskView("planilla");
+    // queueMicrotask: el cambio de tab/vista es una reacción a un evento
+    // externo (abrir la obra desde una notificación de alerta), no un
+    // valor derivado del render — se difiere a microtask para no
+    // encadenar un setState síncrono dentro del efecto.
+    queueMicrotask(() => {
+      onTabChange("tareas");
+      setTaskView("planilla");
+    });
     const t = setTimeout(() => {
       sheetViewRef.current?.focusTask(focusAlert.taskId, focusAlert.field);
     }, 80);
@@ -163,7 +169,10 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
   }, [obra.id]);
 
   useEffect(() => {
-    loadData();
+    // Diferido a microtask: loadData() dispara setLoading/setTasks/etc. de
+    // forma síncrona, y el efecto no debe encadenar esos setState
+    // directamente — mismo motivo que en el efecto de abajo.
+    queueMicrotask(loadData);
   }, [loadData]);
 
   const refreshTasks = useCallback(async () => {
@@ -186,7 +195,7 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
     return () => window.removeEventListener("focus", refreshTasks);
   }, [refreshTasks]);
 
-  useEffect(() => { refreshTasks(); }, [activeTab, refreshTasks]);
+  useEffect(() => { queueMicrotask(refreshTasks); }, [activeTab, refreshTasks]);
 
   useTaskSocket({
     obraId: obra.id,
@@ -323,7 +332,6 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
           <ResumenTab
             dashboard={dashboard}
             tasks={tasks}
-            alerts={alerts}
             historial={historial}
             responsibles={responsibles}
             obraStartDate={obra.start_date}
@@ -331,7 +339,6 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
             obraId={obra.id}
             suggestionCounts={suggestionCounts}
             error={error}
-            onMarkRead={handleMarkRead}
             onViewAlerts={() => onTabChange("alertas")}
             onViewTareas={() => onTabChange("tareas")}
             onViewHistorial={() => onTabChange("historial")}

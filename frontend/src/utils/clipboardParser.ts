@@ -59,7 +59,7 @@ function parseDate(raw: string): string | null {
   }
 
   // DD/MM/YYYY or MM/DD/YYYY — both are ambiguous, but Argentina uses DD/MM/YYYY
-  const slashMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  const slashMatch = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (slashMatch) {
     const day   = parseInt(slashMatch[1], 10);
     const month = parseInt(slashMatch[2], 10);

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useUser, ROLE_LABELS, ROLE_COLORS } from "../context/UserContext";
+import { useUser } from "../hooks/useUser";
+import { ROLE_LABELS, ROLE_COLORS } from "../lib/userMeta";
 import { usePermission } from "../hooks/usePermission";
 import { InviteModal } from "../components/InviteModal";
 import { MemberObraRolesModal } from "../components/MemberObraRolesModal";
@@ -79,7 +80,7 @@ export function EquipoPage() {
     }
   }
 
-  useEffect(() => { reload(); }, [showInvite]);
+  useEffect(() => { queueMicrotask(reload); }, [showInvite]);
 
   const active = members.filter(m => m.is_active).length;
 

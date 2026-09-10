@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { useUser } from "../context/UserContext";
+import { useUser } from "../hooks/useUser";
 import { changePassword, updateProfile, uploadAvatar } from "../api/users";
 import { normalizePhone } from "../utils/phone";
 import { useDialog } from "../hooks/useDialog";

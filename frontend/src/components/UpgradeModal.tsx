@@ -1,30 +1,6 @@
 import { Rocket, X } from "lucide-react";
 import { useDialog } from "../hooks/useDialog";
-
-export interface PlanLimitInfo {
-  message: string;
-  resource?: string;
-  current?: number;
-  limit?: number;
-  plan?: string;
-  /** "plan_expired" = el plan venció (hay que RENOVAR el mismo plan, no subir
-   * de categoría); "plan_limit_reached" (u otro) = tocó techo del plan (ahí sí
-   * tiene sentido ofrecer subir de plan). */
-  code?: string;
-}
-
-/** Extrae la info de límite de plan de un error HTTP 402, o null si no es 402. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function getPlanLimitError(err: unknown): PlanLimitInfo | null {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const resp = (err as any)?.response;
-  if (resp?.status !== 402) return null;
-  const d = resp.data?.detail;
-  if (d && typeof d === "object" && d.message) {
-    return { message: d.message, resource: d.resource, current: d.current, limit: d.limit, plan: d.plan, code: d.code };
-  }
-  return { message: "Alcanzaste el límite de tu plan. Actualizá para continuar." };
-}
+import type { PlanLimitInfo } from "../lib/planLimit";
 
 const PLAN_LABEL: Record<string, string> = {
   basico: "Básico", pro: "Pro", enterprise: "Enterprise",

@@ -48,7 +48,7 @@ export function useActivityFeed(currentUserId?: number): [ActivityEvent[], Activ
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [latest, setLatest] = useState<ActivityEvent | null>(null);
   const currentUserIdRef = useRef(currentUserId);
-  currentUserIdRef.current = currentUserId;
+  useEffect(() => { currentUserIdRef.current = currentUserId; });
 
   useEffect(() => {
     if (!socket.connected) socket.connect();

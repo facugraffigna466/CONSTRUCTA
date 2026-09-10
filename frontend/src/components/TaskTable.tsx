@@ -155,6 +155,44 @@ function StatusDropdown({
   );
 }
 
+type FilterCol = "estado" | "responsable" | "vencimiento";
+
+function FilterBtn({
+  col, active, openFilter, setOpenFilter, setDropdownPos,
+}: Readonly<{
+  col: FilterCol;
+  active: boolean;
+  openFilter: FilterCol | null;
+  setOpenFilter: (col: FilterCol | null) => void;
+  setDropdownPos: (pos: { top: number; left: number }) => void;
+}>) {
+  return (
+    <button
+      type="button"
+      onClick={e => {
+        e.stopPropagation();
+        if (openFilter === col) { setOpenFilter(null); return; }
+        const rect = e.currentTarget.getBoundingClientRect();
+        setDropdownPos({ top: rect.bottom + 6, left: rect.left });
+        setOpenFilter(col);
+      }}
+      style={{
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: 18, height: 18, borderRadius: 4,
+        background: active ? "#FF6B35" : "transparent",
+        border: "none", cursor: "pointer", padding: 0,
+        flexShrink: 0,
+        transition: "background 0.12s",
+      }}
+      title="Filtrar"
+    >
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+        <path d="M1 2.5h10M3 6h6M5 9.5h2" stroke={active ? "#fff" : "#ADAAA4"} strokeWidth="1.4" strokeLinecap="round"/>
+      </svg>
+    </button>
+  );
+}
+
 function ResponsableAvatar({
   task,
   responsibles,
@@ -272,10 +310,18 @@ export function TaskTable({
   const hasFilters = statusFilter.size > 0 || responsibleFilter.size > 0 || overdueOnly || !!fromDate || !!toDate;
 
   function toggleStatus(s: TaskStatus) {
-    setStatusFilter(prev => { const n = new Set(prev); n.has(s) ? n.delete(s) : n.add(s); return n; });
+    setStatusFilter(prev => {
+      const n = new Set(prev);
+      if (n.has(s)) { n.delete(s); } else { n.add(s); }
+      return n;
+    });
   }
   function toggleResponsible(rid: string) {
-    setResponsibleFilter(prev => { const n = new Set(prev); n.has(rid) ? n.delete(rid) : n.add(rid); return n; });
+    setResponsibleFilter(prev => {
+      const n = new Set(prev);
+      if (n.has(rid)) { n.delete(rid); } else { n.add(rid); }
+      return n;
+    });
   }
 
   const filtered = tasks.filter(t => {
@@ -312,35 +358,6 @@ export function TaskTable({
     tasks.some(t => t.responsible_id === r.id)
   );
   const hasUnassigned = tasks.some(t => t.responsible_id == null);
-
-  // ── Filter icon button ───────────────────────────────────────────────────────
-  function FilterBtn({ col, active }: { col: "estado" | "responsable" | "vencimiento"; active: boolean }) {
-    return (
-      <button
-        type="button"
-        onClick={e => {
-          e.stopPropagation();
-          if (openFilter === col) { setOpenFilter(null); return; }
-          const rect = e.currentTarget.getBoundingClientRect();
-          setDropdownPos({ top: rect.bottom + 6, left: rect.left });
-          setOpenFilter(col);
-        }}
-        style={{
-          display: "inline-flex", alignItems: "center", justifyContent: "center",
-          width: 18, height: 18, borderRadius: 4,
-          background: active ? "#FF6B35" : "transparent",
-          border: "none", cursor: "pointer", padding: 0,
-          flexShrink: 0,
-          transition: "background 0.12s",
-        }}
-        title="Filtrar"
-      >
-        <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-          <path d="M1 2.5h10M3 6h6M5 9.5h2" stroke={active ? "#fff" : "#ADAAA4"} strokeWidth="1.4" strokeLinecap="round"/>
-        </svg>
-      </button>
-    );
-  }
 
   if (tasks.length === 0) {
     return (
@@ -429,7 +446,7 @@ export function TaskTable({
         {/* Estado */}
         <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Estado</span>
-          <FilterBtn col="estado" active={statusFilter.size > 0} />
+          <FilterBtn col="estado" active={statusFilter.size > 0} openFilter={openFilter} setOpenFilter={setOpenFilter} setDropdownPos={setDropdownPos} />
           {openFilter === "estado" && (
             <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, boxShadow: "0 8px 24px -4px rgba(15,22,28,0.14)", padding: 6, minWidth: 165 }}>
               {STATUS_ORDER.map(s => {
@@ -457,7 +474,7 @@ export function TaskTable({
         {/* Responsable */}
         <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Responsable</span>
-          <FilterBtn col="responsable" active={responsibleFilter.size > 0} />
+          <FilterBtn col="responsable" active={responsibleFilter.size > 0} openFilter={openFilter} setOpenFilter={setOpenFilter} setDropdownPos={setDropdownPos} />
           {openFilter === "responsable" && (
             <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, boxShadow: "0 8px 24px -4px rgba(15,22,28,0.14)", padding: 6, minWidth: 185 }}>
               {hasUnassigned && (() => { const on = responsibleFilter.has("null"); return (
@@ -485,7 +502,7 @@ export function TaskTable({
         {/* Vencimiento */}
         <div style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 5 }}>
           <span style={{ fontSize: 10, fontWeight: 600, color: "#7D7973", letterSpacing: "0.09em", textTransform: "uppercase" as const }}>Vencimiento</span>
-          <FilterBtn col="vencimiento" active={overdueOnly || !!fromDate || !!toDate} />
+          <FilterBtn col="vencimiento" active={overdueOnly || !!fromDate || !!toDate} openFilter={openFilter} setOpenFilter={setOpenFilter} setDropdownPos={setDropdownPos} />
           {openFilter === "vencimiento" && (
             <div style={{ position: "fixed", top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999, background: "#fff", border: "1px solid #E6E7E5", borderRadius: 12, boxShadow: "0 8px 24px -4px rgba(15,22,28,0.14)", padding: 8, minWidth: 210, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               {/* Quick: overdue only */}

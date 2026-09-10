@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type ReactNode, type ChangeEvent, type KeyboardEvent } from "react";
 import { parseClipboardRows } from "../utils/clipboardParser";
-import { useUser } from "../context/UserContext";
+import { useUser } from "../hooks/useUser";
 import {
   X, Plus, Trash2, Pencil, AlertTriangle, CheckCircle2,
   ChevronLeft, ChevronRight, Loader2, Upload, ImageOff, Building2,
@@ -9,13 +9,14 @@ import {
 import { uploadImage } from "../api/upload";
 import { createObra } from "../api/obras";
 import { useDialog } from "../hooks/useDialog";
-import { UpgradeModal, getPlanLimitError, type PlanLimitInfo } from "./UpgradeModal";
+import { UpgradeModal } from "./UpgradeModal";
+import { getPlanLimitError, type PlanLimitInfo } from "../lib/planLimit";
 import { createResponsible, lookupResponsibleByWhatsapp } from "../api/responsibles";
 import { addObraTeamMember } from "../api/obraTeam";
 import { createTask } from "../api/tasks";
 import { normalizePhone, PHONE_ERROR_HINT } from "../utils/phone";
 import type { Obra } from "../types";
-import { useConfirm } from "./ConfirmProvider";
+import { useConfirm } from "../hooks/useConfirm";
 
 // ─── Local draft types ────────────────────────────────────────────────────────
 
@@ -680,18 +681,20 @@ function Step3({ tasks, responsibles, form, onFormChange, error, onAdd, onRemove
 
 const TASK_PREVIEW = 4;
 
+function SectionLabel({ children }: Readonly<{ children: string }>) {
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      {children}
+    </span>
+  );
+}
+
 function Step4({ obraData, responsibles, tasks, tasksWithoutResp, error }: {
   obraData: ObraFormData; responsibles: DraftResponsible[]; tasks: DraftTask[];
   tasksWithoutResp: number; error: string | null;
 }) {
   const extraTasks = tasks.length > TASK_PREVIEW ? tasks.length - TASK_PREVIEW : 0;
   const visibleTasks = tasks.slice(0, TASK_PREVIEW);
-
-  const SectionLabel = ({ children }: { children: string }) => (
-    <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#6B7580", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-      {children}
-    </span>
-  );
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -998,7 +1001,7 @@ export function ObraSetupWizard({ onClose, onCreated }: ObraSetupWizardProps) {
   async function safeClose() {
     // tras crear, cerrar con X equivale a "Ir a la obra": si solo cerráramos,
     // el portfolio de atrás quedaría sin la obra nueva (lista stale)
-    if (done) { createdObra ? onCreated(createdObra) : onClose(); return; }
+    if (done) { if (createdObra) { onCreated(createdObra); } else { onClose(); } return; }
     const hasData = obraData.name.trim() !== "" || responsibles.length > 0 || tasks.length > 0;
     if (!hasData) { onClose(); return; }
     const detalle = [

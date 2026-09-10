@@ -23,9 +23,8 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(
   const { escClose = true } = opts;
   const ref = useRef<T>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
   const escRef = useRef(escClose);
-  escRef.current = escClose;
+  useEffect(() => { onCloseRef.current = onClose; escRef.current = escClose; });
 
   useEffect(() => {
     const id = Symbol("dialog");
@@ -84,7 +83,6 @@ export function useDialog<T extends HTMLElement = HTMLDivElement>(
       if (i !== -1) dialogStack.splice(i, 1);
       prevFocus?.focus?.();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return ref;

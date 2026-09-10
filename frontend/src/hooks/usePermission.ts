@@ -1,4 +1,4 @@
-import { useUser } from "../context/UserContext";
+import { useUser } from "./useUser";
 import type { UserRole } from "../context/UserContext";
 import type { CurrentUser, ObraUserRoleType } from "../types";
 

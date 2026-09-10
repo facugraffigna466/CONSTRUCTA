@@ -25,7 +25,7 @@ import {
 import { fetchSuppliers } from "../api/suppliers";
 import { createMaterial } from "../api/taskMaterials";
 import { fetchObraTeam } from "../api/obraTeam";
-import { useConfirm } from "./ConfirmProvider";
+import { useConfirm } from "../hooks/useConfirm";
 import type {
   AnalisisComparativo,
   AnalisisHistoricoCompras,
@@ -1046,7 +1046,11 @@ function SolicitudAllModal({
     setSelected(prev => { const n = new Set(prev); ids.forEach(id => n.add(id)); return n; });
   }
   function toggleMat(id: number) {
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) { n.delete(id); } else { n.add(id); }
+      return n;
+    });
   }
 
   const providerName = providerKey.startsWith("s:")
@@ -1060,7 +1064,7 @@ function SolicitudAllModal({
     if (!providerKey) { setError("Seleccioná un proveedor o contratista."); return; }
     setSaving(true); setError(null);
 
-    let supplierIds: number[] = [];
+    let supplierIds: number[];
     let contratistaPhones: string[] = [];
     let contratistaName: string | null = null;
     let contratistaHasPhone = false;
@@ -1373,7 +1377,7 @@ export function ComprasTab({ obraId, obraName, tasks = [], focusTaskId }: { obra
     }
   }, [obraId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { queueMicrotask(load); }, [load]);
 
   // Auto-poll solicitudes when on cotizaciones tab and any are still "enviada"
   const hasEnviadaRef = useRef(false);

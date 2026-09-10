@@ -22,7 +22,7 @@ export function AcceptInvitePage({ token, onAccepted }: Props) {
   // para que la persona vea a qué se está uniendo antes de aceptar.
   useEffect(() => {
     let cancelled = false;
-    setContextLoading(true);
+    queueMicrotask(() => setContextLoading(true));
     fetchInviteContext(token)
       .then(ctx => { if (!cancelled) setContext(ctx); })
       .catch((err: unknown) => {

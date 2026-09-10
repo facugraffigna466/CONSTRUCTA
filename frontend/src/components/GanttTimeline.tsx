@@ -200,7 +200,7 @@ export function GanttTimeline({
   const baseDayW = view === "semana" ? 90 : view === "mes" ? 45 : 22;
   const dayW = baseDayW * zoom;
   const dayWRef = useRef(dayW);
-  dayWRef.current = dayW;
+  useEffect(() => { dayWRef.current = dayW; });
 
   // ── Existing state ───────────────────────────────────────────────────────────
   const [drag,            setDrag]            = useState<DragState | null>(null);
@@ -307,7 +307,7 @@ export function GanttTimeline({
   // ── Critical path fetch ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!viewOptions.highlightCritical || !obraId) {
-      setCriticalData(null);
+      queueMicrotask(() => setCriticalData(null));
       return;
     }
     let cancelled = false;
@@ -320,7 +320,7 @@ export function GanttTimeline({
   // ── Baseline fetch ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!viewOptions.showBaseline || !obraId) {
-      setBaselineMap(new Map());
+      queueMicrotask(() => setBaselineMap(new Map()));
       return;
     }
     let cancelled = false;
@@ -350,7 +350,7 @@ export function GanttTimeline({
   ];
   // Agrupar el árbol: cada subtarea queda justo debajo de su tarea padre.
   const orderedVisible: Task[] = groupChildrenUnderParents(flatOrdered);
-  orderedVisRef.current = orderedVisible;
+  useEffect(() => { orderedVisRef.current = orderedVisible; });
 
   const levelMap = buildLevelMap(tasks);
 
@@ -375,12 +375,14 @@ export function GanttTimeline({
 
   // Sync rowOrder when visible tasks change (add new, remove deleted)
   useEffect(() => {
-    setRowOrder(prev => {
-      const prevSet = new Set(prev);
-      const newIds  = visible.filter(t => !prevSet.has(t.id)).map(t => t.id);
-      const merged  = [...prev.filter(id => visibleById.has(id)), ...newIds];
-      try { localStorage.setItem(storageKey, JSON.stringify(merged)); } catch { /* ignore */ }
-      return merged;
+    queueMicrotask(() => {
+      setRowOrder(prev => {
+        const prevSet = new Set(prev);
+        const newIds  = visible.filter(t => !prevSet.has(t.id)).map(t => t.id);
+        const merged  = [...prev.filter(id => visibleById.has(id)), ...newIds];
+        try { localStorage.setItem(storageKey, JSON.stringify(merged)); } catch { /* ignore */ }
+        return merged;
+      });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible.map(t => t.id).join(",")]);
@@ -413,7 +415,7 @@ export function GanttTimeline({
   const totalDays = rangeEnd - rangeStart + 1;
   const gridWidth = totalDays * dayW;
 
-  stateRef.current = { visible, rangeStart };
+  useEffect(() => { stateRef.current = { visible, rangeStart }; });
 
   function offsetToLeft(offset: number): number {
     return (offset - rangeStart) * dayW;
@@ -598,7 +600,10 @@ export function GanttTimeline({
 
   function getRowTranslate(taskId: number): number {
     if (!rowDrag) return 0;
-    const ord = orderedVisRef.current;
+    // Se usa la lista recién calculada de este render (no el ref, que recién
+    // se actualiza después vía efecto): esta función corre sincrónicamente
+    // durante el render, dentro del JSX de cada fila.
+    const ord = orderedVisible;
     const origIdx = ord.findIndex(t => t.id === rowDrag.taskId);
     const thisIdx = ord.findIndex(t => t.id === taskId);
     const targetIdx = Math.max(0, Math.min(ord.length - 1, origIdx + Math.round(rowDrag.currentDeltaY / ROW_H)));
