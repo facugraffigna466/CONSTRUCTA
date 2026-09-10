@@ -2799,3 +2799,24 @@ Backend: suite completa, **603 passed** (sin cambio de conteo — se extendieron
 
 ### Pending / next steps
 Ninguno abierto para I-14/I-15/I-16: diseño e implementación cerrados en la misma sesión, paso 7 del plan completo. Actualizando el IPI a continuación (RF nuevos + trazabilidad del objetivo 8), siguiendo el mismo criterio que I-01 a I-13.
+
+## 2026-09-10 — Consistencia del documento de indicadores de obra (I-14 a I-16)
+
+### Objective
+Revisión de la extensión I-14/I-16 contra su implementación. La revisión no encontró bugs —las tres fichas hacen lo que dicen— pero sí tres inconsistencias entre lo escrito y lo que corre.
+
+### Changes made
+**El documento decía ser un plan cuando ya es una especificación.** El encabezado seguía diciendo "diseño aprobado para implementar… este documento no implementa nada… la implementación la toma Martina a partir de acá", con los siete pasos ya mergeados. Quien lo abriera dentro de dos meses iba a creer que había trabajo pendiente que no existe. Ahora declara que está implementado y que **si el código y el documento se contradicen, es un bug de alguno de los dos** — que es lo que un documento así tiene que decir una vez que el código existe.
+
+**El fundamento sobre `triggered_by` era incorrecto.** D-04 justificaba no mostrarlo diciendo que era "un señalamiento de persona". No lo es: `triggered_by` es el canal por el que entró el evento (`user` | `chatbot` | `system`, `models/historial.py:32`). La decisión de no mostrarlo está bien —a nadie le sirve el canal en una tarjeta— pero el motivo escrito describía un campo que no existe, e insinuaba una protección de privacidad que ese campo no da. Se separan los dos motivos: `responsible_id` se omite por criterio (evidencia de una tarea, no de una persona), el resto por ruido. Mismo arreglo en el comentario del componente y en el del servicio.
+
+**La advertencia de causalidad estaba escrita a mano en el componente.** El backend ya declara el caveat en `bitacora_themes.note` junto al dato, y el documento pedía usar ese texto. El componente mostraba una frase propia: el día que cambie la ventana de correlación (hoy 5 días) o el método de matcheo, el backend actualiza su nota y la pantalla seguiría mostrando la vieja. Ahora se renderiza `note`.
+
+### Files modified
+`docs/features/dashboard-indicadores-obra.md`, `frontend/src/components/MonthlyInsightsAccordion.tsx`, `backend/app/services/obra_dashboard_service.py` (comentario), y `frontend/src/components/MonthlyInsightsAccordion.test.tsx` (nuevo).
+
+### Validation
+603 pruebas backend y 52 frontend en verde, `tsc` y ESLint limpios. El cambio del caveat no se pudo verificar en navegador: la base de desarrollo local no tiene ninguna fila en `obra_stats_snapshots` (el job es mensual), así que el acordeón no llega a renderizarse — y sembrar un snapshot falso en la base del equipo para sacar una captura era peor que no hacerlo. Se cubrió con **el primer test del componente**, que no tenía ninguno: se verificó que falla contra el código viejo y pasa con el nuevo, así que es una prueba de regresión real y no una que acompaña. Cubre además los dos casos borde de I-15 que ya estaban bien y no estaban protegidos: el umbral de 3 menciones para mostrar porcentaje, y la sección que no se renderiza sin categorías.
+
+### Pending / next steps
+Nada abierto. La revisión confirmó lo demás de la extensión: el gate de muestra chica de I-15, el formato de horas de I-16 y el no-renderizado de `responsible_id` están implementados como dice el documento, y la decisión de no filtrar I-14/I-16 por rol es correcta —`risk_concentration.by_task` ya viaja con `responsible_id` sin filtrar y el historial que `top_deviations` incluye ya lo lee cualquiera con `SOLO_LECTURA` sobre la obra (`obras.py:80`), así que no expone nada nuevo.

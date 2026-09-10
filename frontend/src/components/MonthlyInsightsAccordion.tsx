@@ -9,9 +9,11 @@ import type { AlertType, MonthlyInsights } from "../types";
 // que ObraCompletenessChecklist): es material de reunión, no de control
 // diario. El ranking por responsable (D-01) solo llega si el backend decidió
 // mandarlo — acá no se vuelve a chequear rol, ya viene filtrado.
-// D-04: top_deviations trae responsible_id/triggered_by en el JSON crudo —
-// acá deliberadamente no se leen ni se muestran, es evidencia de una tarea,
-// no un señalamiento de persona.
+// D-04: top_deviations trae el paquete de evidencia crudo (responsible_id,
+// historial con payloads, triggered_by). Acá se muestra un resumen curado:
+// `responsible_id` no se lee a propósito —es evidencia de una tarea, no un
+// señalamiento de persona— y el resto queda afuera por ruido, no por
+// privacidad (`triggered_by` es el canal: user | chatbot | system).
 
 const CATEGORY_LABEL: Record<string, string> = {
   falta_material: "Falta de material",
@@ -206,8 +208,11 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
                       );
                     })}
                   </div>
+                  {/* La advertencia sale de `bitacora_themes.note`, que el propio motor
+                      declara junto al dato (I-15). Escribirla acá a mano la dejaría vieja
+                      el día que cambie la ventana de correlación o el método de matcheo. */}
                   <div style={{ fontSize: 11, color: "#A0ABB4", marginTop: 6 }}>
-                    Correlación temporal, no causalidad: dice que después de la mención hubo un retraso dentro de la ventana, no que lo haya causado.
+                    {data.bitacora_themes?.note}
                   </div>
                 </div>
               )}
