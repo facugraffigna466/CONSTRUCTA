@@ -2820,3 +2820,34 @@ Revisión de la extensión I-14/I-16 contra su implementación. La revisión no 
 
 ### Pending / next steps
 Nada abierto. La revisión confirmó lo demás de la extensión: el gate de muestra chica de I-15, el formato de horas de I-16 y el no-renderizado de `responsible_id` están implementados como dice el documento, y la decisión de no filtrar I-14/I-16 por rol es correcta —`risk_concentration.by_task` ya viaja con `responsible_id` sin filtrar y el historial que `top_deviations` incluye ya lo lee cualquiera con `SOLO_LECTURA` sobre la obra (`obras.py:80`), así que no expone nada nuevo.
+
+## 2026-09-10 — Diseño del estado global de la cartera (Portfolio)
+
+### Objective
+Ticket de diseño, no de implementación: definir qué indicadores muestra la pantalla de portfolio para responder la pregunta de nivel cartera —"tengo ocho obras, ¿cuál abro primero?"— que hoy no contesta nadie. Entregable: `docs/features/portfolio-estado-global.md`.
+
+### Changes made
+El relevamiento previo cambió el alcance del ticket. El dashboard **de obra** ya está entregado de punta a punta (I-01 a I-16, backend y frontend, migración 0074 incluida), así que "visualización de estado global" solo podía significar el nivel cartera — y ahí el sistema está donde estaba el detalle de obra antes del documento hermano: `PortfolioPage` tiene cuatro contadores (`PortfolioPage.tsx:524-558`) que son un censo, no un diagnóstico, y para saber qué obra está en rojo hay que entrar a las ocho. El dato ya existe; lo que falta es subirlo un nivel.
+
+El documento define 10 indicadores: 5 P0 (semáforo de obras ordenado por urgencia, avance de cartera vs. plan, SPI de cartera, obras fuera de fecha, alertas críticas cross-obra), 4 P1 (compromisos a 30 días, peor cuello de botella de la empresa, tendencia, calidad de datos) y 1 P2 (carga por responsable, solo admin). **Ninguno necesita tabla nueva ni fórmula nueva**: los cinco P0 son agregaciones de `dashboard_calc.py`, que ya está implementado y testeado, y la tendencia sale de `obra_progress_daily`, que ya escribe el job diario de la curva S.
+
+Se heredan explícitamente las definiciones del documento hermano (universo, peso, avance, avance planificado) en vez de repetirlas, y los umbrales del semáforo son los mismos del I-03: si el detalle de obra dice "Atención" y el portfolio pinta rojo, se pierde la confianza en los dos.
+
+Dos principios nuevos que solo aparecen con más de una obra. **P6 — ranking antes que promedio**: seis obras impecables y dos incendiadas promedian "bien", así que el agregado va pero el orden de la pantalla lo manda el ranking. **P7 — nunca comparar obras entre sí**: el semáforo mide a cada obra contra su propio plan; un ranking que compita una remodelación de 12 tareas contra una torre de 300 termina usándose para evaluar gente.
+
+La única decisión de ingeniería seria es de rendimiento (§5): el agregado **no** puede llamar `get_dashboard()` en un loop —son 6-8 queries por obra en la primera pantalla después del login— sino usar un número constante de queries y calcular en Python con las funciones puras de `dashboard_calc`. De paso aparece un N+1 que ya está en producción (`obra_service.py:70` pide el calendario dentro del loop) y que el agregado heredaría. Se descarta explícitamente cachear si no se llega al presupuesto: en una pantalla que la gente refresca para ver si cambió algo, un TTL genera un problema de confianza peor que 400 ms.
+
+Tres decisiones cerradas: la tendencia se pondera por `tasks_total` y no por peso en días, porque la fila histórica no guarda el peso y recalcularlo exigiría el replay que ya se había descartado —la aproximación se declara en el tooltip (D-P01)—; el agregado se calcula sobre las obras **visibles**, nunca sobre el tenant, porque un número agregado también filtra información sobre obras que el usuario no puede ver (D-P02); y el semáforo **convive** con las tarjetas en vez de reemplazarlas, porque las tarjetas ganan para reconocer una obra y pierden para comparar ocho (D-P03).
+
+### Files modified
+`docs/features/portfolio-estado-global.md` (nuevo) y esta entrada.
+
+### Validation
+Cada afirmación sobre el código existente se verificó contra el repo. Una salió mal y se corrigió antes de cerrar: el documento afirmaba que `is_read` (leída por un usuario) y "resuelta" eran estados distintos y que el indicador debía usar el segundo. No es así — en este sistema la alerta es de la obra y no de la persona, `is_read` **es** la marca de resolución y `resolved_at` solo guarda el cuándo (`alert.py:107`). La ficha P-05 ahora usa el mismo criterio que `_build_alerts` para I-09, que era el punto: que las dos pantallas no cuenten distinto.
+
+### Pending / next steps
+Queda para implementación el plan de 6 pasos de la sección 10, arrancando por `PortfolioDashboardService` con el presupuesto de performance de §5 (y el arreglo del N+1 de `obra_service.py:70`, que conviene que entre ahí).
+
+Dos cosas abiertas, ninguna bloqueante: el horizonte de 30 días para compromisos es un parámetro de producto a validar con uso real, y una regla de riesgo por SPI de cartera que queda anotada pero **deliberadamente fuera de alcance**, igual que su equivalente por obra (A-02 del documento hermano) — toca `risk_service.py` y `SystemSettings`, y es alcance de otro ticket.
+
+**El IPI no se toca**, mismo criterio que con el documento hermano: describe una solución diseñada, no implementada. La sección de Implementación se actualiza cuando el módulo esté andando.
