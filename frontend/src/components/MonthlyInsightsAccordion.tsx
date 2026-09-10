@@ -1,18 +1,36 @@
 import { useEffect, useState } from "react";
 import { ChevronDown, ClipboardList } from "lucide-react";
 import { fetchMonthlyInsights } from "../api/monthlyInsights";
-import type { MonthlyInsights } from "../types";
+import { ALERT_LABEL } from "../lib/alertMeta";
+import type { AlertType, MonthlyInsights } from "../types";
 
-// I-12/I-13 — lo que ya calcula obra_stats_service.py mensualmente pero hoy
+// I-12 a I-16 — lo que ya calcula obra_stats_service.py mensualmente pero hoy
 // solo alimenta el informe HTML interno. Colapsado por defecto (mismo patrón
 // que ObraCompletenessChecklist): es material de reunión, no de control
 // diario. El ranking por responsable (D-01) solo llega si el backend decidió
 // mandarlo — acá no se vuelve a chequear rol, ya viene filtrado.
+// D-04: top_deviations trae responsible_id/triggered_by en el JSON crudo —
+// acá deliberadamente no se leen ni se muestran, es evidencia de una tarea,
+// no un señalamiento de persona.
+
+const CATEGORY_LABEL: Record<string, string> = {
+  falta_material: "Falta de material",
+  clima: "Clima",
+  ausencia_personal: "Ausencia de personal",
+  proveedor: "Proveedores",
+  problema_tecnico: "Problema técnico",
+  equipos_maquinaria: "Equipos y maquinaria",
+  seguridad: "Seguridad",
+};
 
 function formatPeriod(period: string): string {
   const [y, m] = period.split("-");
   const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
   return `${MESES[parseInt(m, 10) - 1]} ${y}`;
+}
+
+function formatHours(hours: number): string {
+  return hours >= 48 ? `${Math.round(hours / 24)} días` : `${Math.round(hours)} h`;
 }
 
 export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
@@ -42,6 +60,10 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
   const byTask = data.risk_concentration?.by_task;
   const byResponsible = data.risk_concentration?.by_responsible;
   const disciplinas = data.estimation_accuracy?.by_discipline ?? [];
+  const deviationItems = data.top_deviations?.items ?? [];
+  const temas = data.bitacora_themes?.categories ?? [];
+  const maxMentions = Math.max(1, ...temas.map((t) => t.mentions));
+  const reaccion = data.alert_reaction?.by_type ?? [];
 
   return (
     <section style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, overflow: "hidden" }}>
@@ -72,7 +94,53 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
             <div style={{ fontSize: 13, color: "#6B7580" }}>Disponible a partir del cierre del próximo mes.</div>
           ) : (
             <>
-              {byTask && byTask.ranking.length > 0 && (
+              {deviationItems.length > 0 ? (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#A0ABB4", marginBottom: 8 }}>
+                    Tareas con mayor desvío
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {deviationItems.map((item) => {
+                      const days = item.task.deviation_days;
+                      const mentions = item.bitacora_mentions.slice(0, 3);
+                      const pushed = item.cascade_impact.direct_dependent_count;
+                      return (
+                        <div key={item.task.task_id} style={{ border: "1px solid #EEEFED", borderRadius: 10, padding: "10px 12px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "#1A2329", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {item.task.title}
+                            </span>
+                            <span style={{ color: days > 0 ? "#D03A3A" : "#1F8A5B", fontWeight: 700, fontSize: 13, flexShrink: 0 }}>
+                              {days > 0 ? "+" : ""}{days}d
+                            </span>
+                          </div>
+                          {(mentions.length > 0 || pushed > 0 || item.alerts.length > 0) && (
+                            <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                              {mentions.map((m) => (
+                                <span
+                                  key={m.bitacora_id}
+                                  title={m.summary ?? undefined}
+                                  style={{ fontSize: 11, padding: "2px 8px", borderRadius: 99, background: "#F0F1EF", color: "#5B6770" }}
+                                >
+                                  {m.categories.map((c) => CATEGORY_LABEL[c] ?? c).join(", ")}
+                                </span>
+                              ))}
+                              {item.alerts.length > 0 && (
+                                <span style={{ fontSize: 11, color: "#A0ABB4" }}>
+                                  {item.alerts.length} alerta{item.alerts.length === 1 ? "" : "s"}
+                                </span>
+                              )}
+                              {pushed > 0 && (
+                                <span style={{ fontSize: 11, color: "#A0ABB4" }}>→ empujó {pushed} tarea{pushed === 1 ? "" : "s"}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : byTask && byTask.ranking.length > 0 && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#A0ABB4", marginBottom: 8 }}>
                     Tareas con mayor desvío
@@ -104,6 +172,39 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
                 </div>
               )}
 
+              {temas.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#A0ABB4", marginBottom: 8 }}>
+                    Problemas recurrentes en bitácora
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {temas.map((t) => {
+                      const barPct = (t.mentions / maxMentions) * 100;
+                      const delayPct = (t.mentions_followed_by_delay / maxMentions) * 100;
+                      const mentionWord = t.mentions === 1 ? "mención" : "menciones";
+                      const rateLabel = t.mentions >= 3
+                        ? `${Math.round(t.correlation_rate * 100)}% con retraso después`
+                        : `${t.mentions} ${mentionWord}, ${t.mentions_followed_by_delay} con retraso después`;
+                      return (
+                        <div key={t.category}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "#1A2329", marginBottom: 3 }}>
+                            <span>{CATEGORY_LABEL[t.category] ?? t.category}</span>
+                            <span style={{ color: "#5B6770" }}>{rateLabel}</span>
+                          </div>
+                          <div style={{ height: 6, borderRadius: 99, background: "#F0F1EF", overflow: "hidden", position: "relative" }}>
+                            <span style={{ display: "block", height: "100%", width: `${barPct}%`, background: "#FDBFA0" }} />
+                            <span style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${delayPct}%`, background: "#D03A3A" }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#A0ABB4", marginTop: 6 }}>
+                    Correlación temporal, no causalidad: dice que después de la mención hubo un retraso dentro de la ventana, no que lo haya causado.
+                  </div>
+                </div>
+              )}
+
               {disciplinas.length > 0 && (
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#A0ABB4", marginBottom: 8 }}>
@@ -123,6 +224,32 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
                           <div style={{ height: 5, borderRadius: 99, background: "#F0F1EF", overflow: "hidden" }}>
                             <span style={{ display: "block", height: "100%", width: `${pct}%`, background: d.avg_deviation_percent > 0 ? "#D03A3A" : "#1F8A5B" }} />
                           </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {reaccion.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#A0ABB4", marginBottom: 8 }}>
+                    Velocidad de reacción a alertas
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {reaccion.map((r) => {
+                      const unresolved = data.alert_reaction?.alerts_unresolved_by_type[r.type] ?? 0;
+                      return (
+                        <div key={r.type} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#1A2329" }}>
+                          <span>{ALERT_LABEL[r.type as AlertType] ?? r.type}</span>
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontWeight: 600 }}>{formatHours(r.avg_hours)} promedio</span>
+                            {unresolved > 0 && (
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: "1px 7px", borderRadius: 99, background: "#FCE5E5", color: "#D03A3A" }}>
+                                {unresolved} sin resolver
+                              </span>
+                            )}
+                          </span>
                         </div>
                       );
                     })}

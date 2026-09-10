@@ -571,7 +571,8 @@ class ObraDashboardService:
         ).scalar_one_or_none()
         if snapshot is None:
             return {"available": False, "period": None, "computed_at": None,
-                    "risk_concentration": None, "estimation_accuracy": None}
+                    "risk_concentration": None, "estimation_accuracy": None,
+                    "top_deviations": None, "bitacora_themes": None, "alert_reaction": None}
 
         metrics = snapshot.metrics or {}
         risk_concentration = dict(metrics.get("risk_concentration") or {})
@@ -584,4 +585,10 @@ class ObraDashboardService:
             "computed_at": snapshot.computed_at.isoformat(),
             "risk_concentration": risk_concentration,
             "estimation_accuracy": metrics.get("estimation_accuracy"),
+            # I-14/I-15/I-16: sin filtro de rol — a diferencia de by_responsible
+            # arriba, ninguna trae ranking por persona (D-04 lo resuelve el front
+            # no renderizando responsible_id/triggered_by, el JSON viaja completo).
+            "top_deviations": metrics.get("top_deviations"),
+            "bitacora_themes": metrics.get("bitacora_themes"),
+            "alert_reaction": metrics.get("alert_reaction"),
         }
