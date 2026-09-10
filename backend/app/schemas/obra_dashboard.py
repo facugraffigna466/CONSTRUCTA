@@ -1,6 +1,7 @@
 """Contrato de GET /obras/{id}/dashboard — sección 6 de
-docs/features/dashboard-indicadores-obra.md (bloques P0 de esta etapa:
-progress/forecast/alerts/bottleneck/data_quality).
+docs/features/dashboard-indicadores-obra.md: bloques P0
+(progress/forecast/alerts/bottleneck/data_quality) y P1
+(baseline/critical_path/milestones/materials).
 
 Cada bloque trae `available` (y `reason` cuando aplica): el frontend nunca
 decide si un dato es válido, lo dice el backend.
@@ -58,6 +59,53 @@ class DashboardDataQuality(BaseModel):
     milestones_without_dates: int
 
 
+class DashboardBaseline(BaseModel):
+    available: bool
+    reason: str | None
+    saved_at: str | None
+    end_deviation_days: int | None
+    tasks_deviated: int
+    tasks_total_in_baseline: int
+    tasks_added_after_baseline: int
+    avg_deviation_days: float
+
+
+class DashboardCriticalPath(BaseModel):
+    available: bool
+    reason: str | None
+    critical_task_count: int
+    at_risk_task_count: int
+    slack_task_count: int
+    median_float_days: float | None
+    coverage_percent: float
+    partial: bool
+
+
+class DashboardMilestoneItem(BaseModel):
+    task_id: int
+    title: str
+    due_date: str | None
+    completed_date: str | None
+    state: str  # cumplido | tarde | en_riesgo | pendiente
+    float_days: int | None
+
+
+class DashboardMilestones(BaseModel):
+    available: bool
+    items: list[DashboardMilestoneItem]
+
+
+class DashboardMaterials(BaseModel):
+    available: bool
+    reason: str | None
+    total_estimado: float
+    total_pedido: float
+    total_recibido: float
+    percent_committed: float
+    percent_received: float
+    alignment_delta: float | None
+
+
 class ObraDashboardRead(BaseModel):
     computed_at: str
     as_of: str
@@ -66,3 +114,7 @@ class ObraDashboardRead(BaseModel):
     alerts: DashboardAlerts
     bottleneck: DashboardBottleneck
     data_quality: DashboardDataQuality
+    baseline: DashboardBaseline
+    critical_path: DashboardCriticalPath
+    milestones: DashboardMilestones
+    materials: DashboardMaterials

@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import {
   AlertTriangle,
-  ArrowRight, Calendar, Activity,
+  ArrowRight, Calendar, Activity, Route, Gauge, Flag, Boxes,
 } from "lucide-react";
 import { GanttTimeline } from "./GanttTimeline";
 import { HistorialPanel } from "./HistorialPanel";
@@ -17,6 +17,26 @@ function formatDate(d: string | null): string {
   const [y, m, day] = d.split("-");
   return `${day}/${m}/${y}`;
 }
+
+// I-07: total de tareas consideradas por el CPM (críticas + en riesgo + holgadas),
+// para las proporciones de la barra de 3 segmentos.
+function cpTotal(cp: { critical_task_count: number; at_risk_task_count: number; slack_task_count: number }): number {
+  return cp.critical_task_count + cp.at_risk_task_count + cp.slack_task_count || 1;
+}
+
+const MILESTONE_STATE_LABEL: Record<string, string> = {
+  cumplido: "Cumplido",
+  tarde: "Cumplido tarde",
+  en_riesgo: "En riesgo",
+  pendiente: "Pendiente",
+};
+
+const MILESTONE_STATE_COLOR: Record<string, string> = {
+  cumplido: "#1F8A5B",
+  tarde: "#D97706",
+  en_riesgo: "#D03A3A",
+  pendiente: "#3B82F6",
+};
 
 // ─── Progress ring ────────────────────────────────────────────────────────────
 
@@ -135,6 +155,10 @@ export function ResumenTab({
     : null;
   const ringPct = progress?.available ? Math.round(progress.real_percent ?? 0) : 0;
   const totalCriticalAlerts = dashAlerts?.critica ?? 0;
+  const criticalPath = dashboard?.critical_path ?? null;
+  const baseline = dashboard?.baseline ?? null;
+  const milestones = dashboard?.milestones ?? null;
+  const materials = dashboard?.materials ?? null;
 
   const kpiTileStyle: CSSProperties = {
     background: "#fff",
@@ -293,8 +317,11 @@ export function ResumenTab({
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M8 2.5L14 13H2L8 2.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none"/><path d="M8 6.5V9.5M8 11.4v.1" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
             </div>
           </div>
-          <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: totalCriticalAlerts > 0 ? SEVERITY_PALETTE.critica.color : "#1A2329", lineHeight: 1 }}>
-            {String(totalCriticalAlerts).padStart(2, "0")}
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: totalCriticalAlerts > 0 ? SEVERITY_PALETTE.critica.color : "#1A2329", lineHeight: 1 }}>
+              {String(totalCriticalAlerts).padStart(2, "0")}
+            </span>
+            <span style={{ fontSize: 11.5, color: "#5B6770" }}>crítica{totalCriticalAlerts === 1 ? "" : "s"}</span>
           </div>
           <div style={{ fontSize: 11.5, color: "#5B6770" }}>
             {SEVERITY_ORDER.filter((s) => s !== "critica").map((s) => `${dashAlerts?.[s] ?? 0} ${SEVERITY_LABEL[s].toLowerCase()}`).join(" · ")}
@@ -326,6 +353,118 @@ export function ResumenTab({
           suggestionCounts={suggestionCounts}
         />
       </section>
+
+      {/* ── I-06/I-07: ruta crítica y línea base ──────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={kpiTileStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={kpiLabelStyle}>Ruta crítica</span>
+            <div style={kpiIconStyle("#E5EEFB", "#2A6FDB")}>
+              <Route style={{ width: 15, height: 15 }} />
+            </div>
+          </div>
+          {criticalPath?.available ? (
+            <>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: "#1A2329", lineHeight: 1 }}>
+                {criticalPath.critical_task_count} crítica{criticalPath.critical_task_count === 1 ? "" : "s"}
+              </div>
+              <div style={{ display: "flex", height: 6, borderRadius: 99, overflow: "hidden", background: "#F0F1EF" }}>
+                {criticalPath.critical_task_count > 0 && <span style={{ background: "#D03A3A", width: `${100 * criticalPath.critical_task_count / cpTotal(criticalPath)}%` }} />}
+                {criticalPath.at_risk_task_count > 0 && <span style={{ background: "#D97706", width: `${100 * criticalPath.at_risk_task_count / cpTotal(criticalPath)}%` }} />}
+                {criticalPath.slack_task_count > 0 && <span style={{ background: "#1F8A5B", width: `${100 * criticalPath.slack_task_count / cpTotal(criticalPath)}%` }} />}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#5B6770" }}>
+                {criticalPath.at_risk_task_count} en riesgo
+                {criticalPath.median_float_days != null && ` · holgura mediana ${Math.round(criticalPath.median_float_days)}d`}
+              </div>
+              {criticalPath.partial && (
+                <div style={{ fontSize: 11, color: "#C97D0E" }}>Cobertura parcial: {Math.round(criticalPath.coverage_percent)}% de las tareas tienen fechas</div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontSize: 11.5, color: "#5B6770" }}>Cargá dependencias entre tareas para ver la ruta crítica</div>
+          )}
+        </div>
+
+        <div style={kpiTileStyle}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={kpiLabelStyle}>Línea base</span>
+            <div style={kpiIconStyle("#FDF1DE", "#C97D0E")}>
+              <Gauge style={{ width: 15, height: 15 }} />
+            </div>
+          </div>
+          {baseline?.available ? (
+            <>
+              <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.03em", color: (baseline.end_deviation_days ?? 0) > 0 ? "#D03A3A" : "#1F8A5B", lineHeight: 1 }}>
+                {baseline.end_deviation_days == null
+                  ? "—"
+                  : baseline.end_deviation_days === 0
+                  ? "En fecha"
+                  : `${baseline.end_deviation_days > 0 ? "+" : ""}${baseline.end_deviation_days} días`}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#5B6770" }}>
+                {baseline.tasks_deviated} de {baseline.tasks_total_in_baseline} tareas desviadas
+              </div>
+              {baseline.tasks_added_after_baseline > 0 && (
+                <div style={{ fontSize: 11, color: "#5B6770" }}>{baseline.tasks_added_after_baseline} tareas agregadas después de la línea base</div>
+              )}
+              <div style={{ fontSize: 11, color: "#A0ABB4" }}>guardada el {formatDate(baseline.saved_at?.slice(0, 10) ?? null)}</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 11.5, color: "#5B6770" }}>Guardá la línea base (⚙ Ajustes del Gantt) para medir el desvío del plan</div>
+          )}
+        </div>
+      </div>
+
+      {/* ── I-08: hitos ────────────────────────────────────────────────────────── */}
+      {milestones?.available && (
+        <section style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <Flag style={{ width: 15, height: 15, color: "#FF6B35" }} />
+            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 15, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.01em" }}>Hitos</span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, padding: "2px 9px", borderRadius: 99, background: "#F0F1EF", color: "#5B6770", fontFamily: "'JetBrains Mono', monospace" }}>
+              {milestones.items.length}
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 18 }}>
+            {milestones.items.map((m) => (
+              <button
+                key={m.task_id}
+                type="button"
+                onClick={() => {
+                  const task = tasks.find((t) => t.id === m.task_id);
+                  if (task) onEditTask(task);
+                }}
+                title={`${m.title} — ${MILESTONE_STATE_LABEL[m.state]}`}
+                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", background: "none", border: "none", padding: 0, font: "inherit" }}
+              >
+                <span style={{ color: MILESTONE_STATE_COLOR[m.state], fontSize: 16 }}>◆</span>
+                <span style={{ fontSize: 12.5, color: "#1A2329", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── I-11: ejecución de materiales ─────────────────────────────────────── */}
+      {materials?.available && (
+        <section style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, padding: "16px 20px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <Boxes style={{ width: 15, height: 15, color: "#FF6B35" }} />
+            <span style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 15, fontWeight: 700, color: "#1A2329", letterSpacing: "-0.01em" }}>Materiales</span>
+          </div>
+          <div style={{ display: "flex", height: 10, borderRadius: 99, overflow: "hidden", background: "#F0F1EF" }}>
+            <span style={{ background: "#1F8A5B", width: `${materials.percent_received}%` }} />
+            <span style={{ background: "#D97706", width: `${Math.max(0, materials.percent_committed - materials.percent_received)}%` }} />
+          </div>
+          <div style={{ fontSize: 11.5, color: "#5B6770", marginTop: 8 }}>
+            {Math.round(materials.percent_committed)}% comprometido · {Math.round(materials.percent_received)}% recibido
+            {materials.alignment_delta != null && (
+              <> · alineación {materials.alignment_delta > 0 ? "+" : ""}{Math.round(materials.alignment_delta)} pts vs. avance real</>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ── Lower two-column section ──────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

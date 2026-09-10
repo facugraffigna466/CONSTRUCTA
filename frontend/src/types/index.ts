@@ -76,6 +76,53 @@ export interface ObraDashboardDataQuality {
   milestones_without_dates: number;
 }
 
+export interface ObraDashboardBaseline {
+  available: boolean;
+  reason: string | null;
+  saved_at: string | null;
+  end_deviation_days: number | null;
+  tasks_deviated: number;
+  tasks_total_in_baseline: number;
+  tasks_added_after_baseline: number;
+  avg_deviation_days: number;
+}
+
+export interface ObraDashboardCriticalPath {
+  available: boolean;
+  reason: string | null;
+  critical_task_count: number;
+  at_risk_task_count: number;
+  slack_task_count: number;
+  median_float_days: number | null;
+  coverage_percent: number;
+  partial: boolean;
+}
+
+export interface ObraDashboardMilestoneItem {
+  task_id: number;
+  title: string;
+  due_date: string | null;
+  completed_date: string | null;
+  state: "cumplido" | "tarde" | "en_riesgo" | "pendiente";
+  float_days: number | null;
+}
+
+export interface ObraDashboardMilestones {
+  available: boolean;
+  items: ObraDashboardMilestoneItem[];
+}
+
+export interface ObraDashboardMaterials {
+  available: boolean;
+  reason: string | null;
+  total_estimado: number;
+  total_pedido: number;
+  total_recibido: number;
+  percent_committed: number;
+  percent_received: number;
+  alignment_delta: number | null;
+}
+
 export interface ObraDashboard {
   computed_at: string;
   as_of: string;
@@ -84,6 +131,10 @@ export interface ObraDashboard {
   alerts: ObraDashboardAlerts;
   bottleneck: ObraDashboardBottleneck;
   data_quality: ObraDashboardDataQuality;
+  baseline: ObraDashboardBaseline;
+  critical_path: ObraDashboardCriticalPath;
+  milestones: ObraDashboardMilestones;
+  materials: ObraDashboardMaterials;
 }
 
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";
