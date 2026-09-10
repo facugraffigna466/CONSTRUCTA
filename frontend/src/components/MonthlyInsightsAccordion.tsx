@@ -64,6 +64,7 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
   const temas = data.bitacora_themes?.categories ?? [];
   const maxMentions = Math.max(1, ...temas.map((t) => t.mentions));
   const reaccion = data.alert_reaction?.by_type ?? [];
+  const unresolvedByType = data.alert_reaction?.alerts_unresolved_by_type ?? {};
 
   return (
     <section style={{ background: "#fff", border: "1px solid #E6E7E5", borderRadius: 14, overflow: "hidden" }}>
@@ -103,7 +104,10 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
                     {deviationItems.map((item) => {
                       const days = item.task.deviation_days;
                       const mentions = item.bitacora_mentions.slice(0, 3);
-                      const pushed = item.cascade_impact.direct_dependent_count;
+                      // Tareas dependientes que SE reprogramaron por una cascada real, no
+                      // solo las que dependen estructuralmente de esta (direct_dependent_count
+                      // cuenta el grafo, no si la cascada disparó).
+                      const pushed = item.cascade_impact.tasks_pushed_by_cascade.length;
                       return (
                         <div key={item.task.task_id} style={{ border: "1px solid #EEEFED", borderRadius: 10, padding: "10px 12px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
@@ -141,6 +145,9 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
                   </div>
                 </div>
               ) : byTask && byTask.ranking.length > 0 && (
+                // Fallback para snapshots calculados antes de I-14 (metrics sin
+                // top_deviations). Se puede borrar cuando ya no queden snapshots
+                // viejos sin recalcular — no hay forma de saberlo desde acá.
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "#A0ABB4", marginBottom: 8 }}>
                     Tareas con mayor desvío
@@ -238,7 +245,7 @@ export function MonthlyInsightsAccordion({ obraId }: { obraId?: number }) {
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {reaccion.map((r) => {
-                      const unresolved = data.alert_reaction?.alerts_unresolved_by_type[r.type] ?? 0;
+                      const unresolved = unresolvedByType[r.type] ?? 0;
                       return (
                         <div key={r.type} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#1A2329" }}>
                           <span>{ALERT_LABEL[r.type as AlertType] ?? r.type}</span>
