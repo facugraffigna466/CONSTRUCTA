@@ -137,6 +137,86 @@ export interface ObraDashboard {
   materials: ObraDashboardMaterials;
 }
 
+export interface CurvaSPoint {
+  date: string;
+  planned: number;
+  real: number | null;
+}
+
+export interface CurvaSResponse {
+  granularity: string;
+  tracking_since: string | null;
+  points: CurvaSPoint[];
+}
+
+export interface TaskDeviation {
+  task_id: number;
+  title: string;
+  status: string;
+  discipline: string | null;
+  responsible_id: number | null;
+  start_date: string | null;
+  due_date: string | null;
+  completed_date: string | null;
+  deviation_days: number;
+  delay_days: number;
+  basis: string;
+  reference_date: string | null;
+}
+
+export interface RiskConcentrationByTask {
+  tasks_considered: number;
+  tasks_with_delay: number;
+  total_delay_days: number;
+  top_task_count: number;
+  top_delay_days: number;
+  concentration_percent: number;
+  ranking: TaskDeviation[];
+}
+
+export interface RiskConcentrationByResponsible {
+  responsibles_with_delay: number;
+  total_delay_days: number;
+  top_responsible_count: number;
+  top_delay_days: number;
+  concentration_percent: number;
+  unassigned_delay_days: number;
+  ranking: Array<{ responsible_id: number; name: string | null; delay_days: number; task_count: number }>;
+}
+
+export interface RiskConcentration {
+  note: string;
+  top_percent: number;
+  by_task: RiskConcentrationByTask;
+  // Ausente (no vacío) cuando el usuario no es admin — D-01, filtrado en el backend.
+  by_responsible?: RiskConcentrationByResponsible;
+}
+
+export interface EstimationAccuracyDiscipline {
+  discipline: string;
+  task_count: number;
+  avg_deviation_percent: number;
+  total_planned_days: number;
+  total_actual_days: number;
+  avg_planned_days: number;
+  avg_actual_days: number;
+}
+
+export interface EstimationAccuracy {
+  method: string;
+  tasks_considered: number;
+  tasks_excluded: Record<string, number>;
+  by_discipline: EstimationAccuracyDiscipline[];
+}
+
+export interface MonthlyInsights {
+  available: boolean;
+  period: string | null;
+  computed_at: string | null;
+  risk_concentration: RiskConcentration | null;
+  estimation_accuracy: EstimationAccuracy | null;
+}
+
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";
 
 export type ObraTab = "resumen" | "tareas" | "responsables" | "alertas" | "historial" | "presupuesto" | "planos";

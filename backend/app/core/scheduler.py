@@ -125,6 +125,35 @@ async def _job_cleanup_expired_sessions() -> None:
     logger.info("Scheduler: cleanup_expired_sessions → %d filas eliminadas", count)
 
 
+async def _job_obra_progress_daily() -> None:
+    """I-05 (curva S): guarda el avance de hoy de cada obra activa.
+
+    Es la única forma de tener una serie histórica de avance real — el
+    sistema no reconstruye el pasado (docs/features/dashboard-indicadores-obra.md
+    §5). Mismo criterio de "obra activa" que el snapshot mensual de insights.
+    Una obra con datos raros no tumba el job entero.
+    """
+    from sqlalchemy import select
+    from app.models.obra import Obra
+    from app.services.obra_dashboard_service import ObraDashboardService
+    from app.services.obra_stats_service import INACTIVE_OBRA_STATUSES
+
+    logger.info("Scheduler: obra_progress_daily")
+    async with _db() as db:
+        obras = list((await db.execute(
+            select(Obra).where(Obra.status.notin_(list(INACTIVE_OBRA_STATUSES)))
+        )).scalars().all())
+        service = ObraDashboardService(db)
+        ok = 0
+        for obra in obras:
+            try:
+                await service.record_daily_progress(obra)
+                ok += 1
+            except Exception:
+                logger.exception("Scheduler: obra_progress_daily falló para la obra %d", obra.id)
+    logger.info("Scheduler: obra_progress_daily → %d/%d obras", ok, len(obras))
+
+
 async def _job_weekly_digest() -> None:
     """Resumen semanal de WhatsApp a cada responsable activo, los lunes.
 
@@ -280,6 +309,16 @@ def start_scheduler() -> None:
         id="cleanup_expired_sessions",
         replace_existing=True,
         misfire_grace_time=3600,
+    )
+
+    # Historial diario de avance para la curva S (I-05) — 2:30 AM, igual que
+    # el diseño lo especifica (docs/features/dashboard-indicadores-obra.md §5).
+    scheduler.add_job(
+        _job_obra_progress_daily,
+        CronTrigger(hour=2, minute=30),
+        id="obra_progress_daily",
+        replace_existing=True,
+        misfire_grace_time=6 * 3600,
     )
 
     # Resumen semanal a los responsables — lunes, cada hora entre las 6 y las 12.

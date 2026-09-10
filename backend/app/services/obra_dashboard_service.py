@@ -11,7 +11,7 @@ Cada bloque trae `available`: el frontend nunca decide si un dato es válido,
 lo dice el backend. Nunca se manda 0 en lugar de "no calculable".
 """
 import statistics
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.alert import Alert, AlertSeverity
 from app.models.baseline import TaskBaseline
 from app.models.obra import Obra, ObraStatus
+from app.models.obra_progress_daily import ObraProgressDaily
 from app.models.task import Task, TaskStatus
 from app.models.task_material import TaskMaterial
 from app.repositories.calendar import CalendarRepository
@@ -41,6 +42,13 @@ _SPI_LOW_CONFIDENCE_THRESHOLD = 5.0
 # de la obra); se sigue calculando pero se marca `capped` para que el frontend
 # muestre "más de X meses de desvío" en vez de una fecha falsamente precisa.
 _FORECAST_CAPPED_SPI_THRESHOLD = 0.5
+
+# I-05: cuántos días de margen se aceptan para emparejar un punto semanal de
+# la curva con la fila de obra_progress_daily más cercana. El job corre todos
+# los días desde que arrancó a trackear, pero ese día no tiene por qué caer en
+# el mismo día de la semana que el inicio de la obra — exigir fecha exacta
+# dejaría la serie real vacía para la mayoría de las obras.
+_CURVA_S_MATCH_TOLERANCE_DAYS = 3
 
 
 class ObraDashboardService:
@@ -427,4 +435,153 @@ class ObraDashboardService:
             "percent_committed": percent_committed,
             "percent_received": percent_received,
             "alignment_delta": (percent_received - real_percent) if real_percent is not None else None,
+        }
+
+    async def record_daily_progress(self, obra: Obra) -> None:
+        """I-05 — snapshot de hoy para la curva S. Se guarda el resultado ya
+        calculado (mismo `get_dashboard` que ve el usuario), no los insumos:
+        si la fórmula cambia, la historia vieja queda con la fórmula vieja.
+        Upsert por (obra_id, hoy) — correr el job dos veces el mismo día pisa
+        la fila, no la duplica. Llamado por el job diario (core/scheduler.py)."""
+        dashboard = await self.get_dashboard(obra.id)
+        progress = dashboard["progress"]
+        critical_path = dashboard["critical_path"]
+        today = date.today()
+
+        existing = (
+            await self.session.execute(
+                select(ObraProgressDaily).where(
+                    ObraProgressDaily.obra_id == obra.id, ObraProgressDaily.date == today
+                )
+            )
+        ).scalar_one_or_none()
+
+        values = {
+            "progress_real": progress["real_percent"],
+            "progress_planned": progress["planned_percent"],
+            "spi": progress["spi"],
+            "tasks_total": progress["tasks_total"],
+            "tasks_completed": progress["tasks_completed"],
+            "critical_task_count": critical_path["critical_task_count"] if critical_path["available"] else None,
+            "median_float_days": critical_path["median_float_days"] if critical_path["available"] else None,
+        }
+        if existing is not None:
+            for key, value in values.items():
+                setattr(existing, key, value)
+        else:
+            self.session.add(
+                ObraProgressDaily(obra_id=obra.id, tenant_id=obra.tenant_id, date=today, **values)
+            )
+        await self.session.flush()
+
+    def _nearest_tracked_value(
+        self, tracked_rows: list[tuple[date, float | None]], target: date
+    ) -> float | None:
+        """Fila de `tracked_rows` más cercana a `target` dentro de la
+        tolerancia (§I-05). `None` si no hay ninguna — el punto queda sin
+        dato real, no en 0."""
+        best: float | None = None
+        best_distance: int | None = None
+        for d, value in tracked_rows:
+            distance = abs((d - target).days)
+            if distance > _CURVA_S_MATCH_TOLERANCE_DAYS:
+                continue
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best = value
+        return best
+
+    def _curva_s_range(
+        self, obra: Obra | None, calendar, tasks: list[Task], from_date: date | None, to_date: date | None
+    ) -> tuple[date | None, date | None]:
+        span = dashboard_calc.planned_span(calendar, tasks)
+        start = from_date or (obra.start_date if obra else None) or (span[0] if span else None)
+        end = to_date or (obra.expected_end_date if obra else None) or (span[1] if span else None)
+        return start, end
+
+    async def get_curva_s(
+        self, obra_id: int, from_date: date | None = None, to_date: date | None = None
+    ) -> dict[str, Any]:
+        """I-05 — curva S. `planned` se calcula al vuelo (determinístico, no
+        necesita historia guardada); `real` sale de `obra_progress_daily` y es
+        `None` antes de `tracking_since` — el gráfico corta la línea, no la
+        manda a cero. Solo semanal por ahora (§10 del diseño no pide más)."""
+        obra = await self.obra_repo.get(obra_id)
+        tasks = await self.task_repo.list_by_obra(obra_id)
+        calendar = await self.calendar_repo.get_for_obra(obra_id)
+        span_start, span_end = self._curva_s_range(obra, calendar, tasks, from_date, to_date)
+
+        tracking_since = (
+            await self.session.execute(
+                select(func.min(ObraProgressDaily.date)).where(ObraProgressDaily.obra_id == obra_id)
+            )
+        ).scalar_one_or_none()
+
+        points: list[dict[str, Any]] = []
+        if span_start is not None and span_end is not None:
+            tracked_rows: list[tuple[date, float | None]] = []
+            if tracking_since is not None:
+                # Ventana con margen: el job corre todos los días desde
+                # `tracking_since`, pero anclado al día en que arrancó a
+                # trackear, no al día de la semana del inicio de la obra —
+                # una fila casi nunca cae justo en un punto semanal del
+                # gráfico. Se busca la más cercana dentro de una tolerancia,
+                # no una coincidencia exacta.
+                result = (
+                    await self.session.execute(
+                        select(ObraProgressDaily.date, ObraProgressDaily.progress_real).where(
+                            ObraProgressDaily.obra_id == obra_id,
+                            ObraProgressDaily.date >= span_start - timedelta(days=_CURVA_S_MATCH_TOLERANCE_DAYS),
+                            ObraProgressDaily.date <= span_end + timedelta(days=_CURVA_S_MATCH_TOLERANCE_DAYS),
+                        )
+                    )
+                ).all()
+                tracked_rows = [(d, float(r) if r is not None else None) for d, r in result]
+
+            d = span_start
+            while d <= span_end:
+                planned = dashboard_calc.weighted_planned_progress(calendar, tasks, d)
+                points.append({
+                    "date": d.isoformat(),
+                    "planned": round(planned, 2) if planned is not None else 0.0,
+                    "real": self._nearest_tracked_value(tracked_rows, d),
+                })
+                d += timedelta(days=7)
+
+        return {
+            "granularity": "week",
+            "tracking_since": tracking_since.isoformat() if tracking_since else None,
+            "points": points,
+        }
+
+    async def get_monthly_insights(self, obra_id: int, current_user_role: str) -> dict[str, Any]:
+        """I-12/I-13 — última foto mensual (`ObraStatsSnapshot`). No se
+        recalcula acá, se lee el snapshot que ya escribe el job mensual.
+        D-01: el ranking por responsable (I-12) se filtra en el backend para
+        quien no sea admin — la clave ni siquiera viaja en el JSON."""
+        from app.models.obra_stats_snapshot import ObraStatsSnapshot
+
+        snapshot = (
+            await self.session.execute(
+                select(ObraStatsSnapshot)
+                .where(ObraStatsSnapshot.obra_id == obra_id)
+                .order_by(ObraStatsSnapshot.period.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if snapshot is None:
+            return {"available": False, "period": None, "computed_at": None,
+                    "risk_concentration": None, "estimation_accuracy": None}
+
+        metrics = snapshot.metrics or {}
+        risk_concentration = dict(metrics.get("risk_concentration") or {})
+        if current_user_role != "admin":
+            risk_concentration.pop("by_responsible", None)
+
+        return {
+            "available": True,
+            "period": snapshot.period,
+            "computed_at": snapshot.computed_at.isoformat(),
+            "risk_concentration": risk_concentration,
+            "estimation_accuracy": metrics.get("estimation_accuracy"),
         }
