@@ -92,9 +92,11 @@ export function useTaskSocket({
   const updatedRef = useRef(onTaskUpdated);
   const createdRef = useRef(onTaskCreated);
   const deletedRef = useRef(onTaskDeleted);
-  updatedRef.current = onTaskUpdated;
-  createdRef.current = onTaskCreated;
-  deletedRef.current = onTaskDeleted;
+  useEffect(() => {
+    updatedRef.current = onTaskUpdated;
+    createdRef.current = onTaskCreated;
+    deletedRef.current = onTaskDeleted;
+  });
 
   useEffect(() => {
     if (!socket.connected) socket.connect();

@@ -9,7 +9,7 @@ export function useMediaQuery(query: string): boolean {
   useEffect(() => {
     const mql = window.matchMedia(query);
     const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
-    setMatches(mql.matches);
+    queueMicrotask(() => setMatches(mql.matches));
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, [query]);

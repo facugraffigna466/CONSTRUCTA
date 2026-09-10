@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { fetchPlanos, uploadPlano, deletePlano, setPlanoVigente } from "../api/planos";
 import type { Plano } from "../types";
-import { useConfirm } from "./ConfirmProvider";
+import { useConfirm } from "../hooks/useConfirm";
 import { useCan } from "../hooks/usePermission";
 
 const C = {
@@ -508,7 +508,7 @@ export function PlanosTab({ obraId, onChanged }: { obraId: number; onChanged?: (
     finally { setLoading(false); }
   }, [obraId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { queueMicrotask(load); }, [load]);
 
   const porDisciplina = useMemo(() => agrupar(planos), [planos]);
   const total = planos.length;

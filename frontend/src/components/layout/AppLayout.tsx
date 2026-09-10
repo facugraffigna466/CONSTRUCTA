@@ -4,7 +4,8 @@ import type React from "react";
 import type { ReactNode } from "react";
 import { useRef, useState, useEffect } from "react";
 import { Sidebar } from "./Sidebar";
-import { useUser, ROLE_LABELS, ROLE_COLORS } from "../../context/UserContext";
+import { useUser } from "../../hooks/useUser";
+import { ROLE_LABELS, ROLE_COLORS } from "../../lib/userMeta";
 import { useOnlineUsers } from "../../hooks/useOnlineUsers";
 import { useGlobalAlerts } from "../../hooks/useGlobalAlerts";
 import { UserAvatarTooltip } from "../ui/UserAvatarTooltip";
@@ -60,7 +61,7 @@ export function AppLayout({
   const isCompact = useIsCompact();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // En pantallas chicas el sidebar arranca cerrado y se abre como drawer
-  useEffect(() => { setSidebarCollapsed(isCompact); }, [isCompact]);
+  useEffect(() => { queueMicrotask(() => setSidebarCollapsed(isCompact)); }, [isCompact]);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const avatarRef   = useRef<HTMLDivElement>(null);
 

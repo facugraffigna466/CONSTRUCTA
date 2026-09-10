@@ -516,11 +516,13 @@ export function ConfiguracionPage() {
 
   useEffect(() => {
     if (!canEdit) return;
-    setSuppLoading(true);
-    fetchSuppliers()
-      .then(setSuppliers)
-      .catch(() => {})
-      .finally(() => setSuppLoading(false));
+    queueMicrotask(() => {
+      setSuppLoading(true);
+      fetchSuppliers()
+        .then(setSuppliers)
+        .catch(() => {})
+        .finally(() => setSuppLoading(false));
+    });
   }, [canEdit]);
 
   function openNewSupplier() {
@@ -605,7 +607,7 @@ export function ConfiguracionPage() {
     function onDisconnect() { setWsConnected(false); }
     socket.on("connect",    onConnect);
     socket.on("disconnect", onDisconnect);
-    if (!socket.connected) socket.connect(); else setWsConnected(true);
+    if (!socket.connected) socket.connect(); else queueMicrotask(() => setWsConnected(true));
     return () => { socket.off("connect", onConnect); socket.off("disconnect", onDisconnect); };
   }, []);
 

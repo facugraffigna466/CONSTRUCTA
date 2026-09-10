@@ -44,9 +44,11 @@ export function useObraSocket({
   const createdRef = useRef(onObraCreated);
   const updatedRef = useRef(onObraUpdated);
   const deletedRef = useRef(onObraDeleted);
-  createdRef.current = onObraCreated;
-  updatedRef.current = onObraUpdated;
-  deletedRef.current = onObraDeleted;
+  useEffect(() => {
+    createdRef.current = onObraCreated;
+    updatedRef.current = onObraUpdated;
+    deletedRef.current = onObraDeleted;
+  });
 
   useEffect(() => {
     if (!socket.connected) socket.connect();

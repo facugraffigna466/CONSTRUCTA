@@ -121,8 +121,10 @@ export function GanttSettingsDrawer({ obraId, isOpen, onClose, viewOptions, onVi
 
   useEffect(() => {
     if (!isOpen) return;
-    setLoading(true);
-    fetchCalendar(obraId).then(setCalendar).finally(() => setLoading(false));
+    queueMicrotask(() => {
+      setLoading(true);
+      fetchCalendar(obraId).then(setCalendar).finally(() => setLoading(false));
+    });
   }, [isOpen, obraId]);
 
   async function toggleDay(bit: number) {

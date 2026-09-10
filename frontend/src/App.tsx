@@ -14,11 +14,12 @@ import { AdminPage } from "./pages/AdminPage";
 import { ConfiguracionPage } from "./pages/ConfiguracionPage";
 import { EquipoPage } from "./pages/EquipoPage";
 import { LoginPage } from "./pages/LoginPage";
-import { OnboardingModal, isOnboardingDone } from "./components/OnboardingModal";
+import { OnboardingModal } from "./components/OnboardingModal";
+import { isOnboardingDone } from "./lib/onboarding";
 import { ObraDetailPage } from "./pages/ObraDetailPage";
 import { PortfolioPage } from "./pages/PortfolioPage";
 import { Spinner } from "./components/Spinner";
-import { useUser } from "./context/UserContext";
+import { useUser } from "./hooks/useUser";
 import { useActivityFeed } from "./hooks/useActivityFeed";
 import type { Alert, Obra, ObraTab, Page } from "./types";
 import type { AlertFocusField } from "./pages/ObraDetailPage";
@@ -80,7 +81,7 @@ function App() {
 
   const [showOnboarding, setShowOnboarding] = useState(false);
   useEffect(() => {
-    if (authed && !userLoading && !isOnboardingDone()) setShowOnboarding(true);
+    if (authed && !userLoading && !isOnboardingDone()) queueMicrotask(() => setShowOnboarding(true));
   }, [authed, userLoading]);
 
   // Badge de sugerencias de IA sin revisar — por obra.
@@ -91,7 +92,7 @@ function App() {
   const [suggestionsTick, setSuggestionsTick] = useState(0);
   const refreshBitacoraPending = useCallback(() => setSuggestionsTick(n => n + 1), []);
   useEffect(() => {
-    if (!authed || userLoading || !selectedObra) { setBitacoraPending(0); return; }
+    if (!authed || userLoading || !selectedObra) { queueMicrotask(() => setBitacoraPending(0)); return; }
     fetchSuggestionsPendingCount(selectedObra.id).then(setBitacoraPending).catch(() => { /* ignore */ });
   }, [authed, userLoading, selectedObra, activePage, suggestionsTick]);
 

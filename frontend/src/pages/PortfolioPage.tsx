@@ -4,15 +4,16 @@ import { PlusIcon, MapPinIcon } from "@heroicons/react/24/outline";
 import { GooeyInput } from "@/components/ui/gooey-input";
 import { fetchObras, updateObraStatus, deleteObra } from "../api/obras";
 import { fetchPlanUsage } from "../api/admin";
-import { UpgradeModal, type PlanLimitInfo } from "../components/UpgradeModal";
+import { UpgradeModal } from "../components/UpgradeModal";
+import type { PlanLimitInfo } from "../lib/planLimit";
 import type { PlanUsage } from "../types";
 import { fetchMembers, type ApiUser } from "../api/users";
-import { userAvatarColor } from "../context/UserContext";
+import { userAvatarColor } from "../lib/userMeta";
 import { Spinner } from "../components/Spinner";
 import { usePermission } from "../hooks/usePermission";
 import { useObraSocket } from "../hooks/useObraSocket";
 import type { Obra, ObraStatus } from "../types";
-import { useConfirm } from "../components/ConfirmProvider";
+import { useConfirm } from "../hooks/useConfirm";
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
@@ -421,7 +422,7 @@ export function PortfolioPage({ onSelectObra, onNewObra, pinnedObras, onTogglePi
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { queueMicrotask(loadData); }, [loadData]);
 
   // 6.9: espejamos filtro + búsqueda en la URL para que el estado sea compartible
   // y sobreviva a un F5. replaceState (no pushState) evita ensuciar el back button.

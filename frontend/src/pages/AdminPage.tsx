@@ -71,7 +71,7 @@ export function AdminPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { queueMicrotask(load); }, []);
 
   const plan = usage?.tenant.plan;
   const planLabel = plan ? plan.name.charAt(0).toUpperCase() + plan.name.slice(1) : "Sin plan";

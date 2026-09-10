@@ -1,16 +1,7 @@
 import { useState } from "react";
 import { Building2, Users, ClipboardList, ArrowRight, X } from "lucide-react";
 import { useDialog } from "../hooks/useDialog";
-
-const STORAGE_KEY = "onboarding_done";
-
-export function isOnboardingDone(): boolean {
-  try { return localStorage.getItem(STORAGE_KEY) === "true"; } catch { return true; }
-}
-
-function markDone() {
-  try { localStorage.setItem(STORAGE_KEY, "true"); } catch { /* ignore */ }
-}
+import { markOnboardingDone as markDone } from "../lib/onboarding";
 
 const STEPS = [
   {

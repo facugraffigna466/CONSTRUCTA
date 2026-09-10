@@ -11,8 +11,7 @@ export function ActivityToast({ event }: Props) {
 
   useEffect(() => {
     if (!event) return;
-    setCurrent(event);
-    setVisible(true);
+    queueMicrotask(() => { setCurrent(event); setVisible(true); });
     const t = setTimeout(() => setVisible(false), 4200);
     return () => clearTimeout(t);
   }, [event]);

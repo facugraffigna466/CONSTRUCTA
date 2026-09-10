@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import socket from "../lib/socket";
-import { useUser } from "../context/UserContext";
+import { useUser } from "./useUser";
 
 export interface GanttCursor {
   id: number;

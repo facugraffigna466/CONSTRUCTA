@@ -12,7 +12,7 @@ import {
 import { SuggestionCard } from "../components/SuggestionCard";
 import { fetchObras } from "../api/obras";
 import type { Obra } from "../types";
-import { useConfirm } from "../components/ConfirmProvider";
+import { useConfirm } from "../hooks/useConfirm";
 import socket from "../lib/socket";
 
 const FONT = "'Plus Jakarta Sans', sans-serif";
@@ -302,7 +302,7 @@ export function BitacoraPage({ obra }: { obra: Obra | null }) {
     }
   }, [obraId]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
+  useEffect(() => { queueMicrotask(() => { setLoading(true); load(); }); }, [load]);
   useEffect(() => { entriesCountRef.current = entries.length; }, [entries]);
 
   async function loadMore() {
