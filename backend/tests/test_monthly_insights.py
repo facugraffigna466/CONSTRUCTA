@@ -1,7 +1,10 @@
-"""GET /obras/{id}/dashboard/monthly-insights — I-12/I-13.
+"""GET /obras/{id}/dashboard/monthly-insights — I-12 a I-16.
 
 D-01: el ranking por responsable (I-12) se filtra en el backend para quien
 no sea admin — la clave ni siquiera debe viajar en el JSON.
+D-04: I-14/I-15/I-16 (top_deviations, bitacora_themes, alert_reaction) no
+tienen ranking por persona en lo que consume el front, así que viajan sin
+filtrar para cualquier rol — a diferencia de risk_concentration.by_responsible.
 """
 import pytest_asyncio
 
@@ -57,6 +60,23 @@ def _metrics() -> dict:
             "tasks_considered": 5,
             "by_discipline": [{"discipline": "Hormigón", "avg_deviation_percent": 15.0}],
         },
+        "top_deviations": {
+            "count": 1,
+            "items": [{
+                "task": {"task_id": 5, "title": "Excavación", "deviation_days": 9, "responsible_id": 1},
+                "bitacora_mentions": [],
+                "alerts": [],
+                "cascade_impact": {"direct_dependent_count": 0},
+            }],
+        },
+        "bitacora_themes": {
+            "categories": [
+                {"category": "falta_material", "mentions": 4, "mentions_followed_by_delay": 3, "correlation_rate": 0.75},
+            ],
+        },
+        "alert_reaction": {
+            "by_type": [{"type": "task_overdue", "avg_hours": 30.0}],
+        },
     }
 
 
@@ -87,6 +107,9 @@ async def test_admin_recibe_ranking_por_responsable(ctx, db, client):
     assert "by_responsible" in body["risk_concentration"]
     assert body["risk_concentration"]["by_responsible"]["ranking"][0]["name"] == "Juan Albañil"
     assert body["estimation_accuracy"]["by_discipline"][0]["discipline"] == "Hormigón"
+    assert body["top_deviations"]["items"][0]["task"]["title"] == "Excavación"
+    assert body["bitacora_themes"]["categories"][0]["category"] == "falta_material"
+    assert body["alert_reaction"]["by_type"][0]["type"] == "task_overdue"
 
 
 async def test_no_admin_no_recibe_ranking_por_responsable(ctx, db, client):
@@ -105,3 +128,7 @@ async def test_no_admin_no_recibe_ranking_por_responsable(ctx, db, client):
     assert "by_responsible" not in body["risk_concentration"]
     # el ranking por tarea SÍ viaja para cualquiera con acceso a la obra
     assert body["risk_concentration"]["by_task"]["tasks_considered"] == 10
+    # D-04: I-14/I-15/I-16 no tienen ranking por persona, viajan igual para no-admin
+    assert body["top_deviations"]["items"][0]["task"]["title"] == "Excavación"
+    assert body["bitacora_themes"]["categories"][0]["category"] == "falta_material"
+    assert body["alert_reaction"]["by_type"][0]["type"] == "task_overdue"

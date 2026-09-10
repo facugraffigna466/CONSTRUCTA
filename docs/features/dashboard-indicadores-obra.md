@@ -4,6 +4,7 @@
 > **Fase:** Dashboard Avanzado (Gantt) — 29/09 a 23/10.
 > **Regla de oro:** ningún indicador de este documento usa un modelo de lenguaje. Todos salen de SQL/Python y son verificables a mano con los datos de una obra.
 > **Formato:** pendiente de confirmar contra la plantilla que define Facundo. La estructura de acá sigue la de los demás `docs/features/*.md` del repo.
+> **Extensión 2026-09-10 — "Visualización de desvíos y problemas":** se agregan I-14 a I-16 al final de la sección 4. Mismo estado que el resto del documento (diseño listo para implementar, no implementado todavía) — entran como paso 7 del plan (sección 10).
 
 ---
 
@@ -367,6 +368,59 @@ El dato es genuinamente útil para quien gestiona, pero es el mismo riesgo por e
 
 ---
 
+## 4-bis. Visualización de desvíos y problemas (extensión 2026-09-10)
+
+Los tres indicadores que siguen no son cálculo nuevo: `obra_stats_service.py` ya los produce dentro del mismo snapshot mensual que alimenta I-12/I-13 (`_top_deviations`, `_bitacora_themes`, `_alert_reaction`). Hoy ese JSON llega hasta el informe mensual con IA (`insights.py`) y ahí muere — nunca llegó a una pantalla de la app. Es exactamente el mismo movimiento que ya hizo este documento con I-09/I-10/I-11: **exponer lo que ya se calcula y estaba escondido**, no inventar una métrica.
+
+Van en el mismo acordeón "Análisis del período" que I-12/I-13 (mismo endpoint, misma cadencia mensual, mismo criterio de "se muestra la fecha del snapshot").
+
+---
+
+### I-14 · Evidencia de desvíos (problemas) — **P1** — 🆕 expone `top_deviations`, ya calculado
+
+**Pregunta:** de las tareas que más se desviaron el mes pasado, ¿qué pasó exactamente — qué se dijo en bitácora, qué alertas saltaron, a cuántas tareas arrastró?
+
+**Fuente:** `ObraStatsService._top_deviations()` ya arma, para las `TOP_DEVIATIONS_COUNT` (3) tareas con mayor `abs(deviation_days)`, un paquete completo: menciones de bitácora en la ventana previa al vencimiento, alertas propias y de predecesoras, últimos eventos de historial (hasta 30, con `payload` crudo y `triggered_by`) y el impacto en cascada (`cascade_impact`).
+
+**Qué se muestra y qué no (D-04):** el paquete completo es insumo para que un modelo redacte un informe, no para pegar tal cual en una tarjeta. El panel muestra un **resumen curado** por tarea: título, desvío en días, hasta 3 menciones de bitácora (resumen + categoría matcheada), cantidad de alertas asociadas, y `cascade_impact.direct_dependent_count` si es > 0 ("empujó a N tareas"). **No se muestra `responsible_id` ni `triggered_by`** — esto es evidencia sobre una *tarea*, no un ranking de quién la causó; es el mismo criterio que en la sección 8 descartó "productividad por responsable". El JSON completo sigue disponible en el snapshot para quien lo consulte por API; la UI no lo despliega.
+
+**Casos borde:**
+- `top_deviations.count == 0` (ninguna tarea con `deviation_days != 0` ese período) → no se muestra la sección. Es buena noticia, no un estado vacío que llenar.
+- Tarea con desvío pero sin ninguna mención de bitácora ni alerta asociada → la tarjeta se muestra igual, solo con título y días: el desvío es el dato duro, y que no haya evidencia adicional también es información (nadie documentó por qué).
+
+**Visual:** dentro del acordeón, reemplaza a la lista actual "Tareas con mayor desvío" (que hoy es solo texto + días — esta ficha es un superset del mismo ranking, con contexto). Tarjetas apiladas, una por tarea: título + badge de días en rojo y, si existen, chips de categoría de bitácora (`falta_material`, `clima`, ...) con su resumen en texto chico, y "→ empujó N tareas" cuando aplica. Clickeable a la tarea.
+
+---
+
+### I-15 · Temas recurrentes de bitácora (patrones de problema) — **P1** — 🆕 expone `bitacora_themes`, ya calculado
+
+**Pregunta:** ¿qué tipo de problema se repite en el campo, y cuánto de eso realmente termina en un retraso medible?
+
+**Fuente:** `ObraStatsService._bitacora_themes()` categoriza cada bitácora por palabras clave (`BITACORA_THEME_SYNONYMS`: falta_material, clima, ausencia_personal, proveedor, problema_tecnico, equipos_maquinaria, seguridad) y calcula `correlation_rate` = menciones seguidas de una señal de retraso (bloqueo, vencimiento, alerta, reprogramación en cascada) dentro de `CORRELATION_WINDOW_DAYS` (5 días) sobre el total de menciones de esa categoría.
+
+**Casos borde:**
+- Ninguna bitácora matcheó alguna categoría → no se muestra la sección.
+- **Muestra chica engañosa:** con 1 mención y 1 retraso, `correlation_rate` da 100% y es ruido, no un patrón. El porcentaje se muestra **solo si `mentions >= 3`**; por debajo, se muestra el conteo crudo sin porcentaje ("2 menciones, 1 con retraso después") para no insinuar una tasa que no es estadísticamente nada.
+- El propio método ya declara en `bitacora_themes.note` que es "correlación temporal, NO causalidad" — ese texto va como tooltip fijo de la sección, mismo criterio que D-03 con el tooltip de I-01.
+
+**Visual:** sección nueva "Problemas recurrentes en bitácora" en el mismo acordeón. Barras horizontales por categoría (orden `mentions_followed_by_delay` desc, ya viene así del backend), con label en español fijo (`falta_material`→"Falta de material", `clima`→"Clima", `ausencia_personal`→"Ausencia de personal", `proveedor`→"Proveedores", `problema_tecnico`→"Problema técnico", `equipos_maquinaria`→"Equipos y maquinaria", `seguridad`→"Seguridad"). Largo de barra = `mentions`, segmento interno más oscuro = `mentions_followed_by_delay`.
+
+---
+
+### I-16 · Velocidad de reacción a alertas — **P2** — ♻️ expone `alert_reaction`, ya calculado
+
+**Pregunta:** ¿cuánto tardamos, en promedio, en resolver una alerta una vez que salta?
+
+**Fuente:** `ObraStatsService._alert_reaction()` — horas entre `created_at` y `resolved_at` por tipo de alerta, más el conteo de alertas sin resolver por tipo (`alerts_unresolved_by_type`).
+
+**Casos borde:**
+- `alerts_measured == 0` (obra nueva o sin alertas resueltas con timestamp) → no se muestra.
+- `alerts_resolved_without_timestamp > 0` (alertas resueltas antes de la migración 0062, sin `resolved_at`) → nota chica debajo de la tabla; no altera el promedio.
+
+**Visual:** tabla compacta en el acordeón, un tipo de alerta por fila, ordenada por `avg_hours` descendente (la que peor se atiende arriba). `avg_hours` se muestra en horas o en días si supera 48h, con badge si `unresolved` > 0 para ese tipo.
+
+---
+
 ### Resumen
 
 | # | Indicador | Estado | Cadencia | Prioridad |
@@ -384,6 +438,9 @@ El dato es genuinamente útil para quien gestiona, pero es el mismo riesgo por e
 | I-11 | Ejecución de materiales | ♻️ ya existe en API | vivo | P1 |
 | I-12 | Concentración 80/20 | ♻️ snapshot | mensual | P2 |
 | I-13 | Precisión de estimación | ♻️ snapshot | mensual | P2 |
+| I-14 | Evidencia de desvíos (problemas) | 🆕 expone snapshot | mensual | P1 |
+| I-15 | Temas recurrentes de bitácora | 🆕 expone snapshot | mensual | P1 |
+| I-16 | Velocidad de reacción a alertas | ♻️ expone snapshot | mensual | P2 |
 
 **5 P0 son todos nuevos y ninguno necesita esquema nuevo** — salen de campos que ya existen. La única tabla nueva es para la curva S (P1).
 
@@ -545,6 +602,36 @@ Endpoint aparte porque es una serie, se pide bajo demanda y no debe encarecer la
 
 I-12 e I-13 se leen del último `ObraStatsSnapshot` vía los endpoints de insights que ya existen. **No se recalculan en vivo** y se muestran con su `period` y `computed_at` visibles.
 
+**Extensión I-14/I-15/I-16:** mismo endpoint (`GET /obras/{obra_id}/dashboard/monthly-insights`), mismo snapshot, tres claves nuevas en la respuesta — no hay endpoint nuevo:
+
+```jsonc
+{
+  "available": true,
+  "period": "2026-08",
+  "computed_at": "2026-09-01T02:35:00Z",
+  "risk_concentration": { /* ya existe, sin cambios */ },
+  "estimation_accuracy": { /* ya existe, sin cambios */ },
+
+  "top_deviations": {
+    // Tal cual devuelve _top_deviations() — items completos (bitácora, alertas,
+    // historial, cascade_impact). El front consume solo el subset curado (I-14);
+    // el resto queda disponible para quien pegue directo a la API.
+    "count": 3,
+    "items": [ /* ... */ ]
+  },
+  "bitacora_themes": {
+    // Tal cual devuelve _bitacora_themes().
+    "categories": [ /* ... */ ]
+  },
+  "alert_reaction": {
+    // Tal cual devuelve _alert_reaction().
+    "by_type": [ /* ... */ ]
+  }
+}
+```
+
+Sin filtro de rol nuevo: a diferencia de `risk_concentration.by_responsible` (D-01), estas tres claves no traen ranking por persona — `top_deviations` es evidencia por tarea sin `responsible_id` expuesto en el subset que consume el front (D-04), y `bitacora_themes`/`alert_reaction` son agregados por categoría/tipo, no por persona. Viajan igual para todos los roles.
+
 ---
 
 ## 7. Layout
@@ -573,7 +660,12 @@ Reemplaza el contenido actual del tab **Resumen** de `ObraDetailPage`. No es un 
 ├───────────────────────────────────────────────────────────────────┤
 │  Materiales  ▓▓▓▓▓▓░░░░  64% comprometido · 40% recibido          │  I-11
 ├───────────────────────────────────────────────────────────────────┤
-│  ▸ Análisis del período (snapshot 2026-09)              [colapsado]│  I-12, I-13
+│  ▸ Análisis del período (snapshot 2026-09)              [colapsado]│  I-12..I-16
+│      Tareas con mayor desvío (con evidencia)                       │  I-14
+│      Por responsable                                               │  I-12
+│      Problemas recurrentes en bitácora                             │  I-15
+│      Precisión de estimación por disciplina                        │  I-13
+│      Velocidad de reacción a alertas                                │  I-16
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -611,6 +703,8 @@ Decidir qué **no** mostrar es la mitad de este documento. Cada uno de estos par
 
 **D-03 · El cambio del % de avance se comunica con un tooltip permanente en el indicador**, no con una nota de release ni con un aviso por única vez. Resuelve el día del despliegue y también al usuario que entra por primera vez seis meses después, sin construir infraestructura de "visto una vez". Texto exacto en la ficha I-01.
 
+**D-04 · La evidencia de desvíos (I-14) no expone `responsible_id` ni `triggered_by` en la tarjeta.** El paquete crudo de `_top_deviations()` los trae, pero la UI muestra evidencia sobre una *tarea* (bitácora, alertas, cascada), no un señalamiento de quién la causó. Es el mismo argumento que ya cerró D-01 y la exclusión de "productividad por responsable" en la sección 8: la evidencia completa sigue disponible por API para quien la necesite (el informe mensual con IA, por ejemplo), pero el panel que ve el equipo de obra no la convierte en un scoreboard personal.
+
 ### Lo que sigue abierto
 
 **A-01 · Formato del documento.** El ticket dice "formato definido por Facundo" y no lo tuvimos al escribir. Esta estructura sigue la de los demás `docs/features/*.md` del repo. Si hay plantilla propia, reformatear es barato — pero conviene confirmarlo antes de darlo por entregado.
@@ -629,5 +723,6 @@ Orden pensado para que cada paso deje algo usable en pantalla, no para que todo 
 | 4 | `baseline`, `critical_path`, `milestones`, `materials` en el mismo endpoint + su UI | I-06 a I-08, I-11 |
 | 5 | Tabla `obra_progress_daily` + job diario + endpoint curva-s + gráfico | I-05 |
 | 6 | Acordeón mensual leyendo el snapshot, con `by_responsible` filtrado por rol (D-01) | I-12, I-13 |
+| 7 | Extender `get_monthly_insights` con `top_deviations`, `bitacora_themes`, `alert_reaction` (mismo snapshot, sin migración) + tarjetas de evidencia, barras de temas y tabla de reacción en el acordeón (D-04) | I-14, I-15, I-16 |
 
 **Sobre los tests:** cada indicador de la sección 4 tiene fórmula cerrada y casos borde explícitos — se pueden testear con una obra fixture de ~6 tareas donde los números se verifican a mano, igual que hizo `test_obra_stats.py` con las 5 métricas mensuales. Los casos borde de cada ficha **son la lista de tests**, no una aclaración al margen: obra sin tareas, sin fechas, sin baseline, sin dependencias, SPI con planificado en cero, y tarea bloqueada conservando su avance.

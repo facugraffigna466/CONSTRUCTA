@@ -2756,3 +2756,46 @@ El resto: variables sin usar, ternarios usados por su efecto secundario converti
 
 ### Pending / next steps
 Ninguno abierto: era una limpieza acotada y quedó cerrada en el mismo PR.
+
+## 2026-09-10 — Diseño de "Visualización de desvíos y problemas" (extensión del Dashboard Avanzado)
+
+### Objective
+Ticket de Trello (backlog "próximo round, post-auditoría"): tarea de Martina, dependiente de la parte de Facundo ya cerrada — el análisis de patrones y desvíos que calcula `obra_stats_service.py`. Ticket de diseño, no de implementación: definir cómo se exponen y visualizan los desvíos y problemas que ese motor ya calcula pero que nunca llegaron a una pantalla.
+
+### Changes made
+Relevamiento: de las 5 métricas mensuales de `obra_stats_service.py`, el Dashboard Avanzado (P0-P2, sesión anterior) solo expuso 2 (`risk_concentration`, `estimation_accuracy`) en `GET /obras/{id}/dashboard/monthly-insights`. Las otras 3 —`top_deviations` (paquete de evidencia de los mayores desvíos), `bitacora_themes` (temas recurrentes de bitácora y su correlación con retraso) y `alert_reaction` (velocidad de reacción a alertas)— ya se calculan en el mismo snapshot mensual pero solo alimentan el informe HTML interno (`insights.py`); nadie las ve en la app. Es exactamente ese hueco el que describe la tarjeta "Visualización de desvíos y problemas": desvíos = `top_deviations`, problemas = `bitacora_themes`.
+
+Se agregaron tres fichas nuevas a `docs/features/dashboard-indicadores-obra.md` (sección 4-bis, I-14 a I-16), siguiendo el mismo formato que las 13 existentes: pregunta, fuente, casos borde, visual. Dos decisiones de diseño quedaron cerradas en el documento:
+
+**D-04 (nueva):** la tarjeta de evidencia de desvíos (I-14) no expone `responsible_id` ni `triggered_by`, aunque el JSON crudo de `_top_deviations()` los trae — es evidencia sobre una tarea, no un señalamiento de quién la causó. Mismo argumento que ya había cerrado D-01 y la exclusión de "productividad por responsable" en la sección 8 del documento original: el día que alguien sospecha que reportar un problema lo deja mal parado en una pantalla que ve todo el equipo, deja de reportarlo.
+
+**Muestra chica en I-15:** con 1 mención de bitácora y 1 retraso después, `correlation_rate` da 100% y es ruido, no un patrón. Se decidió mostrar el porcentaje solo con `mentions >= 3`; por debajo, conteo crudo sin porcentaje.
+
+Contrato de API: no hay endpoint nuevo. Las tres claves se agregan a la respuesta que ya existe de `/dashboard/monthly-insights`, mismo snapshot, sin filtro de rol nuevo (a diferencia de I-12, ninguna de las tres trae ranking por persona en lo que consume el front).
+
+### Files modified
+`docs/features/dashboard-indicadores-obra.md` (extensión: bloque de contexto en el encabezado, sección 4-bis con I-14/I-15/I-16, filas nuevas en la tabla Resumen, contrato de API extendido en sección 6, acordeón actualizado en el layout de sección 7, D-04 en sección 9, paso 7 en el plan de sección 10) y esta entrada.
+
+### Pending / next steps
+**El IPI no se toca todavía** — mismo criterio que la sesión de diseño del 09/09: este documento describe una solución diseñada, no implementada. La sección de Implementación del IPI se actualiza cuando el paso 7 (backend `get_monthly_insights` + frontend `MonthlyInsightsAccordion`) esté hecho y verificado, igual que se hizo con I-01 a I-13. Falta implementar: extender `ObraDashboardService.get_monthly_insights` con las tres claves nuevas (sin migración, mismo snapshot) y las tres secciones nuevas del acordeón (tarjetas de evidencia, barras de temas, tabla de reacción a alertas) en `MonthlyInsightsAccordion.tsx`.
+
+## 2026-09-10 — Implementación de "Visualización de desvíos y problemas" (I-14 a I-16)
+
+### Objective
+Paso 7 del plan de `docs/features/dashboard-indicadores-obra.md` (sección 10): llevar a código el diseño cerrado unas horas antes en la misma sesión. Cierra la tarjeta de Trello de Martina.
+
+### Changes made
+**Backend, sin migración** — las tres métricas ya existían en el `metrics` JSON de cada `ObraStatsSnapshot` desde la sesión de P2 (`_top_deviations`, `_bitacora_themes`, `_alert_reaction` corren dentro de `ObraStatsService.compute()` junto con `risk_concentration`/`estimation_accuracy`), solo faltaba leerlas. `ObraDashboardService.get_monthly_insights` (`obra_dashboard_service.py`) ahora agrega `top_deviations`, `bitacora_themes` y `alert_reaction` a la respuesta, sin filtro de rol (D-04: a diferencia de `risk_concentration.by_responsible`, ninguna de las tres trae ranking por persona en lo que consume el front). `MonthlyInsightsRead` (`schemas/obra_dashboard.py`) tipa las tres claves nuevas igual que las dos existentes — `dict[str, Any]`, se leen tal cual del snapshot.
+
+**Frontend:** tres tipos nuevos en `types/index.ts` (`TopDeviations`, `BitacoraThemes`, `AlertReaction`, más los sub-tipos de item). `MonthlyInsightsAccordion.tsx` reemplaza la lista plana "Tareas con mayor desvío" por tarjetas de evidencia (I-14: título, días con color por signo, chips de categoría de bitácora, alertas asociadas, cascada) — **sin leer `responsible_id` ni `triggered_by`** aunque el JSON los trae (D-04). Se agregan dos secciones nuevas: "Problemas recurrentes en bitácora" (I-15, barras por categoría con el label en español y el corte de `mentions >= 3` para no mostrar un % con una sola mención) y "Velocidad de reacción a alertas" (I-16, tabla por tipo con `ALERT_LABEL` ya existente en `lib/alertMeta.ts`, reusado en vez de duplicar el mapeo de nombres de alerta).
+
+### Files modified
+Backend: `app/schemas/obra_dashboard.py`, `app/services/obra_dashboard_service.py`, `tests/test_monthly_insights.py` (fixture y aserciones extendidas, sin tests nuevos — mismo archivo que ya cubría I-12/I-13). Frontend: `types/index.ts`, `components/MonthlyInsightsAccordion.tsx`.
+
+### Validation
+Backend: suite completa, **603 passed** (sin cambio de conteo — se extendieron tests existentes, no se agregaron archivos). Frontend: `tsc -b` y `eslint` limpios sobre los archivos tocados, `vitest run` 49/49 sin cambios (el resto de componentes del dashboard no tiene tests de render, igual que I-12/I-13 cuando se implementaron).
+
+**Verificación manual en navegador (Playwright headless, sin librería nueva — mismo patrón que la sesión de P2):** se generó un snapshot real corriendo `ObraStatsService.snapshot()` sobre una obra del entorno de desarrollo local (`Edificio Residencial Los Ceibos`, obra con bitácoras reales que mencionan "falta de material" y "proveedor"), con una alerta marcada como resuelta temporalmente solo para poder ver la sección de reacción a alertas con datos (revertido después de la captura). Se vio en pantalla el acordeón completo con las tres secciones nuevas pobladas: tarjeta de evidencia con desvío en verde (tarea terminada 48 días antes) más "2 alertas → empujó 1 tarea", barras de "Proveedores" y "Falta de material" con 1 mención cada una (sin porcentaje, tal como define el corte de muestra chica), y la tabla de reacción mostrando "Riesgo de demora — 3 h promedio, 4 sin resolver". Sin errores de consola. Los cambios temporales en la base de datos local (snapshot nuevo para la obra 2, resolución de la alerta) se hicieron directo sobre el Postgres de desarrollo, no vía migración ni fixture de test.
+
+### Pending / next steps
+Ninguno abierto para I-14/I-15/I-16: diseño e implementación cerrados en la misma sesión, paso 7 del plan completo. Actualizando el IPI a continuación (RF nuevos + trazabilidad del objetivo 8), siguiendo el mismo criterio que I-01 a I-13.

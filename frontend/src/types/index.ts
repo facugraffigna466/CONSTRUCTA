@@ -209,12 +209,64 @@ export interface EstimationAccuracy {
   by_discipline: EstimationAccuracyDiscipline[];
 }
 
+export interface TopDeviationBitacoraMention {
+  bitacora_id: number;
+  at: string;
+  categories: string[];
+  matched_keywords: string[];
+  summary: string | null;
+}
+
+export interface TopDeviationItem {
+  // D-04: no incluye responsible_id ni triggered_by aunque el backend los manda
+  // — evidencia sobre una tarea, no un señalamiento de persona.
+  task: TaskDeviation;
+  bitacora_mentions: TopDeviationBitacoraMention[];
+  alerts: Array<{ alert_id: number; type: string }>;
+  cascade_impact: { direct_dependent_count: number };
+}
+
+export interface TopDeviations {
+  count: number;
+  items: TopDeviationItem[];
+}
+
+export interface BitacoraThemeCategory {
+  category: string;
+  mentions: number;
+  mentions_followed_by_delay: number;
+  correlation_rate: number;
+}
+
+export interface BitacoraThemes {
+  note: string;
+  categories: BitacoraThemeCategory[];
+}
+
+export interface AlertReactionByType {
+  type: string;
+  resolved_count: number;
+  avg_hours: number;
+  min_hours: number;
+  max_hours: number;
+}
+
+export interface AlertReaction {
+  alerts_measured: number;
+  alerts_unresolved_by_type: Record<string, number>;
+  overall_avg_hours: number | null;
+  by_type: AlertReactionByType[];
+}
+
 export interface MonthlyInsights {
   available: boolean;
   period: string | null;
   computed_at: string | null;
   risk_concentration: RiskConcentration | null;
   estimation_accuracy: EstimationAccuracy | null;
+  top_deviations: TopDeviations | null;
+  bitacora_themes: BitacoraThemes | null;
+  alert_reaction: AlertReaction | null;
 }
 
 export type Page = "panel" | "configuracion" | "equipo" | "bitacora" | "presupuestos" | "admin";

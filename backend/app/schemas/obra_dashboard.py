@@ -130,6 +130,11 @@ class MonthlyInsightsRead(BaseModel):
     # calculan, no en este endpoint que solo las reexpone.
     risk_concentration: dict[str, Any] | None
     estimation_accuracy: dict[str, Any] | None
+    # I-14/I-15/I-16 (docs/features/dashboard-indicadores-obra.md, sección 4-bis):
+    # mismo criterio, formas de _top_deviations / _bitacora_themes / _alert_reaction.
+    top_deviations: dict[str, Any] | None
+    bitacora_themes: dict[str, Any] | None
+    alert_reaction: dict[str, Any] | None
 
 
 class ObraDashboardRead(BaseModel):
