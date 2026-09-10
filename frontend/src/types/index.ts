@@ -223,7 +223,10 @@ export interface TopDeviationItem {
   task: TaskDeviation;
   bitacora_mentions: TopDeviationBitacoraMention[];
   alerts: Array<{ alert_id: number; type: string }>;
-  cascade_impact: { direct_dependent_count: number };
+  // direct_dependent_count es estructural (tareas que dependen de esta en el
+  // grafo), no implica que se haya reprogramado nada. Lo que sí se empujó por
+  // una cascada real es tasks_pushed_by_cascade.
+  cascade_impact: { direct_dependent_count: number; tasks_pushed_by_cascade: number[] };
 }
 
 export interface TopDeviations {

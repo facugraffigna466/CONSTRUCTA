@@ -66,7 +66,7 @@ def _metrics() -> dict:
                 "task": {"task_id": 5, "title": "Excavación", "deviation_days": 9, "responsible_id": 1},
                 "bitacora_mentions": [],
                 "alerts": [],
-                "cascade_impact": {"direct_dependent_count": 0},
+                "cascade_impact": {"direct_dependent_count": 0, "tasks_pushed_by_cascade": []},
             }],
         },
         "bitacora_themes": {
