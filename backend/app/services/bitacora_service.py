@@ -105,6 +105,13 @@ _ANALYSIS_SCHEMA = {
                             {"type": "null"},
                         ],
                     },
+                    "new_progress": {
+                        "anyOf": [
+                            {"type": "integer", "minimum": 0, "maximum": 100},
+                            {"type": "null"},
+                        ],
+                        "description": "% de avance de la tarea, SOLO si el audio menciona un porcentaje explícito",
+                    },
                     "title": {"type": ["string", "null"]},
                     "description": {"type": ["string", "null"]},
                     "responsible_name": {"type": ["string", "null"]},
@@ -112,7 +119,7 @@ _ANALYSIS_SCHEMA = {
                 },
                 "required": ["type", "task_id", "task_title", "new_start_date", "new_due_date",
                              "shift_working_days", "shift_target",
-                             "new_status", "title", "description", "responsible_name", "reason"],
+                             "new_status", "new_progress", "title", "description", "responsible_name", "reason"],
                 "additionalProperties": False,
             },
         },
@@ -464,7 +471,11 @@ class BitacoraService:
             "   - reschedule_task: si se habló de mover/atrasar/adelantar fechas de una tarea EXISTENTE "
             "(usá el id exacto de la lista de tareas; calculá fechas concretas YYYY-MM-DD a partir de hoy).\n"
             "   - create_task: si se acordó un trabajo nuevo que no está en la lista.\n"
-            "   - update_status: si se dijo que una tarea está terminada, empezada, frenada o cancelada.\n"
+            "   - update_status: si se dijo que una tarea está terminada, empezada, frenada o cancelada, "
+            "O si se mencionó su porcentaje de avance ('la mampostería va al 75%'): en ese caso completá "
+            "`new_progress` con el número que dijo el audio y `new_status` con el estado que corresponda "
+            "(en_progreso si avanza y no estaba iniciada; el estado actual del contexto si no cambia). "
+            "NUNCA inventes un porcentaje que el audio no dice — si no se mencionó, dejá new_progress en null.\n"
             "   - note: para acuerdos importantes que no mapean a una tarea (quedan como registro).\n\n"
             "Reglas:\n"
             f"- Hoy es {today}. Interpretá expresiones relativas ('la semana que viene', 'el lunes') contra esa fecha.\n"
@@ -648,6 +659,7 @@ class BitacoraService:
                     new_start_date=inicio,
                     new_due_date=fin,
                     new_status=s.get("new_status"),
+                    new_progress=s.get("new_progress") if isinstance(s.get("new_progress"), int) else None,
                     title=s.get("title"),
                     description=s.get("description"),
                     responsible_name=s.get("responsible_name"),

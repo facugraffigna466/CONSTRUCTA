@@ -24,6 +24,7 @@ export interface Suggestion {
   new_start_date: string | null;
   new_due_date: string | null;
   new_status: string | null;
+  new_progress: number | null;
   title: string | null;
   description: string | null;
   responsible_name: string | null;
@@ -47,6 +48,7 @@ export interface SuggestionEdit {
   new_start_date?: string | null;
   new_due_date?: string | null;
   new_status?: string | null;
+  new_progress?: number | null;
   title?: string | null;
   responsible_name?: string | null;
   description?: string | null;

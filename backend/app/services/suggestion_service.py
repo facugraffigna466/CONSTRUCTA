@@ -33,6 +33,7 @@ _EDITABLE_FIELDS = (
     "new_start_date",
     "new_due_date",
     "new_status",
+    "new_progress",
     "title",
     "responsible_name",
     "description",
@@ -219,6 +220,7 @@ class SuggestionService:
             "new_start_date": suggestion.new_start_date,
             "new_due_date": suggestion.new_due_date,
             "new_status": suggestion.new_status,
+            "new_progress": suggestion.new_progress,
             "title": suggestion.title,
             "responsible_name": suggestion.responsible_name,
             "description": suggestion.description,
@@ -288,10 +290,19 @@ class SuggestionService:
                 f"Bitácora #{suggestion.source_entry_id}"
                 if suggestion.source_entry_id else "Sugerencia de IA"
             )
+            # `TaskStatusUpdate.estimated_progress` tiene default 0 y el repo lo
+            # escribe SIEMPRE: sin esto, aplicar "bloqueada" a una tarea al 60%
+            # le reseteaba el avance a cero. Si la sugerencia no trae un avance
+            # propuesto, se conserva el actual de la tarea.
+            task_actual = await task_service.get_or_raise(suggestion.task_id)
+            avance = values["new_progress"]
+            if avance is None:
+                avance = task_actual.estimated_progress or 0
             await task_service.apply_status_update_checked(
                 suggestion.task_id,
                 TaskStatusUpdate(
                     status=self._parse_status(values["new_status"]),
+                    estimated_progress=avance,
                     triggered_by="user",
                     reason=f"{origen}: {(suggestion.reason or '')[:200]}",
                 ),
@@ -379,7 +390,9 @@ class SuggestionService:
         if s.type == SuggestionType.UPDATE_STATUS:
             ref = s.task_title or f"tarea #{s.task_id}"
             estado = (values.get("new_status") or "").replace("_", " ")
-            return f"✅ {who}marcó «{ref}» como {estado} a partir de tu nota de voz."
+            avance = values.get("new_progress")
+            extra = f" ({avance}% de avance)" if avance is not None else ""
+            return f"✅ {who}marcó «{ref}» como {estado}{extra} a partir de tu nota de voz."
         return f"✅ {who}registró tu nota en la bitácora de la obra. ¡Gracias!"
 
     async def _notify_reporter(

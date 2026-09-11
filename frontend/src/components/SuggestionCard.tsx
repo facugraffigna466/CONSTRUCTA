@@ -50,6 +50,7 @@ export function SuggestionCard({ s, onResolved }: {
     new_start_date: s.new_start_date,
     new_due_date: s.new_due_date,
     new_status: s.new_status,
+    new_progress: s.new_progress,
     title: s.title,
     responsible_name: s.responsible_name,
   });
@@ -86,7 +87,7 @@ export function SuggestionCard({ s, onResolved }: {
   } else if (s.type === "create_task") {
     detail = <>«{s.title}»{s.new_start_date && <> · {fmtDate(s.new_start_date)} → {fmtDate(s.new_due_date)}</>}{s.responsible_name && <> · {s.responsible_name}</>}</>;
   } else if (s.type === "update_status") {
-    detail = <>«{s.task_title ?? `Tarea #${s.task_id}`}» → <strong>{s.new_status?.replace("_", " ")}</strong></>;
+    detail = <>«{s.task_title ?? `Tarea #${s.task_id}`}» → <strong>{s.new_status?.replace("_", " ")}</strong>{s.new_progress != null && <> · avance <strong>{s.new_progress}%</strong></>}</>;
   }
 
   let editForm: React.ReactNode = null;
@@ -114,10 +115,14 @@ export function SuggestionCard({ s, onResolved }: {
     );
   } else if (editing && s.type === "update_status") {
     editForm = (
-      <div style={{ marginTop: 5 }}>
+      <div style={{ display: "flex", gap: 10, marginTop: 5, alignItems: "flex-end", flexWrap: "wrap" }}>
         <select value={edit.new_status ?? ""} onChange={e => setField("new_status", e.target.value)} style={{ ...INPUT, cursor: "pointer" }}>
           {STATUS_OPTIONS.map(o => <option key={o} value={o}>{o.replace("_", " ")}</option>)}
         </select>
+        <label style={{ fontSize: 11, color: "#6B7580", display: "flex", flexDirection: "column", gap: 2 }}>% Avance
+          <input type="number" min={0} max={100} placeholder="—" value={edit.new_progress ?? ""}
+            onChange={e => setEdit(prev => ({ ...prev, new_progress: e.target.value === "" ? null : Math.max(0, Math.min(100, Number(e.target.value))) }))}
+            style={{ ...INPUT, width: 70 }} /></label>
       </div>
     );
   }
@@ -127,7 +132,7 @@ export function SuggestionCard({ s, onResolved }: {
     let short = "";
     if (s.type === "reschedule_task") short = `«${s.task_title ?? `Tarea #${s.task_id}`}»`;
     else if (s.type === "create_task") short = `«${s.title ?? ""}»`;
-    else if (s.type === "update_status") short = `«${s.task_title ?? `Tarea #${s.task_id}`}» → ${s.new_status?.replace("_", " ")}`;
+    else if (s.type === "update_status") short = `«${s.task_title ?? `Tarea #${s.task_id}`}» → ${s.new_status?.replace("_", " ")}${s.new_progress != null ? ` · ${s.new_progress}%` : ""}`;
     return (
       <div style={{
         display: "flex", alignItems: "center", gap: 7,
@@ -201,6 +206,7 @@ export function SuggestionCard({ s, onResolved }: {
                     new_start_date: s.new_start_date,
                     new_due_date: s.new_due_date,
                     new_status: s.new_status,
+                    new_progress: s.new_progress,
                     title: s.title,
                     responsible_name: s.responsible_name,
                   });

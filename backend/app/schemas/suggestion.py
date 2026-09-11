@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field
 
 from app.models.suggestion import SuggestionStatus, SuggestionType
 
@@ -24,6 +24,7 @@ class SuggestionRead(BaseModel):
     new_start_date: date | None
     new_due_date: date | None
     new_status: str | None
+    new_progress: int | None
     title: str | None
     description: str | None
     responsible_name: str | None
@@ -63,6 +64,7 @@ class SuggestionEdit(BaseModel):
     new_start_date: str | None = None
     new_due_date: str | None = None
     new_status: str | None = None
+    new_progress: int | None = Field(None, ge=0, le=100)
     title: str | None = None
     responsible_name: str | None = None
     description: str | None = None
