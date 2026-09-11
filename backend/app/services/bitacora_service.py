@@ -78,7 +78,7 @@ _ANALYSIS_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "type": {"type": "string", "enum": ["reschedule_task", "create_task", "update_status", "note"]},
+                    "type": {"type": "string", "enum": ["reschedule_task", "create_task", "update_status", "reassign_responsible", "note"]},
                     "task_id": {"type": ["integer", "null"]},
                     "task_title": {"type": ["string", "null"]},
                     "new_start_date": {"type": ["string", "null"], "description": "YYYY-MM-DD, SOLO si el audio nombra una fecha concreta"},
@@ -114,11 +114,25 @@ _ANALYSIS_SCHEMA = {
                     "title": {"type": ["string", "null"]},
                     "description": {"type": ["string", "null"]},
                     "responsible_name": {"type": ["string", "null"]},
+                    "new_responsible_id": {
+                        "type": ["integer", "null"],
+                        "description": (
+                            "SOLO para reassign_responsible: id EXACTO de la persona nueva, tal como "
+                            "figura en el directorio de responsables del contexto. Si la persona que "
+                            "nombra el audio no está en ese equipo, dejá esto en null y NO propongas "
+                            "reassign_responsible — usá 'note' en su lugar."
+                        ),
+                    },
+                    "new_responsible_name": {
+                        "type": ["string", "null"],
+                        "description": "SOLO para reassign_responsible: nombre tal como figura en el directorio para el id de arriba",
+                    },
                     "reason": {"type": "string", "description": "Cita o referencia a lo dicho en el audio que justifica la acción"},
                 },
                 "required": ["type", "task_id", "task_title", "new_start_date", "new_due_date",
                              "shift_working_days", "shift_target",
-                             "new_status", "new_progress", "title", "description", "responsible_name", "reason"],
+                             "new_status", "new_progress", "title", "description", "responsible_name",
+                             "new_responsible_id", "new_responsible_name", "reason"],
                 "additionalProperties": False,
             },
         },
@@ -401,19 +415,28 @@ class BitacoraService:
     # ── Análisis con Claude ───────────────────────────────────────────────────
 
     async def _build_obra_context(self, obra_id: int) -> str:
-        """Contexto de la obra para que la IA pueda referenciar tareas reales."""
+        """Contexto de la obra para que la IA pueda referenciar tareas y responsables reales."""
         obra = (await self.session.execute(select(Obra).where(Obra.id == obra_id))).scalar_one_or_none()
         tasks = (await self.session.execute(
             select(Task).where(Task.obra_id == obra_id).order_by(Task.order_index, Task.id)
         )).scalars().all()
-        resp_names: dict[int, str] = {}
-        if tasks:
-            rids = {t.responsible_id for t in tasks if t.responsible_id}
-            if rids:
-                for r in (await self.session.execute(
-                    select(Responsible).where(Responsible.id.in_(rids))
-                )).scalars().all():
-                    resp_names[r.id] = r.full_name
+
+        # Equipo DE ESTA OBRA (ObraTeamMember), no el directorio completo del
+        # tenant: asignar una tarea exige que el responsable ya esté en el
+        # equipo de la obra (TaskService._ensure_team_member) — listar acá
+        # gente de otras obras solo generaría sugerencias que el apply
+        # rechaza. Incluye a los ya asignados a una tarea Y a los que
+        # todavía no tienen ninguna, para que reassign_responsible pueda
+        # nombrar a cualquiera del equipo.
+        from app.models.obra_team_member import ObraTeamMember
+
+        directory = (await self.session.execute(
+            select(Responsible)
+            .join(ObraTeamMember, ObraTeamMember.responsible_id == Responsible.id)
+            .where(ObraTeamMember.obra_id == obra_id, Responsible.is_active.is_(True))
+            .order_by(Responsible.full_name)
+        )).scalars().all()
+        resp_names: dict[int, str] = {r.id: r.full_name for r in directory}
 
         lines = [f"Obra: {obra.name if obra else obra_id}", "Tareas actuales:"]
         for t in tasks:
@@ -424,6 +447,13 @@ class BitacoraService:
             )
         if not tasks:
             lines.append("(sin tareas cargadas)")
+
+        lines.append("Equipo de esta obra (para reasignar o asignar a una tarea nueva):")
+        for r in directory:
+            lines.append(f"- id={r.id} | {r.full_name}")
+        if not directory:
+            lines.append("(sin equipo cargado en esta obra)")
+
         lines.append(await self._calendar_hint(obra_id))
         return "\n".join(lines)
 
@@ -475,6 +505,16 @@ class BitacoraService:
             "`new_progress` con el número que dijo el audio y `new_status` con el estado que corresponda "
             "(en_progreso si avanza y no estaba iniciada; el estado actual del contexto si no cambia). "
             "NUNCA inventes un porcentaje que el audio no dice — si no se mencionó, dejá new_progress en null.\n"
+            "   - reassign_responsible: si se dijo que alguien deja/deja de encargarse de una tarea EXISTENTE "
+            "y otra persona toma su lugar ('Fulano ya no viene más, que la instalación eléctrica la haga "
+            "Mengano', 'pasale la tarea a...'). Buscá a la persona nueva en el EQUIPO DE ESTA OBRA "
+            "del contexto por nombre o apellido y completá `new_responsible_id` con su id EXACTO tal como "
+            "figura ahí, y `new_responsible_name` con su nombre. Si la persona que nombra el audio NO está "
+            "en el equipo de esta obra, NO propongas reassign_responsible — dejá una 'note' citando el "
+            "nombre para que el jefe la sume primero al equipo (tab Responsables). Esto NO da de baja a "
+            "quien deja la tarea: solo "
+            "reasigna hacia adelante; si el audio también dice que esa persona deja la OBRA por completo, "
+            "agregá una 'note' aparte con eso — el sistema todavía no da de baja gente desde la bitácora.\n"
             "   - note: para acuerdos importantes que no mapean a una tarea (quedan como registro).\n\n"
             "Reglas:\n"
             f"- Hoy es {today}. Interpretá expresiones relativas ('la semana que viene', 'el lunes') contra esa fecha.\n"
@@ -667,6 +707,8 @@ class BitacoraService:
                     title=s.get("title"),
                     description=s.get("description"),
                     responsible_name=s.get("responsible_name"),
+                    new_responsible_id=s.get("new_responsible_id") if isinstance(s.get("new_responsible_id"), int) else None,
+                    new_responsible_name=s.get("new_responsible_name"),
                     reason=s.get("reason") or "",
                     status=SuggestionStatus.PENDIENTE,
                 )

@@ -16,6 +16,8 @@ import pytest_asyncio
 from app.core.security import create_access_token
 from app.models.bitacora import BitacoraEntry
 from app.models.obra import Obra
+from app.models.obra_team_member import ObraTeamMember
+from app.models.responsible import Responsible
 from app.models.suggestion import Suggestion, SuggestionStatus, SuggestionType
 from app.models.task import Task
 from app.models.tenant import Tenant
@@ -544,3 +546,107 @@ async def test_aplicar_con_avance_editado_pisa_el_propuesto(client, ctx):
     ctx["db"].expire_all()
     tarea = await ctx["db"].get(Task, ctx["task_id"])
     assert tarea.estimated_progress == 80
+
+
+# ── Reasignar responsable (migración 0077) ────────────────────────────────────
+#
+# El audio dice "Fulano dejó la obra, poné a Mengano en la instalación
+# eléctrica" y antes no había ningún tipo de sugerencia para eso — se forzaba
+# dentro de update_status (guardaba el nombre en un campo que la aplicación
+# ignoraba, dejaba new_status en null) y aplicarla tiraba "no tiene tarea o
+# estado válido". reassign_responsible reemplaza ese comportamiento roto.
+
+async def test_aplicar_reassign_responsible_cambia_la_tarea(client, ctx):
+    db = ctx["db"]
+    resp = Responsible(
+        full_name="Jorge Galarza", whatsapp_number="+5493511110099",
+        tenant_id=ctx["tenant_id"], is_active=True,
+    )
+    db.add(resp)
+    await db.flush()
+    db.add(ObraTeamMember(obra_id=ctx["obra_id"], tenant_id=ctx["tenant_id"], responsible_id=resp.id))
+    await db.flush()
+    await db.commit()
+
+    row = await _add_suggestion(
+        ctx, type=SuggestionType.REASSIGN_RESPONSIBLE,
+        new_responsible_id=resp.id, new_responsible_name=resp.full_name,
+    )
+    r = await client.post(f"{API}/suggestions/{row.id}/apply", headers=_auth(ctx["token"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["applied"] is True
+    assert r.json()["result_task_id"] == ctx["task_id"]
+
+    resp_id = resp.id
+    db.expire_all()
+    tarea = await db.get(Task, ctx["task_id"])
+    assert tarea.responsible_id == resp_id
+
+
+async def test_reassign_responsible_sin_responsable_elegido_no_aplica(client, ctx):
+    """Regresión directa del bug: si new_responsible_id quedó vacío, la
+    sugerencia no se hace pasar por aplicable — mensaje claro, no el genérico
+    'no tiene tarea o estado válido' que tiraba cuando esto vivía en update_status."""
+    row = await _add_suggestion(ctx, type=SuggestionType.REASSIGN_RESPONSIBLE)
+    r = await client.post(f"{API}/suggestions/{row.id}/apply", headers=_auth(ctx["token"]))
+    assert r.status_code == 422, r.text
+    assert "responsable" in r.json()["detail"].lower()
+
+
+async def test_reassign_responsible_a_alguien_de_otro_tenant_falla(client, ctx):
+    """El id del responsable no se confía a ciegas: se revalida tenant + activo
+    en el momento de aplicar, no solo cuando el análisis lo propuso."""
+    db = ctx["db"]
+    otro_tenant = Tenant(name="Otra empresa")
+    db.add(otro_tenant)
+    await db.flush()
+    ajeno = Responsible(
+        full_name="Alguien de otra empresa", whatsapp_number="+5493511110098",
+        tenant_id=otro_tenant.id, is_active=True,
+    )
+    db.add(ajeno)
+    await db.flush()
+    await db.commit()
+
+    row = await _add_suggestion(
+        ctx, type=SuggestionType.REASSIGN_RESPONSIBLE,
+        new_responsible_id=ajeno.id, new_responsible_name=ajeno.full_name,
+    )
+    r = await client.post(f"{API}/suggestions/{row.id}/apply", headers=_auth(ctx["token"]))
+    assert r.status_code == 422, r.text
+
+    db.expire_all()
+    tarea = await db.get(Task, ctx["task_id"])
+    assert tarea.responsible_id is None  # no se tocó
+
+
+async def test_reassign_responsible_editar_pisa_al_propuesto(client, ctx):
+    """El jefe corrige a quién asignar antes de aplicar: su elección gana."""
+    db = ctx["db"]
+    propuesto = Responsible(full_name="Propuesto por la IA", whatsapp_number="+5493511110097",
+                             tenant_id=ctx["tenant_id"], is_active=True)
+    elegido = Responsible(full_name="Elegido por el jefe", whatsapp_number="+5493511110096",
+                           tenant_id=ctx["tenant_id"], is_active=True)
+    db.add_all([propuesto, elegido])
+    await db.flush()
+    db.add_all([
+        ObraTeamMember(obra_id=ctx["obra_id"], tenant_id=ctx["tenant_id"], responsible_id=propuesto.id),
+        ObraTeamMember(obra_id=ctx["obra_id"], tenant_id=ctx["tenant_id"], responsible_id=elegido.id),
+    ])
+    await db.flush()
+    await db.commit()
+
+    row = await _add_suggestion(
+        ctx, type=SuggestionType.REASSIGN_RESPONSIBLE,
+        new_responsible_id=propuesto.id, new_responsible_name=propuesto.full_name,
+    )
+    r = await client.post(
+        f"{API}/suggestions/{row.id}/apply", headers=_auth(ctx["token"]),
+        json={"new_responsible_id": elegido.id},
+    )
+    assert r.status_code == 200, r.text
+
+    elegido_id = elegido.id
+    db.expire_all()
+    tarea = await db.get(Task, ctx["task_id"])
+    assert tarea.responsible_id == elegido_id

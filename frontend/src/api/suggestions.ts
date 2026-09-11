@@ -9,7 +9,7 @@ import { apiClient } from "./client";
  * pantallas que no lo tienen alrededor (la tarjeta dentro de una tarea).
  */
 
-export type SuggestionType = "reschedule_task" | "create_task" | "update_status" | "note";
+export type SuggestionType = "reschedule_task" | "create_task" | "update_status" | "reassign_responsible" | "note";
 export type SuggestionStatus = "pendiente" | "aplicada" | "descartada";
 
 export interface Suggestion {
@@ -25,6 +25,8 @@ export interface Suggestion {
   new_due_date: string | null;
   new_status: string | null;
   new_progress: number | null;
+  new_responsible_id: number | null;
+  new_responsible_name: string | null;
   title: string | null;
   description: string | null;
   responsible_name: string | null;
@@ -49,6 +51,7 @@ export interface SuggestionEdit {
   new_due_date?: string | null;
   new_status?: string | null;
   new_progress?: number | null;
+  new_responsible_id?: number | null;
   title?: string | null;
   responsible_name?: string | null;
   description?: string | null;

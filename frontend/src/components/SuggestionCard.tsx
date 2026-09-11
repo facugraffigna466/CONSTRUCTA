@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { Calendar, CheckCircle2, FileText, Loader2, Plus, RefreshCw, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Calendar, CheckCircle2, FileText, Loader2, Plus, RefreshCw, UserCog, X } from "lucide-react";
 import {
   applySuggestion, dismissSuggestion,
   type Suggestion, type SuggestionEdit,
 } from "../api/suggestions";
+import { fetchResponsibles } from "../api/responsibles";
+import type { Responsible } from "../types";
 
 /**
  * Tarjeta de una sugerencia de IA: qué propone, por qué, y los tres botones que
@@ -21,10 +23,11 @@ const FONT = "'Plus Jakarta Sans', sans-serif";
 const SUGG_META: Record<
   string, { label: string; icon: React.ComponentType<{ style?: React.CSSProperties }> }
 > = {
-  reschedule_task: { label: "Mover fechas",   icon: Calendar },
-  create_task:     { label: "Crear tarea",    icon: Plus },
-  update_status:   { label: "Cambiar estado", icon: RefreshCw },
-  note:            { label: "Nota",           icon: FileText },
+  reschedule_task:       { label: "Mover fechas",       icon: Calendar },
+  create_task:           { label: "Crear tarea",        icon: Plus },
+  update_status:         { label: "Cambiar estado",     icon: RefreshCw },
+  reassign_responsible:  { label: "Reasignar",          icon: UserCog },
+  note:                  { label: "Nota",               icon: FileText },
 };
 
 const STATUS_OPTIONS = ["pendiente", "en_progreso", "bloqueada", "completada", "cancelada"];
@@ -51,12 +54,22 @@ export function SuggestionCard({ s, onResolved }: {
     new_due_date: s.new_due_date,
     new_status: s.new_status,
     new_progress: s.new_progress,
+    new_responsible_id: s.new_responsible_id,
     title: s.title,
     responsible_name: s.responsible_name,
   });
+  const [responsibles, setResponsibles] = useState<Responsible[] | null>(null);
   const meta = SUGG_META[s.type] ?? SUGG_META.note;
   const done = s.applied || s.dismissed;
   const editable = s.type !== "note";
+
+  // El picker de reasignar responsable necesita el directorio — se busca solo
+  // al entrar en edición (no en cada render de la tarjeta) y una sola vez.
+  useEffect(() => {
+    if (editing && s.type === "reassign_responsible" && responsibles === null) {
+      fetchResponsibles().then(all => setResponsibles(all.filter(r => r.is_active))).catch(() => setResponsibles([]));
+    }
+  }, [editing, s.type, responsibles]);
   // Una nota no modifica el plan: deja el acuerdo asentado en el historial.
   // Llamar "Aplicar" a eso promete un cambio en la obra que no va a ocurrir.
   const esNota = s.type === "note";
@@ -88,6 +101,8 @@ export function SuggestionCard({ s, onResolved }: {
     detail = <>«{s.title}»{s.new_start_date && <> · {fmtDate(s.new_start_date)} → {fmtDate(s.new_due_date)}</>}{s.responsible_name && <> · {s.responsible_name}</>}</>;
   } else if (s.type === "update_status") {
     detail = <>«{s.task_title ?? `Tarea #${s.task_id}`}» → <strong>{s.new_status?.replace("_", " ")}</strong>{s.new_progress != null && <> · avance <strong>{s.new_progress}%</strong></>}</>;
+  } else if (s.type === "reassign_responsible") {
+    detail = <>«{s.task_title ?? `Tarea #${s.task_id}`}» → <strong>{s.new_responsible_name ?? "sin responsable elegido"}</strong></>;
   }
 
   let editForm: React.ReactNode = null;
@@ -125,6 +140,20 @@ export function SuggestionCard({ s, onResolved }: {
             style={{ ...INPUT, width: 70 }} /></label>
       </div>
     );
+  } else if (editing && s.type === "reassign_responsible") {
+    editForm = (
+      <div style={{ marginTop: 5 }}>
+        <select
+          value={edit.new_responsible_id ?? ""}
+          onChange={e => setEdit(prev => ({ ...prev, new_responsible_id: e.target.value ? Number(e.target.value) : null }))}
+          disabled={responsibles === null}
+          style={{ ...INPUT, cursor: "pointer", minWidth: 180 }}
+        >
+          <option value="">{responsibles === null ? "Cargando…" : "Elegí un responsable"}</option>
+          {responsibles?.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
+        </select>
+      </div>
+    );
   }
 
   // Aplicada o descartada → colapsada a una sola línea, no ocupa espacio.
@@ -133,6 +162,7 @@ export function SuggestionCard({ s, onResolved }: {
     if (s.type === "reschedule_task") short = `«${s.task_title ?? `Tarea #${s.task_id}`}»`;
     else if (s.type === "create_task") short = `«${s.title ?? ""}»`;
     else if (s.type === "update_status") short = `«${s.task_title ?? `Tarea #${s.task_id}`}» → ${s.new_status?.replace("_", " ")}${s.new_progress != null ? ` · ${s.new_progress}%` : ""}`;
+    else if (s.type === "reassign_responsible") short = `«${s.task_title ?? `Tarea #${s.task_id}`}» → ${s.new_responsible_name ?? ""}`;
     return (
       <div style={{
         display: "flex", alignItems: "center", gap: 7,
@@ -207,6 +237,7 @@ export function SuggestionCard({ s, onResolved }: {
                     new_due_date: s.new_due_date,
                     new_status: s.new_status,
                     new_progress: s.new_progress,
+                    new_responsible_id: s.new_responsible_id,
                     title: s.title,
                     responsible_name: s.responsible_name,
                   });
