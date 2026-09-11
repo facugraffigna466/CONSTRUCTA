@@ -106,11 +106,10 @@ _ANALYSIS_SCHEMA = {
                         ],
                     },
                     "new_progress": {
-                        "anyOf": [
-                            {"type": "integer", "minimum": 0, "maximum": 100},
-                            {"type": "null"},
-                        ],
-                        "description": "% de avance de la tarea, SOLO si el audio menciona un porcentaje explícito",
+                        # structured outputs no soporta minimum/maximum en integer —
+                        # el rango 0-100 se valida en Python al persistir
+                        "type": ["integer", "null"],
+                        "description": "% de avance de la tarea, entero entre 0 y 100, SOLO si el audio menciona un porcentaje explícito",
                     },
                     "title": {"type": ["string", "null"]},
                     "description": {"type": ["string", "null"]},
@@ -659,7 +658,12 @@ class BitacoraService:
                     new_start_date=inicio,
                     new_due_date=fin,
                     new_status=s.get("new_status"),
-                    new_progress=s.get("new_progress") if isinstance(s.get("new_progress"), int) else None,
+                    # rango validado acá porque structured outputs no acepta min/max
+                    new_progress=(
+                        s["new_progress"]
+                        if isinstance(s.get("new_progress"), int) and 0 <= s["new_progress"] <= 100
+                        else None
+                    ),
                     title=s.get("title"),
                     description=s.get("description"),
                     responsible_name=s.get("responsible_name"),
