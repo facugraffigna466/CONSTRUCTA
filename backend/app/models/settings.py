@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -87,12 +87,6 @@ class SystemSettings(Base):
 
     risk_milestone_at_risk: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     risk_milestone_lookahead_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
-
-    # ── General ───────────────────────────────────────────────────────────────
-    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    main_responsible: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    company_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    company_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -19,7 +19,7 @@ async def get_settings(db: DbSession, current_user: AdminUser) -> SettingsRead:
 async def patch_settings(
     data: SettingsPatch, db: DbSession, current_user: AdminUser
 ) -> SettingsRead:
-    updates = data.model_dump(exclude_none=True)
+    updates = data.model_dump(exclude_unset=True)
     obj = await SettingsRepository(db).update(current_user.tenant_id, updates)
     return SettingsRead.model_validate(obj)
 

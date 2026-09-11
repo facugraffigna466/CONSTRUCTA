@@ -288,43 +288,6 @@ function RiskRuleRow({ rule, form, set, first }: {
   );
 }
 
-function FieldRow({ label, value, onChange, type = "text", placeholder, icon, hint, required }: {
-  label: string; value: string; onChange: (v: string) => void;
-  type?: string; placeholder?: string; icon?: React.ReactNode; hint?: string; required?: boolean;
-}) {
-  const [focused, setFocused] = useState(false);
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-      <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", color: C.text2, textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6 }}>
-        {label} {required && <span style={{ color: C.secondary }}>*</span>}
-      </label>
-      <div style={{ position: "relative" }}>
-        {icon && (
-          <span style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", color: C.text3, pointerEvents: "none", display: "flex" }}>
-            {icon}
-          </span>
-        )}
-        <input
-          type={type}
-          value={value}
-          onChange={e => onChange(e.target.value)}
-          placeholder={placeholder}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          style={{
-            height: 38, padding: `0 12px`, paddingLeft: icon ? 34 : 12,
-            border: `1px solid ${focused ? C.secondary : C.line}`,
-            boxShadow: focused ? "0 0 0 4px rgba(255,107,53,0.10)" : "none",
-            background: C.surface, borderRadius: 9, color: C.text,
-            fontSize: 13.5, width: "100%", outline: "none", transition: ".15s",
-          }}
-        />
-      </div>
-      {hint && <div style={{ fontSize: 11.5, color: C.text3 }}>{hint}</div>}
-    </div>
-  );
-}
-
 function SelectRow({ label, value, onChange, children }: {
   label: string; value: number | string; onChange: (v: string) => void; children: React.ReactNode;
 }) {
@@ -392,10 +355,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   risk_whatsapp_critical: true,
   risk_milestone_at_risk: true,
   risk_milestone_lookahead_days: 7,
-  company_name: null,
-  main_responsible: null,
-  company_email: null,
-  company_phone: null,
 };
 
 type StatusLevel = "ok" | "warning" | "error";
@@ -730,7 +689,6 @@ export function ConfiguracionPage() {
       >
         {([
           { id: "cfg-estado", label: "Estado" },
-          { id: "cfg-datos", label: "Datos generales" },
           { id: "cfg-whatsapp", label: "WhatsApp" },
           { id: "cfg-auto", label: "Automatizaciones" },
           { id: "cfg-riesgo", label: "Detección de riesgo" },
@@ -819,60 +777,6 @@ export function ConfiguracionPage() {
               );
             })}
           </div>
-            </div>
-          </div>
-
-{/* ═══ DATOS GENERALES ═══ */}
-          <div id="cfg-datos" style={{ scrollMarginTop: 112, background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, overflow: "hidden", marginBottom: 28 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 22px", borderBottom: `1px solid ${C.line}` }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: 9, flexShrink: 0,
-                  background: "linear-gradient(135deg, #FFF0E8 0%, #FFE0CC 100%)",
-                  border: "1px solid #F5D5C0",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Building2 size={15} color="#E76A2D" />
-                </div>
-                <span style={{ fontSize: 15, fontWeight: 700, color: C.text, letterSpacing: "-0.015em", fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  Datos generales
-                </span>
-                <span style={{ fontSize: 12, color: C.text3, marginLeft: 4 }}>Información de la empresa en avisos y reportes</span>
-              </div>
-            </div>
-            <div style={{ padding: "20px 22px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px" }}>
-                <FieldRow
-                  label="Nombre de la empresa" required
-                  value={form.company_name ?? ""}
-                  onChange={v => set("company_name", v || null)}
-                  placeholder="Constructora XYZ"
-                  icon={<Building2 size={14} />}
-                />
-                <FieldRow
-                  label="Responsable principal" required
-                  value={form.main_responsible ?? ""}
-                  onChange={v => set("main_responsible", v || null)}
-                  placeholder="Juan García"
-                  icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="6" r="2.6" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M3 13.5c.6-2.3 2.6-3.8 5-3.8s4.4 1.5 5 3.8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>}
-                />
-                <FieldRow
-                  label="Email de contacto"
-                  value={form.company_email ?? ""}
-                  onChange={v => set("company_email", v || null)}
-                  type="email"
-                  placeholder="contacto@empresa.com"
-                  icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="4" width="12" height="9" rx="1.4" stroke="currentColor" strokeWidth="1.4" fill="none"/><path d="M2.5 5.5L8 9l5.5-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" fill="none"/></svg>}
-                  hint="Usado para reportes semanales y alertas críticas."
-                />
-                <FieldRow
-                  label="Teléfono"
-                  value={form.company_phone ?? ""}
-                  onChange={v => set("company_phone", v || null)}
-                  placeholder="+54 9 11 1234-5678"
-                  icon={<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 4c0-.8.6-1.5 1.4-1.5h1.4c.6 0 1.1.4 1.3 1l.4 1.5c.1.5-.1 1-.5 1.3l-.7.5c.9 1.8 2.4 3.3 4.2 4.2l.5-.7c.3-.4.8-.6 1.3-.5l1.5.4c.6.2 1 .7 1 1.3v1.4c0 .8-.7 1.4-1.5 1.4C7 13.3 2.7 9 3 4z" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinejoin="round"/></svg>}
-                />
-              </div>
             </div>
           </div>
 
