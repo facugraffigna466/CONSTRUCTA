@@ -800,7 +800,12 @@ class MessageService:
                     except Exception:
                         pass
 
-            _asyncio.create_task(_bg_process_entry())
+            # asyncio.create_task a secas es una trampa: el loop solo guarda una
+            # referencia débil y el GC puede recolectar la tarea a mitad de una
+            # transcripción de 20-40s, sin error ni log — la nota queda sin
+            # procesar y sin avisar por WhatsApp. spawn_background la retiene.
+            from app.core.background_tasks import spawn_background
+            spawn_background(_bg_process_entry(), name=f"bitacora_process_entry_{entry_id}")
             return "🎙️ Nota de voz recibida. La estoy procesando con IA — te aviso enseguida."
 
         # 3b. Varias obras → transcribir, dejar pendiente y preguntar
@@ -981,8 +986,10 @@ class MessageService:
                 except Exception:
                     _log.exception("Error en bg análisis de BitacoraEntry %s", entry_id)
 
-            import asyncio as _aio
-            _aio.create_task(_bg_analyze())
+            # Mismo motivo que en _handle_bitacora_audio: retener la referencia
+            # contra el GC, no un asyncio.create_task suelto.
+            from app.core.background_tasks import spawn_background
+            spawn_background(_bg_analyze(), name=f"bitacora_analyze_{entry_id}")
             return "Procesando la nota con IA — te aviso en un momento."
         else:
             await self.db.flush()
