@@ -2874,3 +2874,20 @@ Suite backend completa: **603 passed**. Los tests de bitácora existentes cubren
 - Prueba de campo: juntar 15-20 notas de voz reales grabadas en obra (con viento/ruido) y comparar la transcripción y la bitácora resultante antes y después del glosario.
 - Evaluación de proveedores alternativos (Deepgram Nova-3 / AssemblyAI, con benchmarks públicos de ruido y keyterm boosting) sólo si la prueba de campo muestra que el glosario no alcanza; el análisis de costos y calidad quedó hecho en esta sesión.
 - Idea a futuro: enriquecer el glosario con términos por obra (títulos de tareas, nombres de responsables) — requiere mover la construcción del prompt a un punto con acceso a la base, hoy `_transcribe` es sync y sin sesión.
+
+## 2026-09-11 — Guía operativa: WhatsApp en producción (salida del sandbox)
+
+### Objective
+Documentar el hallazgo de la sesión de análisis de costos: el número de WhatsApp configurado en `backend/.env` es el **sandbox público de Twilio** (`whatsapp:+14155238886`) — apto solo para desarrollo (número compartido, `join <código>`, sin verificación de Meta). Antes de operar con usuarios reales hay que registrar un número propio. Se investigó el proceso vigente (2026) y quedó como guía de referencia.
+
+### Changes made
+Nuevo `docs/referencia/whatsapp-produccion.md`: guía paso a paso del **WhatsApp Self Sign-up** de Twilio (self-service, ~15 minutos, gratis), requisitos previos (número sin WhatsApp activo, documentos de AFIP para la Business Verification), qué cambia respecto del sandbox (plantillas utility para mensajes fuera de la ventana de 24 hs, error 63016), costos (fee Twilio US$0.005/msg + tarifas Meta por plantilla, casi cero con el patrón reactivo del chatbot), trabas comunes (display name rechazado, error 63110, discrepancia de nombre con AFIP), y una comparación **Twilio vs. Meta Cloud API directa**: quedarse en Twilio a este volumen (el sobrecosto son pocos dólares/mes y el código no cambia — solo `TWILIO_WHATSAPP_NUMBER` en el `.env`); reevaluar Meta directa arriba de ~5-10k msgs/mes, donde el ahorro (~30%) empieza a pagar la reescritura de la capa de integración (firma `X-Hub-Signature-256`, payload JSON, media por token).
+
+### Files modified
+`docs/referencia/whatsapp-produccion.md` (nuevo) y esta entrada.
+
+### Validation
+No aplica — documento de referencia, sin cambios de código. Las cifras salen de la documentación oficial de Twilio y Meta (URLs citadas al pie del documento).
+
+### Pending / next steps
+Ejecutar el onboarding real cuando se decida salir a usuarios: elegir el número (chip argentino dedicado o número US de Twilio), correr el Self Sign-up, y arrancar la Business Verification con la constancia de AFIP. El IPI no se toca: es una guía operativa, no funcionalidad implementada.
