@@ -105,20 +105,22 @@ class MessageService:
         # ── 2. Identificar al emisor: responsable (asignado a tareas) o staff
         #       (usuario arquitecto/jefe/admin con su número de WhatsApp cargado) ──
         # `get_by_whatsapp` ahora filtra por is_active (rediseño identidad
-        # WhatsApp — parte A.1). Si no encuentra activo, hacemos un lookup
-        # extra sin filtrar para distinguir "desactivado" (mensaje específico)
-        # de "no registrado" (mensaje genérico). Solo pagamos la query extra
-        # en el path menos común.
+        # WhatsApp — parte A.1). Si no encuentra activo, intentamos resolver
+        # staff ANTES de mirar responsables desactivados: un responsable dado
+        # de baja no reserva el número, así que si un staff lo cargó en su
+        # perfil (caso "el admin se registró como responsable para probar y
+        # después quiso usar la bitácora"), el staff gana. El mensaje "ya no
+        # tenés acceso" queda solo para ex-responsables que no son staff.
         responsible = await self.resp_repo.get_by_whatsapp(payload.from_number)
         deactivated_responsible = None
         staff = None
         forced_reply: str | None = None
         if responsible is None:
-            any_resp = await self.resp_repo.get_by_whatsapp_any(payload.from_number)
-            if any_resp is not None and not any_resp.is_active:
-                deactivated_responsible = any_resp
-            else:
-                staff, forced_reply = await self._resolve_staff(payload.from_number, payload.Body or "")
+            staff, forced_reply = await self._resolve_staff(payload.from_number, payload.Body or "")
+            if staff is None and forced_reply is None:
+                any_resp = await self.resp_repo.get_by_whatsapp_any(payload.from_number)
+                if any_resp is not None and not any_resp.is_active:
+                    deactivated_responsible = any_resp
         sender = responsible or staff
         is_staff = responsible is None and staff is not None
 

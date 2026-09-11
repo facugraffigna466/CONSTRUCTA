@@ -83,7 +83,7 @@ CONSTRUCTA/
 - **Nunca** llamar `session.commit()` dentro de un service o repository — el commit lo hace `get_db()`
 - **Siempre** capturar el estado ANTES de cualquier operación con la session (ej: `old_status = task.status` antes de `update_status()`)
 - Soft delete: `is_active = False`, nunca borrar filas
-- `whatsapp_number` en Responsible es inmutable — es la clave del chatbot
+- `whatsapp_number` es la clave de identidad del chatbot. Editarlo en un Responsible resetea `confirmed_at` (re-dispara la bienvenida). Un responsable con `is_active=False` NO reserva su número (puede pasar a un staff); reactivarlo re-chequea la colisión User↔Responsible. Los lookups por número usan `wa_number_variants` (`app/core/phone.py`) para tratar +54 y +549 como el mismo celular — nunca comparar números por igualdad exacta a mano
 - `HistorialEvento` es append-only — nunca editar ni borrar eventos
 - `AdminUser` dep para endpoints de admin, `CurrentUser` para autenticados, `CurrentUserId` para solo el id
 

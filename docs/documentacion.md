@@ -2910,3 +2910,30 @@ Backend 603 passed; frontend vitest 52 passed, `tsc` y ESLint limpios. Verificac
 
 ### Pending / next steps
 Ninguno. Los eventos históricos previos al fix quedan truncados en la base — irrecuperable por diseño (append-only), se regeneran solos a medida que se procesan bitácoras nuevas.
+
+## 2026-09-11 — Liberación del número de WhatsApp de responsables desactivados
+
+### Objective
+Caso real: el admin se registró a sí mismo como responsable para probar el menú de tareas del bot; después no pudo cargar su número en su perfil de staff (para usar la bitácora por WhatsApp) — 409 permanente. El número quedaba "quemado" para siempre: la validación de PATCH /users/me y el ruteo del webhook seguían matcheando al responsable aunque estuviera soft-deleted, y no existía ninguna acción legítima en el producto para liberarlo (la única salida era tocar la base a mano).
+
+### Changes made
+Diseño elegido: **liberación sistémica** (un responsable con `is_active=False` deja de reservar el número) en lugar de una acción explícita de admin "liberar número" — no agrega UI nueva y elimina el footgun de raíz. Cuatro piezas más dos arreglos adyacentes:
+
+1. **PATCH /users/me ignora responsables desactivados** en el chequeo de colisión (`get_by_whatsapp_in_tenant(active_only=True)`): un staff puede tomar un número que perteneció a un responsable dado de baja. El de un responsable ACTIVO sigue dando 409.
+2. **Webhook: staff gana sobre desactivado.** El orden de resolución pasa a ser responsable activo → staff → responsable desactivado. "Ya no tenés acceso" queda solo para ex-responsables que no son staff; antes ese mensaje bloqueaba el número para siempre.
+3. **Guard en la reactivación**: si mientras el responsable estuvo de baja un staff tomó su número, `PATCH /responsibles/{id}/reactivate` devuelve 409 (recrearía la colisión User↔Responsable del hallazgo 6.4) en vez de reactivar en silencio.
+4. **Equivalencia +54/+549** (`app/core/phone.py`, `wa_number_variants`): los lookups por número (webhook, colisiones User↔Responsible en ambos sentidos) matchean ambas formas del mismo celular argentino con `IN (variantes)`. En la base conviven registros con y sin el 9 de móvil; comparar por igualdad exacta hacía que el webhook no reconociera al emisor o que un "duplicado con la otra forma" pasara los chequeos. No se migran los datos almacenados (chocarían los unique constraints si ya conviven ambas formas); la equivalencia vive en la comparación.
+
+Adyacentes, misma familia:
+- **Flujo inverso (staff libera su número):** PATCH /users/me filtraba `None` y `whatsapp_number: null` se ignoraba en silencio — el modal de perfil ya lo mandaba así al vaciar el input, pero el campo no se podía borrar nunca. Ahora `exclude_unset` distingue "no enviado" de "null explícito" y el null libera el número de la membership (que entonces puede pasar a un responsable). Se agregó además validación E.164 al schema del perfil (un número mal formateado jamás matchearía en el webhook).
+- **POST /obras/{id}/team**: el lookup de reuso por número era global (`get_by_whatsapp_any`) — podía reusar y sumar al equipo un responsable de OTRO tenant (misma familia que el hallazgo 6.2). Ahora está scopeado al tenant; y si reusa uno desactivado, lo reactiva vía service (con el guard del punto 3) en vez de dejarlo en el team pero inactivo, donde el bot le seguía negando el acceso.
+- Mensajes de conflicto diferenciados al crear/editar responsables sobre el número de uno desactivado (dicen qué hacer: reactivarlo o editarle el número, en vez del genérico "already exists").
+
+### Files modified
+`backend/app/core/phone.py` (nuevo), `backend/app/repositories/responsible.py`, `backend/app/repositories/user.py`, `backend/app/api/routes/users.py`, `backend/app/api/routes/obra_team.py`, `backend/app/services/message_service.py`, `backend/app/services/responsible_service.py`, `backend/app/schemas/user.py`, `backend/tests/test_liberar_numero_whatsapp.py` (nuevo, 16 tests).
+
+### Validation
+Suite completa: 619 passed (603 previos + 16 nuevos). Los nuevos cubren: staff toma número de desactivado (antes 409), activo sigue bloqueando (también por variante +54/+549), null libera el número y permite crear un responsable con él, webhook staff-gana-sobre-baja + regresión del mensaje "Ya no tenés acceso" + match por variante, reactivación con número tomado → 409, reuso en team scopeado al tenant con reactivación.
+
+### Pending / next steps
+Los duplicados +54/+549 ya existentes en la base (dos filas para el mismo teléfono físico) no se fusionan automáticamente — la equivalencia en lookups evita crear nuevos y hace que el webhook resuelva igual; una limpieza de datos queda como tarea de mantenimiento aparte si aparece un caso concreto.

@@ -39,6 +39,17 @@ class ResponsibleService:
             data.whatsapp_number, tenant_id
         )
         if existing:
+            # El unique constraint de BD cubre también a los desactivados —
+            # para reusar el número de un ex-responsable, el camino es
+            # reactivarlo (o editarle el número al desactivado), no crear
+            # una fila nueva. El mensaje distingue el caso para no dejar al
+            # admin sin salida.
+            if not existing.is_active:
+                raise ConflictError(
+                    f"El número {data.whatsapp_number} pertenece a un responsable "
+                    f"desactivado ({existing.full_name}). Reactivalo desde el "
+                    "directorio o editale el número antes de reusarlo."
+                )
             raise ConflictError(
                 f"A responsible with number {data.whatsapp_number} already exists"
             )
@@ -117,6 +128,12 @@ class ResponsibleService:
                 changes["whatsapp_number"], tenant_id
             )
             if existing and existing.id != responsible_id:
+                if not existing.is_active:
+                    raise ConflictError(
+                        f"El número {changes['whatsapp_number']} pertenece a un "
+                        f"responsable desactivado ({existing.full_name}). Reactivalo "
+                        "desde el directorio o editale el número antes de reusarlo."
+                    )
                 raise ConflictError(f"A responsible with number {changes['whatsapp_number']} already exists")
             await self._assert_no_user_collision(changes["whatsapp_number"], tenant_id)
             # Editar el whatsapp_number es "estrenar canal": el dueño anterior
@@ -155,6 +172,11 @@ class ResponsibleService:
         responsible = await self.get_or_raise(responsible_id, tenant_id)
         if responsible.is_active:
             return responsible
+        # Al desactivarlo, su número quedó liberado y un staff pudo haberlo
+        # cargado en su perfil (PATCH /users/me ignora responsables inactivos).
+        # Reactivar sin re-chequear recrearía la colisión User↔Responsible
+        # que el hallazgo 6.4 cerró.
+        await self._assert_no_user_collision(responsible.whatsapp_number, tenant_id)
         updated = await self.repo.update_fields(responsible_id, is_active=True)
         await self.historial.log(
             obra_id=None,
