@@ -25,6 +25,8 @@ class SuggestionRead(BaseModel):
     new_due_date: date | None
     new_status: str | None
     new_progress: int | None
+    new_responsible_id: int | None
+    new_responsible_name: str | None
     title: str | None
     description: str | None
     responsible_name: str | None
@@ -65,6 +67,7 @@ class SuggestionEdit(BaseModel):
     new_due_date: str | None = None
     new_status: str | None = None
     new_progress: int | None = Field(None, ge=0, le=100)
+    new_responsible_id: int | None = None
     title: str | None = None
     responsible_name: str | None = None
     description: str | None = None

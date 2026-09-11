@@ -34,6 +34,7 @@ _EDITABLE_FIELDS = (
     "new_due_date",
     "new_status",
     "new_progress",
+    "new_responsible_id",
     "title",
     "responsible_name",
     "description",
@@ -221,6 +222,7 @@ class SuggestionService:
             "new_due_date": suggestion.new_due_date,
             "new_status": suggestion.new_status,
             "new_progress": suggestion.new_progress,
+            "new_responsible_id": suggestion.new_responsible_id,
             "title": suggestion.title,
             "responsible_name": suggestion.responsible_name,
             "description": suggestion.description,
@@ -310,6 +312,35 @@ class SuggestionService:
             )
             suggestion.result_task_id = suggestion.task_id
 
+        elif suggestion.type == SuggestionType.REASSIGN_RESPONSIBLE:
+            if not suggestion.task_id:
+                raise UnprocessableError("La sugerencia no referencia una tarea válida.")
+            new_resp_id = values.get("new_responsible_id")
+            if not new_resp_id:
+                raise UnprocessableError(
+                    "Esta sugerencia no tiene un responsable nuevo definido. "
+                    "Editala para elegir a quién asignar antes de aplicarla."
+                )
+            await self._assert_task_in_obra(suggestion.task_id, suggestion.obra_id)
+            responsible = (await self.session.execute(
+                select(Responsible).where(
+                    Responsible.id == new_resp_id,
+                    Responsible.tenant_id == suggestion.tenant_id,
+                    Responsible.is_active.is_(True),
+                )
+            )).scalar_one_or_none()
+            if responsible is None:
+                raise UnprocessableError(
+                    "El responsable elegido no existe o no está activo en esta empresa."
+                )
+            # Reusa el camino normal de edición de tarea: mismo log de historial
+            # ("X asignó <tarea> a Y") y misma validación de rol que cualquier
+            # otro cambio de responsable.
+            await task_service.update(
+                suggestion.task_id, TaskUpdate(responsible_id=responsible.id), manager_id, actor=actor,
+            )
+            suggestion.result_task_id = suggestion.task_id
+
         elif suggestion.type == SuggestionType.NOTE:
             await self.historial.log(
                 event_type="bitacora_nota",
@@ -393,6 +424,10 @@ class SuggestionService:
             avance = values.get("new_progress")
             extra = f" ({avance}% de avance)" if avance is not None else ""
             return f"✅ {who}marcó «{ref}» como {estado}{extra} a partir de tu nota de voz."
+        if s.type == SuggestionType.REASSIGN_RESPONSIBLE:
+            ref = s.task_title or f"tarea #{s.task_id}"
+            nuevo = s.new_responsible_name or "el nuevo responsable"
+            return f"✅ {who}reasignó «{ref}» a {nuevo} a partir de tu nota de voz."
         return f"✅ {who}registró tu nota en la bitácora de la obra. ¡Gracias!"
 
     async def _notify_reporter(

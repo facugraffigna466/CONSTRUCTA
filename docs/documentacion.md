@@ -2979,3 +2979,26 @@ Suite completa: **625 passed** (3 tests nuevos del helper). Verificación en viv
 
 ### Pending / next steps
 Validar el camino de WhatsApp real de punta a punta requiere un número de producción configurado (ver `docs/referencia/whatsapp-produccion.md`) o un túnel público (ngrok) para que Twilio pueda entregar el `MediaUrl0` a un endpoint alcanzable — no se pudo simular desde este entorno de desarrollo.
+
+## 2026-09-11 — Bitácora: reasignar responsable desde el audio (nuevo tipo de sugerencia)
+
+### Objective
+Revisión de qué tan completa es la bitácora para "interactuar con todos los ámbitos del sistema". Se encontró y confirmó en vivo un hallazgo concreto: si el audio dice "Fulano dejó la obra, poné a Mengano en la instalación eléctrica", el análisis no tenía ningún tipo de sugerencia para eso — lo forzaba dentro de `update_status` (guardaba el nombre en `responsible_name`, un campo que esa rama de `apply()` ignora por completo, y dejaba `new_status` en null). Probado contra el servidor real: la sugerencia resultante tiraba `422 — "La sugerencia no tiene tarea o estado válido"` al aplicarla tal cual, y ni el formulario de edición tenía un campo para corregirlo. No caía como nota — quedaba como una sugerencia rota que parecía accionable.
+
+### Changes made
+Nuevo tipo `reassign_responsible` (migración 0077: valor nuevo en el enum Postgres `suggestion_type` vía `autocommit_block()`, más columnas `new_responsible_id` FK y `new_responsible_name` denormalizado, mismo criterio que `task_title`).
+
+**El contexto que ve el modelo cambió de alcance**: antes `_build_obra_context` solo listaba a los responsables ya asignados a alguna tarea de la obra — no servía para nombrar a alguien que todavía no tenía nada encima. Se probó primero con el **directorio completo del tenant**, pero eso generaba sugerencias inválidas: asignar una tarea exige que la persona ya esté en el **equipo de la obra** (`ObraTeamMember`, `TaskService._ensure_team_member`), no alcanza con existir en la empresa. Se corrigió a listar el equipo de la obra — confirmado en vivo: con "Jorge Galarza" activo en el tenant pero fuera del equipo de "Edificio Norte", el mismo audio que antes rompía ahora generó automáticamente una **nota explicando exactamente qué falta** ("Jorge Galaza no figura en el equipo de esta obra... cargarlo primero en la pestaña Responsables") en vez de una sugerencia inválida — y de yapa detectó que la persona que se va tiene otras tareas a cargo, dejando otra nota aparte (sin auto-aplicar nada, ese caso queda fuera de alcance por ahora).
+
+Con la persona sumada al equipo, el mismo audio generó `reassign_responsible` con `task_id=122`, `new_responsible_id=12`, `new_responsible_name="Jorge Galarza"`, y aplicarla cambió `tasks.responsible_id` de verdad, con el mismo log de historial que cualquier reasignación manual ("Tarea actualizada: responsable") — reusa `TaskService.update()`, no duplica lógica.
+
+El id se revalida en `apply()` (tenant + activo) aunque ya venga del análisis — no se confía a ciegas en lo que propuso el modelo, mismo criterio que el resto de las sugerencias.
+
+### Files modified
+`backend/alembic/versions/0077_suggestion_reassign_responsible.py` (nueva), `backend/app/models/suggestion.py`, `backend/app/schemas/suggestion.py`, `backend/app/services/bitacora_service.py`, `backend/app/services/suggestion_service.py`, `backend/tests/test_suggestions.py`, `frontend/src/api/suggestions.ts`, `frontend/src/components/SuggestionCard.tsx`, `docs/ipi/IPI-CONSTRUCTA.md` (+docx).
+
+### Validation
+Backend **629 passed** (4 tests nuevos: aplicar reasigna la tarea, sin responsable elegido no aplica con mensaje claro, responsable de otro tenant rechazado, edición del jefe pisa lo propuesto). Frontend: `tsc` y ESLint limpios, vitest 52 passed. **Verificado en vivo contra el servidor real** con el mismo audio en dos escenarios (persona fuera del equipo → nota explicativa; persona en el equipo → reasignación aplicada, `tasks.responsible_id` y el historial confirmados en la base). Datos de prueba revertidos después.
+
+### Pending / next steps
+Quedan del roadmap de "bitácora más completa" (ver conversación): dar de baja a un responsable desde el audio (hoy queda como nota, deliberadamente — no se auto-desactiva a nadie), dependencias entre tareas en `create_task`, y subtareas (`parent_task_id`) para tareas nuevas mencionadas en el audio.

@@ -19,6 +19,7 @@ class SuggestionType(str, enum.Enum):
     RESCHEDULE_TASK = "reschedule_task"
     CREATE_TASK = "create_task"
     UPDATE_STATUS = "update_status"
+    REASSIGN_RESPONSIBLE = "reassign_responsible"
     NOTE = "note"
 
 
@@ -90,6 +91,16 @@ class Suggestion(Base):
     # % de avance propuesto (0-100). El audio dice "va al 75%" y esto lo captura;
     # se aplica sobre tasks.estimated_progress junto con el cambio de estado.
     new_progress: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Responsable nuevo para reassign_responsible — FK, no texto: el análisis
+    # ya matcheó contra el directorio completo al generar la sugerencia, así
+    # que lo que ve el jefe en la tarjeta es la persona real, no un nombre a
+    # resolver (ambiguo) recién al aplicar. El nombre queda denormalizado
+    # (mismo criterio que task_title) para sobrevivir si el responsable se
+    # borra y para no forzar un join en cada lectura.
+    new_responsible_id: Mapped[int | None] = mapped_column(
+        ForeignKey("responsibles.id", ondelete="SET NULL"), nullable=True
+    )
+    new_responsible_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     responsible_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
