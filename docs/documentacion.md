@@ -2851,3 +2851,26 @@ Queda para implementación el plan de 6 pasos de la sección 10, arrancando por 
 Dos cosas abiertas, ninguna bloqueante: el horizonte de 30 días para compromisos es un parámetro de producto a validar con uso real, y una regla de riesgo por SPI de cartera que queda anotada pero **deliberadamente fuera de alcance**, igual que su equivalente por obra (A-02 del documento hermano) — toca `risk_service.py` y `SystemSettings`, y es alcance de otro ticket.
 
 **El IPI no se toca**, mismo criterio que con el documento hermano: describe una solución diseñada, no implementada. La sección de Implementación se actualiza cuando el módulo esté andando.
+
+## 2026-09-11 — Robustez de la cadena de bitácora ante audio ruidoso de obra
+
+### Objective
+Endurecer la cadena audio → transcripción → análisis contra su punto débil documentado: los errores de transcripción en audio grabado en obra (viento, máquinas, micrófono de celular) se propagan al análisis sin que el modelo de lenguaje pueda corregirlos, porque no escucha el audio. La sesión partió de una investigación de alternativas de proveedor (Groq/Whisper, Deepgram, AssemblyAI, Gemini multimodal) que concluyó en no migrar: la evidencia académica (propagación de errores en cascadas ASR→LLM, APSIPA 2026; "modality arbitration" en audio-LLMs, 2026) indica que la mitigación de mayor retorno no es cambiar de arquitectura ni de proveedor, sino (a) atacar el error en la fuente con vocabulario de dominio y (b) impedir la corrección silenciosa aguas abajo.
+
+### Changes made
+**Glosario de jerga de obra en la transcripción.** La API de audio de OpenAI acepta un `prompt` que sesga al modelo hacia un vocabulario; `_transcribe()` ahora envía `_TRANSCRIPTION_PROMPT`, una frase de contexto ("nota de voz de un jefe de obra… con viento y ruido de fondo") más ~50 términos de obra argentinos (encofrado, carpeta de nivelación, azotado hidrófugo, termofusión, amurar…). Un estudio sobre audio con vocabulario técnico midió 19.9% de WER para un ASR guiado con glosario contra 27.9% del mismo contenido sin guiar — es el punto de mayor apalancamiento de toda la cadena. El prompt se mantiene bajo ~224 tokens porque `whisper-1` (fallback configurable vía `WHISPER_MODEL`) trunca ahí.
+
+**El análisis marca incertidumbre en vez de corregir en silencio.** Dos reglas nuevas en el prompt de sistema de `_analyze()`: si un fragmento parece error de transcripción (frase sin sentido, palabra fuera de contexto, repeticiones — el modo de alucinación conocido de Whisper ante ruido), el modelo no debe basar una sugerencia de acción en él ni reinterpretarlo como lo que "tendría sentido" que se dijera; deja una 'note' citando el fragmento dudoso para confirmarlo con el emisor, y marca '(transcripción dudosa)' en el resumen. Si la transcripción entera es incoherente, lo dice en el resumen y devuelve sugerencias vacías. La evidencia detrás de la regla: la corrección ingenua por prompt fabrica contenido con más frecuencia de la que corrige ("Fewer Hallucinations, More Verification", 2025), y el humano que revisa —que en esta cadena siempre existe, RNF-08— sólo puede detectar el problema si el sistema lo señala en vez de taparlo.
+
+Sin cambios de esquema, migración ni frontend: las dudas viajan por los canales que ya existen (notas y resumen).
+
+### Files modified
+`backend/app/services/bitacora_service.py`.
+
+### Validation
+Suite backend completa: **603 passed**. Los tests de bitácora existentes cubren el manejo de errores de `_transcribe` (el caso AMR) y el pipeline con las llamadas de IA mockeadas, por lo que el cambio de prompt no altera conteos. La efectividad real del glosario y de las reglas de incertidumbre se valida con audio real de obra — queda anotado abajo.
+
+### Pending / next steps
+- Prueba de campo: juntar 15-20 notas de voz reales grabadas en obra (con viento/ruido) y comparar la transcripción y la bitácora resultante antes y después del glosario.
+- Evaluación de proveedores alternativos (Deepgram Nova-3 / AssemblyAI, con benchmarks públicos de ruido y keyterm boosting) sólo si la prueba de campo muestra que el glosario no alcanza; el análisis de costos y calidad quedó hecho en esta sesión.
+- Idea a futuro: enriquecer el glosario con términos por obra (títulos de tareas, nombres de responsables) — requiere mover la construcción del prompt a un punto con acceso a la base, hoy `_transcribe` es sync y sin sesión.
