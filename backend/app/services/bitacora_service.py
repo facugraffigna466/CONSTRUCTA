@@ -286,8 +286,18 @@ class BitacoraService:
     async def list_for_task(
         self, *, task_id: int, tenant_id: int | None = None, user_id: int | None = None
     ) -> list[BitacoraEntry]:
-        """Notas de voz cuyas sugerencias aplicadas afectaron a esta tarea (la originaron
-        o la modificaron). Trazabilidad tarea → audio.
+        """Notas de voz relacionadas con esta tarea: las que la originaron o
+        modificaron (sugerencia ya aplicada, via `result_task_id`) y las que
+        tienen una propuesta TODAVÍA sin resolver sobre ella (via `task_id`).
+
+        Sin la segunda mitad, abrir una tarea con una sugerencia recién
+        generada (nunca tocada antes) no mostraba ni el audio ni el resumen
+        de la nota que la originó — la sección de origen quedaba vacía justo
+        en el caso que más importa: decidir sobre algo que todavía no se
+        aplicó. `task_id` es el campo que toda sugerencia sobre una tarea
+        EXISTENTE trae desde que se genera (reschedule/update_status/
+        reassign_responsible, y las notas que citan una tarea puntual);
+        `result_task_id` solo se completa recién al aplicar.
 
         Con las sugerencias en tabla propia esto es un join directo; antes había
         que traer todas las entradas de la obra y filtrar el blob en Python.
@@ -299,9 +309,17 @@ class BitacoraService:
             return []
         entry_ids = set((await self.session.execute(
             select(Suggestion.source_entry_id).where(
-                Suggestion.result_task_id == task_id,
-                Suggestion.status == SuggestionStatus.APLICADA,
                 Suggestion.source_entry_id.is_not(None),
+                or_(
+                    and_(
+                        Suggestion.result_task_id == task_id,
+                        Suggestion.status == SuggestionStatus.APLICADA,
+                    ),
+                    and_(
+                        Suggestion.task_id == task_id,
+                        Suggestion.status == SuggestionStatus.PENDIENTE,
+                    ),
+                ),
             )
         )).scalars().all())
         if not entry_ids:

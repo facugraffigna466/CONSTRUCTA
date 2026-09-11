@@ -208,7 +208,9 @@ function numericCell(row: Row, colId: string | undefined): number | null {
 
 // ─── celda: Título (indenta subtareas — la librería no trae árbol nativo) ────
 
-const TitleCell = React.memo(({ rowData, setRowData, focus, active }: CellProps<Row, unknown>) => {
+interface TitleData { onOpenSuggestions?: (taskId: number) => void }
+
+const TitleCell = React.memo(({ rowData, setRowData, focus, active, columnData }: CellProps<Row, TitleData>) => {
   const ref = useRef<HTMLInputElement>(null);
   // focus() + select(): sin el focus() el input nunca recibe el teclado y
   // escribir sobre la celda seleccionada no hace nada (así lo hace textColumn).
@@ -234,7 +236,10 @@ const TitleCell = React.memo(({ rowData, setRowData, focus, active }: CellProps<
           pointerEvents: focus ? "auto" : "none",
         }}
       />
-      <SuggestionMarker count={rowData.suggestions_pending} />
+      <SuggestionMarker
+        count={rowData.suggestions_pending}
+        onClick={columnData.onOpenSuggestions && rowData.id ? () => columnData.onOpenSuggestions!(rowData.id!) : undefined}
+      />
       {rowData.saving && <span style={{ fontSize: 10, color: "#9BA3AB", flexShrink: 0 }}>·</span>}
       {rowData.error && <span title={rowData.error} style={{ fontSize: 11, color: "#D03A3A", flexShrink: 0 }}>⚠</span>}
     </div>
@@ -1247,6 +1252,8 @@ interface Props {
   suggestionCounts?: Map<number, number>;
   /** Salta a la pestaña Presupuesto, filtrada por los materiales de esa tarea. */
   onOpenBudget?: (taskId: number) => void;
+  /** Abre la tarea con foco en sus propuestas de IA — desde el marcador de la celda de título. */
+  onOpenSuggestions?: (taskId: number) => void;
 }
 
 /** Campos a los que puede saltar una alerta. */
@@ -1281,7 +1288,7 @@ const COL_LABEL: Record<string, string> = {
 };
 
 export const TaskSheetView = forwardRef<SheetViewHandle, Props>(function TaskSheetView(
-  { tasks, responsibles, obraId, onTasksChanged, suggestionCounts, onOpenBudget }: Props,
+  { tasks, responsibles, obraId, onTasksChanged, suggestionCounts, onOpenBudget, onOpenSuggestions }: Props,
   ref
 ) {
   // Qué columnas están ocultas, recordado por obra (igual que la planilla actual).
@@ -1581,6 +1588,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(function TaskShe
       id: "title",
       title: <ColHeader label="Tarea" colId="title" onResizeStart={startResize} />,
       component: TitleCell,
+      columnData: { onOpenSuggestions } satisfies TitleData,
       // Anclada a la izquierda: es la identidad de la fila, no se pierde al
       // scrollear horizontal (el gutter con el nº ya venía sticky).
       cellClassName: "sheetv2-sticky-title",
@@ -1710,7 +1718,7 @@ export const TaskSheetView = forwardRef<SheetViewHandle, Props>(function TaskShe
       isCellEmpty: ({ rowData }) => rowData.materials_count === 0,
       deleteValue: ({ rowData }) => rowData,
     },
-  ], [activeResponsibles, onOpenBudget, rowIds, onMaterialsChanged, startResize]);
+  ], [activeResponsibles, onOpenBudget, onOpenSuggestions, rowIds, onMaterialsChanged, startResize]);
 
   // Ocultar = sacar la columna del array. "Tarea" siempre queda.
   // Y si el usuario redimensionó una columna, su ancho manda (grow/shrink en 0).
