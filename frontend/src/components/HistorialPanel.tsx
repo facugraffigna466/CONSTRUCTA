@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Activity } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Activity, ChevronDown } from "lucide-react";
 import type { HistorialEvento, Task } from "../types/index";
 
 // ─── Badge types ──────────────────────────────────────────────────────────────
@@ -293,6 +293,72 @@ function buildRow(ev: HistorialEvento, tasks?: Task[]): RowData {
   return { actorName: name, avatarBg, sentence, badge, time: relativeTime(ev.created_at) };
 }
 
+// ─── Expandable sentence ─────────────────────────────────────────────────────
+//
+// Los eventos de bitácora traen el resumen completo (el backend ya no trunca),
+// que puede ocupar varias líneas. Se muestra colapsado en 2 líneas y, solo si
+// el texto realmente desborda, aparece "Ver más" para expandirlo. Los eventos
+// cortos (la enorme mayoría) se ven exactamente igual que antes.
+
+function ExpandableSentence({ children }: { children: React.ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const ref = useRef<HTMLParagraphElement>(null);
+
+  useLayoutEffect(() => {
+    if (expanded) return; // expandido no hay clamp: no hay nada que medir
+    const measure = () => {
+      const el = ref.current;
+      if (el) setOverflowing(el.scrollHeight > el.clientHeight + 1);
+    };
+    measure();
+    // El desborde depende del ancho disponible: re-medir al redimensionar.
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [children, expanded]);
+
+  return (
+    <div>
+      <p
+        ref={ref}
+        style={{
+          margin: 0, fontSize: 14, color: "#1A2329", lineHeight: 1.5,
+          ...(expanded ? {} : {
+            display: "-webkit-box",
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical" as const,
+            overflow: "hidden",
+          }),
+        }}
+      >
+        {children}
+      </p>
+      {(overflowing || expanded) && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          aria-expanded={expanded}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 3,
+            marginTop: 4, padding: 0,
+            background: "none", border: "none", cursor: "pointer",
+            fontSize: 12.5, fontWeight: 600, color: "#2A6FDB",
+            fontFamily: "'Plus Jakarta Sans', sans-serif",
+          }}
+        >
+          {expanded ? "Ver menos" : "Ver más"}
+          <ChevronDown
+            style={{
+              width: 14, height: 14,
+              transform: expanded ? "rotate(180deg)" : "none",
+              transition: "transform 0.15s",
+            }}
+          />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 interface HistorialPanelProps {
@@ -383,9 +449,7 @@ export function HistorialPanel({ events, tasks, filterable = false }: HistorialP
 
                 {/* Content */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: 14, color: "#1A2329", lineHeight: 1.5 }}>
-                    {row.sentence}
-                  </p>
+                  <ExpandableSentence>{row.sentence}</ExpandableSentence>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 7 }}>
                     <span style={{
                       display: "inline-flex", alignItems: "center", gap: 5,

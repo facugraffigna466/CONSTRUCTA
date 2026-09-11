@@ -2891,3 +2891,22 @@ No aplica — documento de referencia, sin cambios de código. Las cifras salen 
 
 ### Pending / next steps
 Ejecutar el onboarding real cuando se decida salir a usuarios: elegir el número (chip argentino dedicado o número US de Twilio), correr el Self Sign-up, y arrancar la Business Verification con la constancia de AFIP. El IPI no se toca: es una guía operativa, no funcionalidad implementada.
+
+## 2026-09-11 — Historial: texto completo con colapsado expandible
+
+### Objective
+Feedback de uso real: los eventos de bitácora en el Historial se cortaban a mitad de frase ("…por l") y no había forma de leer el texto completo. El pedido: ver todo, pero arrancando colapsado para que no ocupe la pantalla.
+
+### Changes made
+El corte tenía dos causas y solo una era visual. **La de fondo**: `bitacora_service` truncaba el resumen a 140 caracteres ANTES de guardarlo en el historial (`entry.summary[:140]`) — y como el historial es append-only, lo cortado se perdía para siempre. La columna es `Text`, el truncado era innecesario: ahora se guarda el resumen completo. **La visual**: `HistorialPanel` renderizaba todo el texto sin colapsar. Se agregó `ExpandableSentence`: cada evento se muestra colapsado a 2 líneas (`-webkit-line-clamp`) y, solo cuando el texto realmente desborda (medido con `scrollHeight` vs `clientHeight`, re-medido en `resize`), aparece "Ver más" con chevron para expandir/colapsar. Los eventos cortos — la enorme mayoría — se ven exactamente igual que antes, sin botón.
+
+Los eventos ya guardados truncados quedan como están (append-only): el fix aplica a los nuevos.
+
+### Files modified
+`backend/app/services/bitacora_service.py` (una línea), `frontend/src/components/HistorialPanel.tsx`.
+
+### Validation
+Backend 603 passed; frontend vitest 52 passed, `tsc` y ESLint limpios. Verificación en navegador (preview + login por token JWT local): se insertó un evento largo de prueba en el Postgres de dev (borrado después), y se comprobó en pantalla el ciclo completo — colapsado a 2 líneas con "Ver más ⌄", expansión a texto completo con "Ver menos ⌃", y ausencia del botón en eventos cortos. Detectado y corregido durante la verificación: la medición de desborde no se recalculaba al cambiar el ancho de la ventana (faltaba el listener de `resize`).
+
+### Pending / next steps
+Ninguno. Los eventos históricos previos al fix quedan truncados en la base — irrecuperable por diseño (append-only), se regeneran solos a medida que se procesan bitácoras nuevas.
