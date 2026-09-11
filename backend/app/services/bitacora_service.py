@@ -697,7 +697,10 @@ class BitacoraService:
                     await self.historial.log(
                         event_type="bitacora_procesada",
                         description=(
-                            f"Bitácora #{entry.id} procesada: {entry.summary[:140] if entry.summary else 'sin resumen'}"
+                            # Resumen completo, sin truncar: el historial es append-only,
+                            # lo que se corta acá se pierde para siempre (la columna es
+                            # Text). El colapsado visual lo maneja el frontend.
+                            f"Bitácora #{entry.id} procesada: {entry.summary or 'sin resumen'}"
                             + (f" ({n} acción{'es' if n != 1 else ''} sugerida{'s' if n != 1 else ''})" if n else "")
                         ),
                         obra_id=entry.obra_id,
