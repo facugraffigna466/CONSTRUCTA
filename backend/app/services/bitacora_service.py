@@ -43,6 +43,26 @@ _BITACORA_MONTHLY_LIMITS: dict[str, int | None] = {
 }
 _BITACORA_DEFAULT_LIMIT = 20  # tenant sin plan asignado
 
+# Glosario de jerga de obra para guiar la transcripción. La API de audio de
+# OpenAI acepta un `prompt` que sesga al modelo hacia este vocabulario — es la
+# mitigación de mayor impacto contra errores de ASR en términos técnicos
+# ("encofrado" → "en cofrado", "carpeta" → "carpa", etc.), que después el
+# análisis hereda sin poder corregir porque no escucha el audio. Mantenerlo
+# corto: whisper-1 (fallback configurable) trunca a ~224 tokens y prioriza el
+# final del prompt.
+_TRANSCRIPTION_PROMPT = (
+    "Nota de voz de un jefe de obra en una obra de construcción en Argentina, "
+    "posiblemente con viento y ruido de fondo. Vocabulario frecuente: obrador, "
+    "replanteo, zanjeo, platea, encadenado, encofrado, desencofrar, hormigón "
+    "armado, hormigonada, losa, viga, columna, tabique, mampostería, ladrillo "
+    "hueco, bloque, revoque grueso, revoque fino, azotado hidrófugo, carpeta de "
+    "nivelación, contrapiso, cielorraso, Durlock, yesería, zócalos, cerámicos, "
+    "porcelanato, membrana, babeta, cumbrera, instalación sanitaria, cloacas, "
+    "termofusión, cañería, tablero eléctrico, cañero, amurar, aberturas, "
+    "premarcos, herrería, frente de trabajo, certificación de avance, gremios, "
+    "cuadrilla, capataz, corralón, volquete, mixer, andamios, apuntalamiento."
+)
+
 # Schema de salida estricto para el análisis (structured outputs → JSON garantizado)
 _ANALYSIS_SCHEMA = {
     "type": "object",
@@ -352,7 +372,11 @@ class BitacoraService:
             "https://api.openai.com/v1/audio/transcriptions",
             headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
             files={"file": (filename, audio_bytes)},
-            data={"model": settings.WHISPER_MODEL, "language": "es"},
+            data={
+                "model": settings.WHISPER_MODEL,
+                "language": "es",
+                "prompt": _TRANSCRIPTION_PROMPT,
+            },
             timeout=120,
         )
         if not resp.ok and filename.lower().endswith(".amr"):
@@ -444,6 +468,17 @@ class BitacoraService:
             "   - note: para acuerdos importantes que no mapean a una tarea (quedan como registro).\n\n"
             "Reglas:\n"
             f"- Hoy es {today}. Interpretá expresiones relativas ('la semana que viene', 'el lunes') contra esa fecha.\n"
+            "- EL TEXTO PUEDE VENIR MAL TRANSCRIPTO: el audio se graba en la obra, con viento y ruido de "
+            "máquinas, y la transcripción automática puede confundir palabras — sobre todo nombres de tareas, "
+            "materiales, cantidades y fechas. NO 'corrijas' en silencio una palabra rara reinterpretándola como "
+            "lo que 'tendría sentido' que se dijera: podrías estar arreglando algo que se dijo bien, o dando por "
+            "bueno un error. Si un fragmento parece un error de transcripción (frase sin sentido, palabra fuera "
+            "de contexto, una misma frase repetida varias veces), NO bases una sugerencia de acción "
+            "(reschedule_task/create_task/update_status) en ese fragmento: dejá una 'note' citando el fragmento "
+            "textual dudoso y aclarando que conviene confirmarlo con quien mandó el audio. Si la duda afecta al "
+            "resumen, marcala en el texto con '(transcripción dudosa)' en vez de suavizarla u omitirla.\n"
+            "- Si la transcripción entera es incoherente (ruido puro, repeticiones sin contenido), decilo en el "
+            "resumen ('El audio no se entiende — conviene pedir que lo regraben') y devolvé suggestions vacío.\n"
             "- DIRECCIÓN DEL MOVIMIENTO: en obra, 'correr/mover la fecha para atrás', 'para adelante', 'patearla' "
             "y 'adelantarla' se usan de forma ambigua y contradictoria según quién habla. NO decidas la dirección "
             "por esas palabras: decidila por la CAUSA que se menciona. Si la causa es un problema o una demora "
