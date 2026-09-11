@@ -41,11 +41,6 @@ export interface SystemSettings {
   risk_whatsapp_critical: boolean;
   risk_milestone_at_risk: boolean;
   risk_milestone_lookahead_days: number;
-
-  company_name: string | null;
-  main_responsible: string | null;
-  company_email: string | null;
-  company_phone: string | null;
 }
 
 export interface SystemHealth {

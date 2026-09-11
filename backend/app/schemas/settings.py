@@ -43,11 +43,6 @@ class SettingsRead(BaseModel):
     risk_milestone_at_risk: bool
     risk_milestone_lookahead_days: int
 
-    company_name: str | None
-    main_responsible: str | None
-    company_email: str | None
-    company_phone: str | None
-
     model_config = {"from_attributes": True}
 
 
@@ -92,11 +87,6 @@ class SettingsPatch(BaseModel):
     risk_whatsapp_critical: bool | None = None
     risk_milestone_at_risk: bool | None = None
     risk_milestone_lookahead_days: int | None = None
-
-    company_name: str | None = None
-    main_responsible: str | None = None
-    company_email: str | None = None
-    company_phone: str | None = None
 
 
 class SystemHealth(BaseModel):
