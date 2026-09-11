@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Literal
@@ -224,14 +223,20 @@ def _maybe_schedule_plan_warning(
     # cierra cuando termina el request), así que le pasamos primitivos.
     tenant.last_plan_warning_at = now
 
-    asyncio.create_task(
+    # asyncio.create_task a secas solo guarda una referencia débil — el GC
+    # puede recolectar la tarea antes de que mande el email. spawn_background
+    # retiene la referencia hasta que termina.
+    from app.core.background_tasks import spawn_background
+
+    spawn_background(
         _send_plan_warning_now(
             tenant_id=tenant.id,
             resource_label=resource_label,
             projected=projected,
             limit=limit,
             plan_name=plan.name,
-        )
+        ),
+        name=f"plan_warning_{tenant.id}",
     )
 
 

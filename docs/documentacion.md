@@ -2956,3 +2956,26 @@ Backend **606 passed** (3 tests nuevos en `test_suggestions.py`: aplicar con ava
 
 ### Pending / next steps
 Un cambio de avance sin cambio de estado (tarea ya en progreso que pasa de 50% a 75%) no genera evento de historial — `apply_status_update` solo loguea cuando el estado cambia. La sugerencia aplicada queda como registro, así que la traza existe; si el uso real lo pide, se agrega el evento.
+
+## 2026-09-11 — Bitácora en tiempo real: verificación del mecanismo + hardening de las tareas de background
+
+### Objective
+Reporte: "la bitácora no se actualiza en tiempo real cuando recibe un audio de WhatsApp". Antes de tocar código, se auditó la cadena completa (emit del backend → sala de Socket.IO → listener del frontend) y se verificó en vivo contra el servidor real.
+
+### Changes made
+**Verificación empírica del mecanismo de tiempo real (sin bug encontrado ahí):** con el navegador abierto y logueado en la pestaña Bitácora de obra de "Edificio Norte — Demo", se disparó por `curl` una subida de audio real contra el backend corriendo (mismo pipeline que usa el webhook de WhatsApp: `BitacoraService.process_entry` → `emit_bitacora_created` → sala `obra_{id}` de Socket.IO). La entrada apareció en pantalla sola, sin recargar — confirma que el join de sala al conectar (`connect` handler, `socket_manager.py`), el payload emitido y el listener de `BitacoraPage.tsx` (`socket.on("bitacora_created", ...)`, hallazgo 8.5 de la auditoría, ya arreglado en una sesión anterior) funcionan correctamente para el camino síncrono (subida web).
+
+**El hardening real — riesgo encontrado al revisar el camino asíncrono (WhatsApp):** las dos tareas de background de `message_service.py` (`_bg_process_entry`, `_bg_analyze` — las que efectivamente procesan un audio llegado por WhatsApp: descarga de Twilio + Whisper + Claude, 20-40s) se lanzaban con `asyncio.create_task(coro())` sin guardar la referencia devuelta. Es una trampa documentada de asyncio: el event loop solo mantiene una referencia DÉBIL a la tarea: sin nada más referenciándola, el garbage collector puede recolectarla a mitad de ejecución, sin excepción ni log — la nota de voz quedaría sin procesar y sin avisar al emisor, en silencio. Se agregó `app/core/background_tasks.py` con `spawn_background()`, que retiene la tarea en un set a nivel de módulo hasta que termina (idioma recomendado por la documentación oficial de asyncio). Se aplicó en los tres fire-and-forget del backend: las dos de bitácora por WhatsApp y una tercera de la misma familia en `plan_limits.py` (aviso de límite de plan por email) que tenía el mismo problema.
+
+No se pudo reproducir el bug con un test trivial (`asyncio.sleep` + `gc.collect()`: asyncio retiene la tarea indirectamente a través de la cadena de callbacks del `Future` interno, así que un sleep corto no la pierde) — el helper y su test cubren la retención de la referencia como buena práctica defensiva, documentada como riesgo real por asyncio, no como una reproducción determinística del síntoma reportado.
+
+**Limitación de esta sesión**: no se pudo probar el camino de WhatsApp de punta a punta (webhook real con firma de Twilio + descarga de `MediaUrl0`) porque levantar un servidor HTTP local para simular la descarga de Twilio no fue alcanzable desde este entorno (conexiones entrantes bloqueadas, aparentemente por el firewall/sandbox de red del host) — solo se pudo validar el camino síncrono (subida web) contra el servidor real corriendo.
+
+### Files modified
+`backend/app/core/background_tasks.py` (nuevo), `backend/app/services/message_service.py`, `backend/app/core/plan_limits.py`, `backend/tests/test_background_tasks.py` (nuevo).
+
+### Validation
+Suite completa: **625 passed** (3 tests nuevos del helper). Verificación en vivo contra el servidor real (ver arriba): la entrada de bitácora subida por `curl` apareció en el navegador sin recargar.
+
+### Pending / next steps
+Validar el camino de WhatsApp real de punta a punta requiere un número de producción configurado (ver `docs/referencia/whatsapp-produccion.md`) o un túnel público (ngrok) para que Twilio pueda entregar el `MediaUrl0` a un endpoint alcanzable — no se pudo simular desde este entorno de desarrollo.
