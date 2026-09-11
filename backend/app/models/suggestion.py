@@ -87,6 +87,9 @@ class Suggestion(Base):
     new_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     new_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     new_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    # % de avance propuesto (0-100). El audio dice "va al 75%" y esto lo captura;
+    # se aplica sobre tasks.estimated_progress junto con el cambio de estado.
+    new_progress: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     responsible_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

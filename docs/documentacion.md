@@ -2937,3 +2937,22 @@ Suite completa: 619 passed (603 previos + 16 nuevos). Los nuevos cubren: staff t
 
 ### Pending / next steps
 Los duplicados +54/+549 ya existentes en la base (dos filas para el mismo teléfono físico) no se fusionan automáticamente — la equivalencia en lookups evita crear nuevos y hace que el webhook resuelva igual; una limpieza de datos queda como tarea de mantenimiento aparte si aparece un caso concreto.
+
+## 2026-09-11 — Bitácora: la IA propone el porcentaje de avance (+ fix de reseteo)
+
+### Objective
+Prueba de campo real por WhatsApp: el audio decía "la mampostería de elevación avanza al 75%" y el sistema hizo lo máximo que podía — puso la tarea en progreso — pero el 75% se perdió: el esquema de sugerencias no tenía dónde ponerlo. La tabla de tareas siguió mostrando 0% de avance.
+
+### Changes made
+**`new_progress` en las sugerencias** (migración 0075, columna nullable en `suggestions`). La cadena completa: el schema del análisis acepta un entero 0-100 con la regla "SOLO si el audio menciona un porcentaje explícito — nunca inventes uno"; se persiste en la fila; `SuggestionEdit` lo acepta con validación `ge=0, le=100` (el jefe puede corregirlo antes de aplicar); al aplicar un `update_status` se pasa a `TaskStatusUpdate.estimated_progress`; la confirmación por WhatsApp al emisor lo menciona ("(75% de avance)"); y la tarjeta de sugerencia lo muestra ("→ en progreso · avance 75%") con un input numérico en el modo edición.
+
+**Bug encontrado y arreglado en el camino**: `TaskStatusUpdate.estimated_progress` tiene default 0 y `TaskRepository.update_status` lo escribe SIEMPRE — aplicar cualquier sugerencia de estado sin avance propuesto le reseteaba el % a cero a una tarea que ya venía avanzada (una tarea al 60% marcada "bloqueada" desde la bitácora quedaba en 0%). Ahora, si la sugerencia no trae avance, se conserva el actual de la tarea.
+
+### Files modified
+`backend/alembic/versions/0076_suggestion_new_progress.py` (nueva), `backend/app/models/suggestion.py`, `backend/app/schemas/suggestion.py`, `backend/app/services/suggestion_service.py`, `backend/app/services/bitacora_service.py`, `frontend/src/api/suggestions.ts`, `frontend/src/components/SuggestionCard.tsx`.
+
+### Validation
+Backend **606 passed** (3 tests nuevos en `test_suggestions.py`: aplicar con avance propuesto, regresión del reseteo a cero, y el ajuste del jefe pisa lo propuesto). Frontend 52 passed, `tsc` y ESLint limpios. Migración aplicada en la base de dev local.
+
+### Pending / next steps
+Un cambio de avance sin cambio de estado (tarea ya en progreso que pasa de 50% a 75%) no genera evento de historial — `apply_status_update` solo loguea cuando el estado cambia. La sugerencia aplicada queda como registro, así que la traza existe; si el uso real lo pide, se agrega el evento.

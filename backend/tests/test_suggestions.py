@@ -483,3 +483,64 @@ async def test_conteo_sin_sugerencias_no_rompe(ctx):
     db.expire_all()
     entry = await db.get(BitacoraEntry, ctx["entry_id"])
     assert _acciones_sugeridas(entry) == 0
+
+
+# ── Avance propuesto por la IA (migración 0075) ───────────────────────────────
+#
+# El audio dice "la mampostería va al 75%" y antes ese dato se perdía: el tipo
+# update_status solo cambiaba el estado. `new_progress` lo captura y se aplica
+# sobre `tasks.estimated_progress`.
+
+async def test_aplicar_update_status_con_avance_propuesto(client, ctx):
+    row = await _add_suggestion(
+        ctx, type=SuggestionType.UPDATE_STATUS,
+        new_status="en_progreso", new_progress=75,
+    )
+
+    r = await client.post(f"{API}/suggestions/{row.id}/apply", headers=_auth(ctx["token"]))
+    assert r.status_code == 200, r.text
+
+    ctx["db"].expire_all()
+    tarea = await ctx["db"].get(Task, ctx["task_id"])
+    assert tarea.status.value == "en_progreso"
+    assert tarea.estimated_progress == 75
+
+
+async def test_aplicar_update_status_sin_avance_conserva_el_actual(client, ctx):
+    """Regresión: `TaskStatusUpdate.estimated_progress` tiene default 0 y el
+    repo lo escribe siempre — aplicar una sugerencia de estado sin avance
+    propuesto le reseteaba el % a cero a una tarea que ya venía avanzada."""
+    db = ctx["db"]
+    tarea = await db.get(Task, ctx["task_id"])
+    tarea.estimated_progress = 60
+    await db.flush()
+    await db.commit()
+
+    row = await _add_suggestion(
+        ctx, type=SuggestionType.UPDATE_STATUS, new_status="bloqueada",
+    )
+    r = await client.post(f"{API}/suggestions/{row.id}/apply", headers=_auth(ctx["token"]))
+    assert r.status_code == 200, r.text
+
+    db.expire_all()
+    tarea = await db.get(Task, ctx["task_id"])
+    assert tarea.status.value == "bloqueada"
+    assert tarea.estimated_progress == 60  # el avance que ya tenía no se toca
+
+
+async def test_aplicar_con_avance_editado_pisa_el_propuesto(client, ctx):
+    """El jefe corrige el % antes de aplicar: su valor gana."""
+    row = await _add_suggestion(
+        ctx, type=SuggestionType.UPDATE_STATUS,
+        new_status="en_progreso", new_progress=75,
+    )
+    r = await client.post(
+        f"{API}/suggestions/{row.id}/apply",
+        headers=_auth(ctx["token"]),
+        json={"new_status": "en_progreso", "new_progress": 80},
+    )
+    assert r.status_code == 200, r.text
+
+    ctx["db"].expire_all()
+    tarea = await ctx["db"].get(Task, ctx["task_id"])
+    assert tarea.estimated_progress == 80
