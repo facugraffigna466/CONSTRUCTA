@@ -73,26 +73,37 @@ async def me(current_user: CurrentUser, db: DbSession):
 
 @router.patch("/me", response_model=UserRead)
 async def update_profile(data: UpdateProfileRequest, current_user: CurrentUser, db: DbSession):
-    fields = {k: v for k, v in data.model_dump().items() if v is not None}
-    if not fields:
+    # exclude_unset: distingue "no mandó el campo" de "lo mandó en null".
+    # Para whatsapp_number el null explícito significa "liberar mi número"
+    # (el modal de perfil ya lo manda así cuando se vacía el input) — antes
+    # se filtraba junto con los no-enviados y el número quedaba pegado a la
+    # membership para siempre.
+    raw = data.model_dump(exclude_unset=True)
+    whatsapp_sent = "whatsapp_number" in raw
+    whatsapp_number = raw.pop("whatsapp_number", None)
+    fields = {k: v for k, v in raw.items() if v is not None}
+    if not fields and not whatsapp_sent:
         return UserRead.model_validate(current_user)
-    whatsapp_number = fields.pop("whatsapp_number", None)
-    if whatsapp_number is not None:
-        # Hallazgo 6.4 auditoría 04: si el usuario intenta setear un whatsapp_number
-        # que ya existe como Responsible del mismo tenant, el bot no puede resolver
-        # cuál es el emisor real. Rechazamos con 409 antes de guardar.
-        from app.repositories.responsible import ResponsibleRepository
-        colision = await ResponsibleRepository(db).get_by_whatsapp_in_tenant(
-            whatsapp_number, current_user.tenant_id
-        )
-        if colision is not None:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "Ese número ya está registrado como responsable en tu empresa. "
-                    "Usá un número distinto o eliminá primero al responsable."
-                ),
+    if whatsapp_sent:
+        if whatsapp_number is not None:
+            # Hallazgo 6.4 auditoría 04: si el usuario intenta setear un whatsapp_number
+            # que ya existe como Responsible del mismo tenant, el bot no puede resolver
+            # cuál es el emisor real. Rechazamos con 409 antes de guardar.
+            # active_only: un responsable soft-deleted NO reserva el número —
+            # sin esto, un número usado alguna vez como responsable quedaba
+            # quemado para siempre (no había forma legítima de liberarlo).
+            from app.repositories.responsible import ResponsibleRepository
+            colision = await ResponsibleRepository(db).get_by_whatsapp_in_tenant(
+                whatsapp_number, current_user.tenant_id, active_only=True
             )
+            if colision is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        "Ese número ya está registrado como responsable en tu empresa. "
+                        "Usá un número distinto o desactivá primero al responsable."
+                    ),
+                )
         # whatsapp_number vive en TenantMembership (Fase 3) — es por-empresa,
         # no por-identidad.
         membership_id = getattr(current_user, "membership_id", None)

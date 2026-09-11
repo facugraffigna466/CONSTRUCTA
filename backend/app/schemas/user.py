@@ -1,6 +1,7 @@
+import re
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.models.obra_user_role import ObraUserRoleType
 
@@ -54,7 +55,17 @@ class UserRead(BaseModel):
 class UpdateProfileRequest(BaseModel):
     full_name: str | None = Field(None, min_length=2, max_length=255)
     avatar_url: str | None = None
+    # null explícito = "liberar mi número" (la ruta distingue no-enviado de
+    # null con exclude_unset). Mismo formato E.164 que exige Responsible —
+    # un número mal formateado acá nunca matchearía en el webhook.
     whatsapp_number: str | None = Field(None, max_length=20)
+
+    @field_validator("whatsapp_number")
+    @classmethod
+    def validate_phone(cls, v: str | None) -> str | None:
+        if v is not None and not re.match(r"^\+\d{7,15}$", v):
+            raise ValueError("whatsapp_number must be in E.164 format: +5491112345678")
+        return v
 
 
 class ChangePasswordRequest(BaseModel):

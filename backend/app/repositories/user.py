@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.phone import wa_number_variants
 from app.models.tenant_membership import TenantMembership
 from app.models.user import User
 from app.repositories.base import BaseRepository
@@ -38,7 +39,10 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(
             select(User, TenantMembership)
             .join(TenantMembership, TenantMembership.user_id == User.id)
-            .where(TenantMembership.whatsapp_number == number, TenantMembership.is_active.is_(True))
+            .where(
+                TenantMembership.whatsapp_number.in_(wa_number_variants(number)),
+                TenantMembership.is_active.is_(True),
+            )
         )
         return [(user, membership) for user, membership in result.all()]
 
@@ -56,7 +60,7 @@ class UserRepository(BaseRepository[User]):
         stmt = (
             select(User)
             .join(TenantMembership, TenantMembership.user_id == User.id)
-            .where(TenantMembership.whatsapp_number == number)
+            .where(TenantMembership.whatsapp_number.in_(wa_number_variants(number)))
         )
         if tenant_id is not None:
             stmt = stmt.where(TenantMembership.tenant_id == tenant_id)

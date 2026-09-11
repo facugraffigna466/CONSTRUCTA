@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.phone import wa_number_variants
 from app.models.responsible import Responsible
 from app.repositories.base import BaseRepository
 
@@ -22,14 +23,14 @@ class ResponsibleRepository(BaseRepository[Responsible]):
             return None
         result = await self.session.execute(
             select(Responsible).where(
-                Responsible.whatsapp_number == number,
+                Responsible.whatsapp_number.in_(wa_number_variants(number)),
                 Responsible.is_active.is_(True),
             )
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_by_whatsapp_in_tenant(
-        self, number: str, tenant_id: int | None
+        self, number: str, tenant_id: int | None, active_only: bool = False
     ) -> Responsible | None:
         """Lookup del mismo número dentro de un tenant específico.
 
@@ -37,14 +38,24 @@ class ResponsibleRepository(BaseRepository[Responsible]):
         es el chequeo correcto para "¿ya existe un responsable con este número
         en MI empresa?". El lookup global (get_by_whatsapp_any) solo se usa para
         el pipeline del webhook, donde el emisor no dice qué tenant es.
+
+        `active_only=True` ignora responsables soft-deleted: un responsable
+        dado de baja NO reserva el número — lo usa el chequeo de colisión de
+        PATCH /users/me para que un staff pueda tomar un número liberado.
+        Crear/editar Responsible sigue chequeando contra TODAS las filas
+        porque el unique constraint de BD es sobre todas.
         """
         if not number:
             return None
-        stmt = select(Responsible).where(Responsible.whatsapp_number == number)
+        stmt = select(Responsible).where(
+            Responsible.whatsapp_number.in_(wa_number_variants(number))
+        )
+        if active_only:
+            stmt = stmt.where(Responsible.is_active.is_(True))
         if tenant_id is not None:
             stmt = stmt.where(Responsible.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def get_by_whatsapp_any(self, number: str) -> Responsible | None:
         """Idem al anterior pero SIN filtrar por `is_active`. Uso: el webhook
@@ -57,9 +68,11 @@ class ResponsibleRepository(BaseRepository[Responsible]):
         if not number:
             return None
         result = await self.session.execute(
-            select(Responsible).where(Responsible.whatsapp_number == number)
+            select(Responsible).where(
+                Responsible.whatsapp_number.in_(wa_number_variants(number))
+            )
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def list_active(self, tenant_id: int | None = None) -> list[Responsible]:
         stmt = (

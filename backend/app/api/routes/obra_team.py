@@ -90,18 +90,32 @@ async def add_team_member(
         from app.repositories.responsible import ResponsibleRepository
         from app.schemas.responsible import ResponsibleCreate
         # Reusar responsable existente (activo o desactivado) que ya tenga el
-        # mismo número — no queremos crear duplicados.
-        resp = await ResponsibleRepository(db).get_by_whatsapp_any(payload.whatsapp_number)
+        # mismo número — no queremos crear duplicados. Scopeado al tenant del
+        # caller: el lookup global podía reusar (y sumar al team) un
+        # responsable de OTRA empresa con el mismo número — misma familia que
+        # el hallazgo 6.2 de la auditoría 04.
+        _actor = {
+            "id": current_user.id,
+            "name": current_user.full_name or current_user.email,
+            "role": current_user.role,
+            "channel": "web",
+        }
+        resp = await ResponsibleRepository(db).get_by_whatsapp_in_tenant(
+            payload.whatsapp_number, current_user.tenant_id
+        )
+        if resp and not resp.is_active:
+            # Sumarlo a un equipo es re-incorporarlo: sin esto quedaba en el
+            # team pero inactivo, y el bot le seguía negando el acceso. El
+            # service re-chequea la colisión con staff (el número pudo haber
+            # sido tomado por un User mientras estuvo de baja) → 409.
+            resp = await ResponsibleService(db).reactivate(
+                resp.id, current_user.tenant_id, actor=_actor
+            )
         if not resp:
             resp = await ResponsibleService(db).create(
                 ResponsibleCreate(full_name=payload.full_name, whatsapp_number=payload.whatsapp_number, role=None),
                 tenant_id=current_user.tenant_id,
-                actor={
-                    "id": current_user.id,
-                    "name": current_user.full_name or current_user.email,
-                    "role": current_user.role,
-                    "channel": "web",
-                },
+                actor=_actor,
             )
     else:
         raise HTTPException(status_code=422, detail="Provide responsible_id or full_name + whatsapp_number")
