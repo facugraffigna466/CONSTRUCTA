@@ -650,3 +650,60 @@ async def test_reassign_responsible_editar_pisa_al_propuesto(client, ctx):
     db.expire_all()
     tarea = await db.get(Task, ctx["task_id"])
     assert tarea.responsible_id == elegido_id
+
+
+# ── Origen de bitácora también para sugerencias pendientes ───────────────────
+#
+# BitacoraService.list_for_task (el endpoint GET /tasks/{id}/bitacora, que
+# alimenta "Origen — Bitácora de obra" en el modal de tarea) solo miraba
+# sugerencias APLICADAS. Una tarea con una sugerencia recién generada, nunca
+# tocada, no mostraba ni el audio ni el resumen de la nota que la originó —
+# justo el caso donde más hace falta poder escucharla para decidir.
+
+async def test_origen_bitacora_incluye_nota_de_sugerencia_pendiente(client, ctx):
+    from app.services.bitacora_service import BitacoraService
+
+    await _add_suggestion(
+        ctx, type=SuggestionType.UPDATE_STATUS, new_status="bloqueada",
+        # pendiente por default — no se aplica en este test
+    )
+
+    entries = await BitacoraService(ctx["db"]).list_for_task(
+        task_id=ctx["task_id"], tenant_id=ctx["tenant_id"],
+    )
+    assert [e.id for e in entries] == [ctx["entry_id"]]
+
+
+async def test_origen_bitacora_no_incluye_sugerencia_descartada(client, ctx):
+    """Solo pendientes o ya aplicadas — una descartada no es "origen" de nada:
+    el jefe decidió explícitamente que esa propuesta no vale."""
+    from app.services.bitacora_service import BitacoraService
+    from app.models.suggestion import SuggestionStatus as _Status
+
+    row = await _add_suggestion(ctx, type=SuggestionType.UPDATE_STATUS, new_status="bloqueada")
+    row.status = _Status.DESCARTADA
+    await ctx["db"].flush()
+    await ctx["db"].commit()
+
+    entries = await BitacoraService(ctx["db"]).list_for_task(
+        task_id=ctx["task_id"], tenant_id=ctx["tenant_id"],
+    )
+    assert entries == []
+
+
+async def test_origen_bitacora_sigue_incluyendo_aplicadas(client, ctx):
+    """Regresión: el caso que ya funcionaba (sugerencia aplicada) no se rompió
+    al sumar el de pendientes."""
+    from app.services.bitacora_service import BitacoraService
+    from app.models.suggestion import SuggestionStatus as _Status
+
+    row = await _add_suggestion(ctx, type=SuggestionType.UPDATE_STATUS, new_status="bloqueada")
+    row.status = _Status.APLICADA
+    row.result_task_id = ctx["task_id"]
+    await ctx["db"].flush()
+    await ctx["db"].commit()
+
+    entries = await BitacoraService(ctx["db"]).list_for_task(
+        task_id=ctx["task_id"], tenant_id=ctx["tenant_id"],
+    )
+    assert [e.id for e in entries] == [ctx["entry_id"]]

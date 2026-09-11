@@ -143,14 +143,33 @@ export function TaskFormModal({
   // ✨ de la fila — esa sección vive al final del formulario, después de
   // Materiales, y sin esto quedaba invisible salvo que alguien ya supiera
   // que estaba ahí y bajara a buscarla.
+  //
+  // Un scroll a tiempo fijo no alcanza: Materiales, Sugerencias y el Origen
+  // de bitácora llegan cada uno por su propio fetch, y cuánto tardan depende
+  // de cuánto contenido tiene ESA tarea puntual (dependencias, materiales
+  // cargados, cuántas notas de voz la mencionan) — un retraso que alcanza en
+  // una tarea chica se queda corto en una con más para cargar, y el
+  // resultado es el mismo problema que se quería evitar: el formulario
+  // vuelve a quedar arriba de todo. En vez de adivinar un tiempo, se observa
+  // el propio dialog por mutaciones (cada fetch que resuelve re-renderiza
+  // algo) y se reintenta el scroll cada vez que el layout se mueve, durante
+  // una ventana generosa — así se adapta solo a lo que tarde esta tarea en
+  // particular.
   const suggestionsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (focusSuggestions && mode === "edit") {
-      const id = requestAnimationFrame(() =>
-        suggestionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-      );
-      return () => cancelAnimationFrame(id);
-    }
+    if (!focusSuggestions || mode !== "edit") return;
+    const dialogEl = dialogRef.current;
+    if (!dialogEl) return;
+
+    const scrollToSuggestions = () =>
+      suggestionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    scrollToSuggestions();
+    const observer = new MutationObserver(scrollToSuggestions);
+    observer.observe(dialogEl, { childList: true, subtree: true });
+
+    const stop = window.setTimeout(() => observer.disconnect(), 4000);
+    return () => { observer.disconnect(); clearTimeout(stop); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

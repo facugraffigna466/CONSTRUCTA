@@ -9,6 +9,7 @@ const ACTION_LABEL: Record<string, string> = {
   reschedule_task: "Reprogramada",
   create_task: "Creada",
   update_status: "Estado cambiado",
+  reassign_responsible: "Reasignada",
   note: "Anotada",
 };
 

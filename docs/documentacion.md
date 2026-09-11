@@ -3030,3 +3030,22 @@ Roadmap más amplio de "bitácora lo más completa posible" (de la conversación
 - **Dar de baja a un responsable** desde el audio (hoy la IA deliberadamente solo dejar una nota — "el sistema aún no da de baja personal desde la bitácora" — nunca lo hace sola).
 - **Dependencias entre tareas** en `create_task` (el audio dice "esto arranca cuando termine tal cosa" y hoy se pierde — no hay forma de declarar FS/SS/FF/SF sobre una tarea nueva creada desde una sugerencia).
 - **Subtareas (`parent_task_id`)** para tareas nuevas mencionadas en el audio (jerarquía WBS).
+
+## 2026-09-11 — Dos ajustes al marcador clickeable: scroll robusto + origen de sugerencias pendientes
+
+### Objective
+Feedback directo tras el fix anterior: (1) el scroll al abrir la tarea a veces mostraba el formulario arriba de todo en vez de saltar directo a la sugerencia — dependía de la tarea; (2) la sección "Origen — Bitácora de obra" (audio + resumen de la nota que generó el cambio) no aparecía para sugerencias recién generadas, todavía sin resolver — mostraba una nota vieja no relacionada, o nada.
+
+### Changes made
+**Scroll**: los timeouts fijos (0/150/350/600/900ms) alcanzaban para una tarea con poco contenido pero no para una con dependencias + materiales cargados + varias notas de origen — cada sección carga por su propio fetch y el tiempo real varía por tarea. Se reemplazó por un `MutationObserver` sobre el dialog: reintenta el scroll cada vez que el layout cambia (cualquier fetch que resuelve dispara una mutación), durante una ventana de 4s, en vez de apostar a un tiempo fijo. Verificado en vivo sobre el caso que había fallado (Mampostería de elevación, con dependencia + material cargado): confirmado por el usuario en el navegador.
+
+**Origen de sugerencias pendientes**: `BitacoraService.list_for_task` ([bitacora_service.py:286](backend/app/services/bitacora_service.py:286)) solo miraba sugerencias con `status == APLICADA` — una sugerencia recién generada (el caso típico al clickear el marcador ✨, "sin revisar") no tenía su nota de origen visible en ningún lado, aunque la nota y el audio existieran. Se agregó una segunda condición: también cuentan las notas de una sugerencia `PENDIENTE` cuyo `task_id` (no `result_task_id`, que solo se llena al aplicar) apunta a esta tarea. De paso, `TaskBitacoraOrigin.tsx` tenía el mapa de etiquetas sin la entrada de `reassign_responsible` (cayendo siempre al genérico "Vinculada" aunque se hubiera aplicado) — se agregó "Reasignada".
+
+### Files modified
+`frontend/src/components/TaskFormModal.tsx`, `backend/app/services/bitacora_service.py`, `frontend/src/components/TaskBitacoraOrigin.tsx`, `backend/tests/test_suggestions.py`.
+
+### Validation
+Backend 632 passed (3 tests nuevos: origen incluye pendiente, no incluye descartada, sigue incluyendo aplicada — regresión). Frontend tsc/eslint limpios, vitest 52 passed. Verificado en vivo por el usuario en el navegador tras el fix del scroll.
+
+### Pending / next steps
+Roadmap más amplio de "bitácora lo más completa posible" sigue sin encarar: dar de baja a un responsable desde el audio, dependencias entre tareas en `create_task`, subtareas (`parent_task_id`) — sin cambios respecto a la entrada anterior.
