@@ -261,7 +261,7 @@ interface TaskTableProps {
   /** taskId → propuestas de la IA sin revisar sobre esa tarea. */
   suggestionCounts?: Map<number, number>;
   responsibles?: Responsible[];
-  onEdit?: (task: Task) => void;
+  onEdit?: (task: Task, opts?: { focusSuggestions?: boolean }) => void;
   onDelete?: (task: Task) => void;
   onStatusChange?: (task: Task, newStatus: TaskStatus) => void;
   editingMap?: Map<number, Editor>;
@@ -586,7 +586,10 @@ export function TaskTable({
                   <div style={{ flex: 1, minWidth: 0, paddingLeft: level * 12 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13.5, fontWeight: 600, color: "#1A2329", lineHeight: 1.35 }}>
                       <span>{task.title}</span>
-                      <SuggestionMarker count={suggestionCounts?.get(task.id) ?? 0} />
+                      <SuggestionMarker
+                        count={suggestionCounts?.get(task.id) ?? 0}
+                        onClick={onEdit ? () => onEdit(task, { focusSuggestions: true }) : undefined}
+                      />
                     </div>
                     {task.description && (
                       <div style={{ fontSize: 11.5, color: "#6B7580", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>
@@ -680,7 +683,10 @@ export function TaskTable({
                   }} title={task.title}>
                     {task.title}
                   </div>
-                  <SuggestionMarker count={suggestionCounts?.get(task.id) ?? 0} />
+                  <SuggestionMarker
+                    count={suggestionCounts?.get(task.id) ?? 0}
+                    onClick={onEdit ? () => onEdit(task, { focusSuggestions: true }) : undefined}
+                  />
                 </div>
                 {task.description && (
                   <div style={{

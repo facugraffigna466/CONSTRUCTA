@@ -89,6 +89,10 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
 
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
+  // El marcador ✨ abre la misma tarea que el lápiz, pero además le dice al
+  // modal que arranque con scroll en "Propuestas de la IA" — si no, esa
+  // sección queda perdida al final del formulario.
+  const [focusSuggestionsOnOpen, setFocusSuggestionsOnOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [taskView, setTaskViewState] = useState<"tabla" | "planilla">(() => {
     try {
@@ -604,9 +608,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
               </div>
               {/* Table / Sheet */}
               {taskView === "tabla" ? (
-                <TaskTable tasks={tasks} responsibles={responsibles} suggestionCounts={suggestionCounts} onEdit={(t) => setTaskToEdit(t)} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create", obra.id) ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create", obra.id) ? () => setShowImport(true) : undefined} />
+                <TaskTable tasks={tasks} responsibles={responsibles} suggestionCounts={suggestionCounts} onEdit={(t, opts) => { setTaskToEdit(t); setFocusSuggestionsOnOpen(!!opts?.focusSuggestions); }} onDelete={(t) => setTaskToDelete(t)} onStatusChange={handleStatusChange} editingMap={editingMap} onCreateNew={can("tarea.create", obra.id) ? () => setShowCreateTask(true) : undefined} onImport={can("tarea.create", obra.id) ? () => setShowImport(true) : undefined} />
               ) : (
-                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} suggestionCounts={suggestionCounts} onTasksChanged={() => loadData(true)} onOpenBudget={(taskId: number) => { setBudgetFocusTaskId(taskId); onTabChange("presupuesto"); }} />
+                <TaskSheetView ref={sheetViewRef} tasks={tasks} responsibles={responsibles} obraId={obra.id} suggestionCounts={suggestionCounts} onTasksChanged={() => loadData(true)} onOpenBudget={(taskId: number) => { setBudgetFocusTaskId(taskId); onTabChange("presupuesto"); }} onOpenSuggestions={(taskId: number) => { const t = tasks.find(x => x.id === taskId); if (t) { setTaskToEdit(t); setFocusSuggestionsOnOpen(true); } }} />
               )}
             </div>
 
@@ -918,8 +922,9 @@ export function ObraDetailPage({ obra, activeTab, onTabChange, onCounts, onSugge
       {taskToEdit && (
         <TaskFormModal
           mode="edit" obraId={obra.id} task={taskToEdit} tasks={tasks} responsibles={responsibles} taskCount={tasks.length}
-          onClose={() => setTaskToEdit(null)} onSaved={handleTaskSaved}
+          onClose={() => { setTaskToEdit(null); setFocusSuggestionsOnOpen(false); }} onSaved={handleTaskSaved}
           onSuggestionResolved={handleSuggestionResolved}
+          focusSuggestions={focusSuggestionsOnOpen}
         />
       )}
       {taskToDelete && (

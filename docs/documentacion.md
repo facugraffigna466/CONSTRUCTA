@@ -3002,3 +3002,31 @@ Backend **629 passed** (4 tests nuevos: aplicar reasigna la tarea, sin responsab
 
 ### Pending / next steps
 Quedan del roadmap de "bitácora más completa" (ver conversación): dar de baja a un responsable desde el audio (hoy queda como nota, deliberadamente — no se auto-desactiva a nadie), dependencias entre tareas en `create_task`, y subtareas (`parent_task_id`) para tareas nuevas mencionadas en el audio.
+
+## 2026-09-11 — El marcador ✨ de sugerencias de IA ahora es clickeable
+
+### Objective
+Feedback de uso real: en la tabla de tareas, el marcador ✨ que indica "la IA propone algo sobre esta tarea" solo tenía un `title` nativo del navegador — en la práctica invisible (hay que dejar el mouse quieto varios segundos) y sin ninguna forma de ver el contenido real de la sugerencia desde ahí. El diseño original (ver docstring viejo de `SuggestionMarker.tsx`) decía a propósito "no es un botón", asumiendo que el lápiz de Editar ya cubría la necesidad — pero esa sugerencia vive al final del formulario de edición, después de Materiales, así que aunque abrieras la tarea correcta no la ibas a ver sin bajar a buscarla.
+
+### Changes made
+`SuggestionMarker` ahora acepta un `onClick` opcional: con él se renderiza como `<button>` real (foco de teclado, hover, `stopPropagation` para no disparar el click de la fila) en vez del `<span>` de solo-tooltip; sin él cae al comportamiento viejo (compatibilidad para el único llamador que no lo cablea, el Gantt — ver Pending).
+
+Wireado en las dos vistas de tabla:
+- **`TaskTable`** (vista Tabla): el marcador llama a `onEdit(task, { focusSuggestions: true })` — mismo callback que el lápiz, con un flag nuevo.
+- **`TaskSheetView`** (vista Planilla, grilla `react-datasheet-grid`): se agregó `onOpenSuggestions` a los `columnData` de la celda de título, mismo patrón ya usado por `onOpenBudget` en la celda de costo — no hizo falta inventar un mecanismo nuevo.
+
+`TaskFormModal` suma un prop `focusSuggestions?: boolean`: si viene en `true` y `mode === "edit"`, hace `scrollIntoView({ behavior: "smooth" })` a la sección "La IA propone…" apenas monta (vía `requestAnimationFrame`, sin bloquear el resto del render). `ObraDetailPage` es el que decide el flag (`focusSuggestionsOnOpen`), lo resetea al cerrar el modal, y lo resuelve para ambas vistas — en Planilla resolviendo el id de tarea contra la lista `tasks` ya cargada, porque esa vista solo tiene el id, no el objeto completo.
+
+### Files modified
+`frontend/src/components/SuggestionMarker.tsx`, `frontend/src/components/TaskTable.tsx`, `frontend/src/components/TaskSheetView.tsx`, `frontend/src/components/TaskFormModal.tsx`, `frontend/src/pages/ObraDetailPage.tsx`.
+
+### Validation
+`tsc` y ESLint limpios, vitest 52 passed. Verificado en el navegador contra el servidor real: clickear el marcador de "Instalación eléctrica" (vista Tabla) abrió el modal de esa tarea con la sección "La IA propone un cambio en esta tarea" ya en la parte visible (confirmado por `getBoundingClientRect()`: `top: 14.8px`, contra los cientos de píxeles que hubiera quedado sin el scroll). La verificación visual por captura de pantalla no fue posible en esta sesión (herramienta de screenshot del navegador devolviendo frames en blanco de forma intermitente, no relacionado con la app) — se verificó por inspección directa del DOM y de las requests de red en su lugar.
+
+### Pending / next steps
+El marcador del **Gantt** (`GanttTimeline.tsx`) se dejó sin tocar a propósito — ahí el click en la fila ya abre la tarea (comportamiento heredado, sin `stopPropagation` antes), y el componente es sensible a cambios de mouse events (ver `no-tocar-drag-gantt` en la memoria del proyecto). Si en algún momento se quiere que también salte directo a "La IA propone…" ahí, es un cambio acotado pero mejor hecho aparte, probando bien el drag.
+
+Roadmap más amplio de "bitácora lo más completa posible" (de la conversación con el usuario), sin encarar todavía:
+- **Dar de baja a un responsable** desde el audio (hoy la IA deliberadamente solo dejar una nota — "el sistema aún no da de baja personal desde la bitácora" — nunca lo hace sola).
+- **Dependencias entre tareas** en `create_task` (el audio dice "esto arranca cuando termine tal cosa" y hoy se pierde — no hay forma de declarar FS/SS/FF/SF sobre una tarea nueva creada desde una sugerencia).
+- **Subtareas (`parent_task_id`)** para tareas nuevas mencionadas en el audio (jerarquía WBS).

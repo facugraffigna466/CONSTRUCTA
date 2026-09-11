@@ -105,6 +105,10 @@ interface TaskFormModalProps {
   /** Se resolvió una sugerencia de IA sobre esta tarea: quien tenga
    *  contadores de pendientes (el badge del menú) tiene que refrescarlos. */
   onSuggestionResolved?: () => void;
+  /** Se abrió desde el marcador ✨ de la fila (no desde el lápiz): hace scroll
+   *  directo a "Propuestas de la IA" en vez de dejar el formulario arriba del
+   *  todo, donde esa sección queda fuera de vista. */
+  focusSuggestions?: boolean;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -119,6 +123,7 @@ export function TaskFormModal({
   onClose,
   onSaved,
   onSuggestionResolved,
+  focusSuggestions,
 }: TaskFormModalProps) {
   // escClose:false → el Esc en capas propio (cierra subdiálogos primero) sigue mandando.
   const dialogRef = useDialog(onClose, { escClose: false });
@@ -133,6 +138,21 @@ export function TaskFormModal({
     // mismo id (p.ej. tras un refetch en segundo plano).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, task?.id, obraId]);
+
+  // Scroll directo a "Propuestas de la IA" cuando se abrió desde el marcador
+  // ✨ de la fila — esa sección vive al final del formulario, después de
+  // Materiales, y sin esto quedaba invisible salvo que alguien ya supiera
+  // que estaba ahí y bajara a buscarla.
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusSuggestions && mode === "edit") {
+      const id = requestAnimationFrame(() =>
+        suggestionsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+      );
+      return () => cancelAnimationFrame(id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Lock body scroll while modal is open
   useEffect(() => {
@@ -803,6 +823,7 @@ export function TaskFormModal({
 
             {/* Propuestas de la IA sin resolver sobre esta tarea */}
             {mode === "edit" && task && (
+              <div ref={suggestionsRef}>
               <TaskSuggestions
                 taskId={task.id}
                 onResolved={onSuggestionResolved}
@@ -818,6 +839,7 @@ export function TaskFormModal({
                   }
                 }}
               />
+              </div>
             )}
 
             {/* Origen: notas de voz que originaron/modificaron esta tarea */}
