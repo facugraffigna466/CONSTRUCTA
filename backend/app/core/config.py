@@ -1,5 +1,6 @@
 import sys
 from functools import lru_cache
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 # Valores conocidos débiles que no deben usarse en producción
@@ -19,6 +20,19 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     DATABASE_URL: str
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def _force_asyncpg_driver(cls, v: str) -> str:
+        """Proveedores gestionados (Render, Heroku, etc.) entregan la connection
+        string como postgres:// o postgresql://, sin driver — pero el engine
+        async de SQLAlchemy necesita explícitamente +asyncpg. Normalizamos acá
+        para no depender de que quien despliega edite el string a mano."""
+        if v.startswith("postgres://"):
+            return "postgresql+asyncpg://" + v[len("postgres://"):]
+        if v.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + v[len("postgresql://"):]
+        return v
 
     # CORS — lista de orígenes permitidos (separados por coma en el .env)
     # Default cubre dev local; en producción setear solo el dominio real.

@@ -1,0 +1,58 @@
+# Levanta el stack completo (Postgres + backend + frontend) con imágenes Docker,
+# tal como se despliega en Render, para probar en local antes de pushear.
+#
+# Uso:
+#   docker compose up --build
+#   → frontend: http://localhost:8080
+#   → backend:  http://localhost:8000/docs
+#
+# No usar este archivo en producción tal cual: es solo para probar el build
+# de las imágenes localmente. En Render cada servicio se configura por separado.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: constructa
+      POSTGRES_USER: constructa
+      POSTGRES_PASSWORD: constructa
+    ports:
+      - "5432:5432"
+    volumes:
+      - constructa_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U constructa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_DEBUG: "true"
+      SECRET_KEY: "local-docker-compose-secret-not-for-prod-0123456789"
+      DATABASE_URL: "postgresql+asyncpg://constructa:constructa@db:5432/constructa"
+      ALLOWED_ORIGINS: "http://localhost:8080,http://127.0.0.1:8080"
+      FRONTEND_URL: "http://localhost:8080"
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+    volumes:
+      - constructa_uploads:/app/uploads
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: "http://localhost:8000"
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  constructa_db_data:
+  constructa_uploads:
